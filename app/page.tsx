@@ -1,101 +1,155 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import { useState } from "react"
+import Image from "next/image"
+import Link from "next/link"
+import { Search, Youtube, BookOpen } from "lucide-react"
+
+
+interface Course {
+  id: number
+  title: string
+  instructor: string
+  type: "Free" | "Paid"
+  thumbnail: string
+  chapters?: number
+  isYoutube?: boolean
+}
+
+export default function Page() {
+  const [activeTab, setActiveTab] = useState("all")
+
+  const courses: Course[] = [
+    {
+      id: 1,
+      title: "Car Rental NextJS",
+      instructor: "Tubeguruji",
+      type: "Free",
+      thumbnail: "/placeholder.svg?height=200&width=400",
+      isYoutube: true,
+    },
+    {
+      id: 2,
+      title: "React Native Home Service App",
+      instructor: "Tubeguruji",
+      type: "Paid",
+      thumbnail: "/placeholder.svg?height=200&width=400",
+      chapters: 18,
+    },
+    {
+      id: 3,
+      title: "NextJs Business Listing App",
+      instructor: "Tubeguruji",
+      type: "Free",
+      thumbnail: "/placeholder.svg?height=200&width=400",
+      isYoutube: true,
+    },
+    {
+      id: 4,
+      title: "React Native Hospital Appointment",
+      instructor: "Tubeguruji",
+      type: "Free",
+      thumbnail: "/placeholder.svg?height=200&width=400",
+      chapters: 21,
+    },
+  ]
+
+  const tabs = [
+    { id: "all", label: "All" },
+    { id: "react", label: "React.Js" },
+    { id: "next", label: "Next.Js" },
+    { id: "tailwind", label: "Tailwind CSS" },
+    { id: "firebase", label: "Firebase" },
+    { id: "google-map", label: "Google Map" },
+  ]
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="border-b border-gray-200">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+              src="/placeholder.svg?height=50&width=50"
+              alt="TubeGuriji"
+              width={50}
+              height={50}
+              className="rounded-full"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <input
+                type="search"
+                placeholder="Search Course"
+                className="w-[400px] bg-white border border-gray-200 rounded-md pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-purple-500"
+              />
+            </div>
+          </div>
+          <button className="px-4 py-2 text-purple-500 border border-purple-500 rounded-md hover:bg-purple-50">
+            Login
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-8">
+        {/* Tabs */}
+        <div className="flex gap-2 mb-8">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 rounded-md ${
+                activeTab === tab.id
+                  ? "bg-purple-500 text-white"
+                  : "bg-white border border-gray-200 text-gray-700 hover:bg-purple-50"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Course Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {courses.map((course) => (
+            <Link href="#" key={course.id}>
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-purple-500 hover:shadow-md transition-all">
+                <Image
+                  src={course.thumbnail || "/placeholder.svg"}
+                  alt={course.title}
+                  width={400}
+                  height={200}
+                  className="w-full object-cover"
+                />
+                <div className="p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{course.title}</h3>
+                  <p className="text-gray-500 text-sm">{course.instructor}</p>
+                  <div className="flex items-center justify-between mt-4">
+                    <span className={`text-sm ${course.type === "Free" ? "text-green-500" : "text-purple-500"}`}>
+                      {course.type}
+                    </span>
+                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                      {course.isYoutube ? (
+                        <>
+                          <Youtube className="h-4 w-4" />
+                          Watch on Youtube
+                        </>
+                      ) : (
+                        <>
+                          <BookOpen className="h-4 w-4" />
+                          {course.chapters} Chapters
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
-  );
+  )
 }
+
