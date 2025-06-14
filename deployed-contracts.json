@@ -1,0 +1,12 @@
+{
+  "network": "mantaPacificTestnet",
+  "chainId": 3441006,
+  "deployer": "0xb5075eB5734bc8A6a9bbC1Ca299Fd8C0bd4Cff58",
+  "mockPriceFeed": "0x66B9C917CE2B68C76F5849075cF7768cBAB55746",
+  "courseFactory": "0xFcdb5dc19936E8571bFDB3fa29e8938a8A6B2c3b",
+  "courseLicense": "0x91B2B87C4618291ead469d22c82cB8ddF7111623",
+  "progressTracker": "0x678450B280281BbA07A268D3604f5EEaD68d34A2",
+  "certificateManager": "0x29CE369C4C103C6396F6Ec804E59F1292A04E589",
+  "platformRegistry": "0xb03Fa27f0e9E48d355Aaa9Be8E194815E7AeE6C4",
+  "deployDate": "2025-04-06T03:13:36.960Z"
+}
