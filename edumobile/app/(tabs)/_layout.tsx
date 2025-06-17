@@ -5,63 +5,87 @@ import { Tabs } from "expo-router";
 import React from "react";
 
 export default function TabLayout() {
-	const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme();
 
-	return (
-		<Tabs
-			screenOptions={{
-				tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
-				headerShown: false,
-			}}
-		>
-			<Tabs.Screen
-				name="index"
-				options={{
-					title: "Connect",
-					tabBarIcon: ({ color, focused }) => (
-						<TabBarIcon
-							name={focused ? "wallet" : "wallet-outline"}
-							color={color}
-						/>
-					),
-				}}
-			/>
-			<Tabs.Screen
-				name="read"
-				options={{
-					title: "Read",
-					tabBarIcon: ({ color, focused }) => (
-						<TabBarIcon
-							name={focused ? "reader" : "reader-outline"}
-							color={color}
-						/>
-					),
-				}}
-			/>
-			<Tabs.Screen
-				name="write"
-				options={{
-					title: "Write",
-					tabBarIcon: ({ color, focused }) => (
-						<TabBarIcon
-							name={focused ? "code-slash" : "code-slash-outline"}
-							color={color}
-						/>
-					),
-				}}
-			/>
-			<Tabs.Screen
-				name="buy"
-				options={{
-					title: "Buy",
-					tabBarIcon: ({ color, focused }) => (
-						<TabBarIcon
-							name={focused ? "cart" : "cart-outline"}
-							color={color}
-						/>
-					),
-				}}
-			/>
-		</Tabs>
-	);
+  return (
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
+        headerShown: false,
+      }}
+    >
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: "Home",
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? "home" : "home-outline"}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: "Explore",
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? "compass" : "compass-outline"}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Connect",
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? "wallet" : "wallet-outline"}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="read"
+        options={{
+          title: "Read",
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? "reader" : "reader-outline"}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="write"
+        options={{
+          title: "Write",
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? "code-slash" : "code-slash-outline"}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="buy"
+        options={{
+          title: "Buy",
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon
+              name={focused ? "cart" : "cart-outline"}
+              color={color}
+            />
+          ),
+        }}
+      />
+    </Tabs>
+  );
 }
