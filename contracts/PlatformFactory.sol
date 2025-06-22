@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+/**
+ * NOTE: This contract is not used in the actual deployment.
+ * Instead, contracts are deployed separately to reduce gas costs and avoid contract size limitations.
+ * This file is kept for reference purposes only.
+ */
+
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./CourseFactory.sol";
 import "./CourseLicense.sol";

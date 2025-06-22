@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract CourseFactory is Ownable {
-    // Menggunakan library Counters untuk mengamankan pembuatan ID;
-    using Counters for Counters.Counter;
-    Counters.Counter private _courseIds;
+    // Using simple counter instead of deprecated Counters library
+    uint256 private _courseIds;
 
     //  Memmbangun Struct untuk pembuatan course
     struct Course {
@@ -95,11 +93,10 @@ contract CourseFactory is Ownable {
      */
     function createCourse(string memory title, string memory description, string memory thumbnailURI, uint256 pricePerMonth) external returns (uint256)  {
         // Validasi harga per bulan
-        require(pricePerMonth <= getMaxPriceInETH(), "Price exceeds $2 limit");
-        // Melakukan increment untuk user
-        _courseIds.increment();
+        require(pricePerMonth <= getMaxPriceInETH(), "Price exceeds $2 limit");        // Melakukan increment untuk user
+        _courseIds++;
         // Menggunakan new course ids
-        uint256 newCourseId = _courseIds.current();
+        uint256 newCourseId = _courseIds;
 
         // Membuat course baru dengan memanfaatkan struct yang ada
         Course memory newCourse = Course({
@@ -143,7 +140,7 @@ contract CourseFactory is Ownable {
         // Validasi harga per bulan
         require(pricePerMonth <= getMaxPriceInETH(), "Price exceeds $2 limit");
         // Validasi course id
-        require(courseId <= _courseIds.current(), "Course doesn't exist");
+        require(courseId <= _courseIds, "Course doesn't exist");
 
         Course storage course = courses[courseId];
         course.title = title;
@@ -264,6 +261,6 @@ contract CourseFactory is Ownable {
      * @return Total number of courses
      */
     function getTotalCourses() external view returns (uint256) {
-        return _courseIds.current();
+        return _courseIds;
     }
 }

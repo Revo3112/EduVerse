@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 import "./CourseFactory.sol";
 // Untuk mendapatkan harga real time antara ETH/USDT maka kita bisa menggunakan chainlink
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
@@ -37,15 +36,11 @@ contract CourseLicense is ERC1155, Ownable {
 
     // Mappings untuk setiap address untuk course id dan masing masing token id nya
     // studentTokenIds[0xABC][1] = 1001;
-    mapping (address => mapping(uint256 => uint256)) public studentTokenIds; // studentId => courseId => tokenID
-
-    // Mappings untuk setiap tokenId untuk setiap course
+    mapping (address => mapping(uint256 => uint256)) public studentTokenIds; // studentId => courseId => tokenID    // Mappings untuk setiap tokenId untuk setiap course
     mapping (uint256 => uint256) public courseTokenIds; // courseId => starting tokenId for that course
 
-    // Using counter to create Counter Id
-    using Counters for Counters.Counter;
-    // Counter for generating unique token IDs
-    Counters.Counter private _tokenIds;
+    // Simple counter for generating unique token IDs
+    uint256 private _tokenIds;
 
     // Event untuk lincesesMinted
     event LincenseMinted (
@@ -99,12 +94,10 @@ contract CourseLicense is ERC1155, Ownable {
         require(msg.value >= totalPrice, "Insufficent Payment");
 
         // Dapetin tokennya untuk licensi tersebut
-        uint256 tokenId;
-
-        // Kita ngechek nih token user tuh ada apa enggak kalo misalnya ada kita coba chek apakah udah expiaret atau belom kalo gak ada kita buat id nya
+        uint256 tokenId;        // Kita ngechek nih token user tuh ada apa enggak kalo misalnya ada kita coba chek apakah udah expiaret atau belom kalo gak ada kita buat id nya
         if (studentTokenIds[msg.sender][courseId] == 0){
-            _tokenIds.increment();
-            tokenId = _tokenIds.current();
+            _tokenIds++;
+            tokenId = _tokenIds;
             studentTokenIds[msg.sender][courseId] = tokenId;
         }else {
             tokenId = studentTokenIds[msg.sender][courseId];

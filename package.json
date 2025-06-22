@@ -18,6 +18,8 @@
     "explore-courses": "hardhat run scripts/testing-explore-courses.js --network mantaPacificTestnet",
     "my-licenses": "hardhat run scripts/testing-my-licenses.js --network mantaPacificTestnet",
     "export-abis": "hardhat compile && node scripts/ABI-Export.js",
+    "update-mobile-env": "node scripts/update-mobile-env.js",
+    "setup-mobile": "npm run export-abis && npm run update-mobile-env",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },
