@@ -1,7 +1,7 @@
-// Order matters - polyfills first, then WalletConnect compat
+// App.js - Fixed Configuration
 import "@walletconnect/react-native-compat";
 import { WagmiProvider } from "wagmi";
-import { mainnet, polygon, arbitrum } from "@wagmi/core/chains";
+import { mainnet, polygon, arbitrum, sepolia } from "viem/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createAppKit,
@@ -14,31 +14,33 @@ import { StyleSheet, LogBox } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
+import { ENV_PROJECT_ID } from "@env";
+import { mantaPacificTestnet } from "./src/constants/blockchain";
 
 import MainScreen from "./src/screens/MainScreen";
 
-// Ignore specific warnings that we can't fix directly
+// Ignore specific warnings
 LogBox.ignoreLogs([
   "react-native-compat: Application module is not available",
   "Please use proxy object",
   "setLayoutAnimationEnabledExperimental is currently a no-op",
   "WalletConnect Core is already initialized",
   "Attempted to import the module",
+  "Warning: Failed to create session",
 ]);
 
-// Keep the splash screen visible while we initialize the app
 SplashScreen.preventAutoHideAsync();
 
-// 0. Setup queryClient
+// Setup queryClient
 const queryClient = new QueryClient();
 
-// 1. Get projectId at https://cloud.reown.com
-const projectId = "6d55c9d1dbc781ab9b518c4dcdc35827";
+// Get projectId from Reown Cloud
+const projectId = ENV_PROJECT_ID;
 
-// 2. Create config
+// Improved metadata configuration
 const metadata = {
-  name: "EduVerseApp",
-  description: "Educational Blockchain Platform",
+  name: "EduVerse App",
+  description: "Educational Blockchain Platform for Learning",
   url: "https://eduverse.app",
   icons: ["https://avatars.githubusercontent.com/u/179229932"],
   redirect: {
@@ -47,7 +49,8 @@ const metadata = {
   },
 };
 
-const chains = [mainnet, polygon, arbitrum];
+// Chain configuration - put mainnet first as default, then add custom chains
+const chains = [mainnet, sepolia, polygon, arbitrum, mantaPacificTestnet];
 
 const wagmiConfig = defaultWagmiConfig({
   chains,
@@ -55,16 +58,25 @@ const wagmiConfig = defaultWagmiConfig({
   metadata,
 });
 
-// 3. Create modal
+// Create AppKit with improved configuration
 createAppKit({
   projectId,
   wagmiConfig,
-  defaultChain: mainnet,
+  defaultChain: mainnet, // Start with mainnet instead of custom chain
   enableAnalytics: true,
+  debug: false, // Set to true for debugging
   features: {
     email: true,
     socials: ["x", "discord", "apple"],
+    emailShowWallets: true,
+    swaps: false, // Disable swaps if not needed
   },
+  // Add custom wallet configurations if needed
+  featuredWalletIds: [
+    "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96", // MetaMask
+    "1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369", // Rainbow
+    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0", // Trust
+  ],
 });
 
 // WagmiWeb3ModalProvider component
@@ -85,13 +97,18 @@ export default function App() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Pre-load fonts, make API calls, etc.
-        // Artificial delay to ensure polyfills are properly loaded
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Ensure polyfills are loaded
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        // Check if projectId is available
+        if (!projectId) {
+          console.error(
+            "Project ID is not configured. Please check your .env file."
+          );
+        }
       } catch (e) {
-        console.warn(e);
+        console.warn("App preparation error:", e);
       } finally {
-        // Tell the application to render
         setAppIsReady(true);
       }
     }
@@ -101,7 +118,6 @@ export default function App() {
 
   const onLayoutRootView = useCallback(async () => {
     if (appIsReady) {
-      // This tells the splash screen to hide immediately
       await SplashScreen.hideAsync();
     }
   }, [appIsReady]);

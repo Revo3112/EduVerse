@@ -1,10 +1,14 @@
-// src/constants/blockchain.js
+// src/constants/blockchain.js - Fixed Configuration
 import { defineChain } from "viem";
 
 export const mantaPacificTestnet = defineChain({
   id: 3441006,
   name: "Manta Pacific Testnet",
-  nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+  nativeCurrency: {
+    name: "ETH",
+    symbol: "ETH",
+    decimals: 18,
+  },
   rpcUrls: {
     default: {
       http: ["https://pacific-rpc.sepolia-testnet.manta.network/http"],
@@ -16,26 +20,7 @@ export const mantaPacificTestnet = defineChain({
       url: "https://pacific-explorer.sepolia-testnet.manta.network/",
     },
   },
-  contracts: {
-    courseFactory: {
-      address: process.env.EXPO_PUBLIC_COURSE_FACTORY_ADDRESS,
-    },
-    courseLicense: {
-      address: process.env.EXPO_PUBLIC_COURSE_LICENSE_ADDRESS,
-    },
-    progressTracker: {
-      address: process.env.EXPO_PUBLIC_PROGRESS_TRACKER_ADDRESS,
-    },
-    certificateManager: {
-      address: process.env.EXPO_PUBLIC_CERTIFICATE_MANAGER_ADDRESS,
-    },
-    platformRegistry: {
-      address: process.env.EXPO_PUBLIC_PLATFORM_REGISTRY_ADDRESS,
-    },
-    mockV3Aggregator: {
-      address: process.env.EXPO_PUBLIC_MOCK_V3_AGGREGATOR_ADDRESS,
-    },
-  },
+  testnet: true,
 });
 
 export const BLOCKCHAIN_CONFIG = {
@@ -44,4 +29,14 @@ export const BLOCKCHAIN_CONFIG = {
   CHAIN_NAME: mantaPacificTestnet.name,
   NATIVE_CURRENCY_SYMBOL: mantaPacificTestnet.nativeCurrency.symbol,
   BLOCK_EXPLORER_URL: mantaPacificTestnet.blockExplorers.default.url,
+
+  // Contract addresses
+  CONTRACTS: {
+    courseFactory: process.env.EXPO_PUBLIC_COURSE_FACTORY_ADDRESS,
+    courseLicense: process.env.EXPO_PUBLIC_COURSE_LICENSE_ADDRESS,
+    progressTracker: process.env.EXPO_PUBLIC_PROGRESS_TRACKER_ADDRESS,
+    certificateManager: process.env.EXPO_PUBLIC_CERTIFICATE_MANAGER_ADDRESS,
+    platformRegistry: process.env.EXPO_PUBLIC_PLATFORM_REGISTRY_ADDRESS,
+    mockV3Aggregator: process.env.EXPO_PUBLIC_MOCK_V3_AGGREGATOR_ADDRESS,
+  },
 };
