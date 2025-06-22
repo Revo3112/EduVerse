@@ -61,6 +61,10 @@ createAppKit({
   wagmiConfig,
   defaultChain: mainnet,
   enableAnalytics: true,
+  features: {
+    email: true,
+    socials: ["x", "discord", "apple"],
+  },
 });
 
 // WagmiWeb3ModalProvider component
