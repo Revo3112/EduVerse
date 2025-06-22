@@ -1,0 +1,96 @@
+{
+  "expo": {
+    "name": "EduVerseApp",
+    "slug": "EduVerseApp",
+    "plugins": ["./queries.js"],
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "jsEngine": "hermes",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eduverse.app",
+      "associatedDomains": ["applinks:eduverse.app"],
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "metamask",
+          "trust",
+          "safe",
+          "rainbow",
+          "uniswap",
+          "zerion",
+          "imtokenv2",
+          "blockchain",
+          "pillar",
+          "coinbase-wallet",
+          "argent",
+          "1inch",
+          "unstoppable",
+          "defiwallet",
+          "exodus",
+          "phantom",
+          "tpwalletextra",
+          "kleverSafe",
+          "gnosis-safe",
+          "unstoppableMobile",
+          "binance",
+          "huobi",
+          "kucoin",
+          "okex",
+          "bitpay",
+          "enjin",
+          "mewwallet",
+          "edge",
+          "walletlinkapp",
+          "walleth",
+          "dharma",
+          "alpha",
+          "dcentwallet",
+          "omni",
+          "easypocket",
+          "walletio",
+          "zillet",
+          "hbtcwallet",
+          "mwallet",
+          "trusteeWallet",
+          "tronlink",
+          "tokenaryiOS",
+          "xdcwallet",
+          "unstoppabledomains",
+          "rabby"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.eduverse.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "eduverse",
+              "host": "*"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "eduverse"
+  }
+}
