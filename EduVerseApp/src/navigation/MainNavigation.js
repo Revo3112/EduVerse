@@ -7,6 +7,7 @@ import { Text } from "react-native";
 import DashboardScreen from "../screens/DashboardScreen";
 import MainScreen from "../screens/MainScreen";
 import CreateCourseScreen from "../screens/CreateCourseScreen";
+import ProfileScreen from "../screens/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -67,7 +68,7 @@ export default function MainNavigation() {
       />
       <Tab.Screen
         name="Wallet"
-        component={MainScreen}
+        component={ProfileScreen}
         options={{
           tabBarIcon: ({ focused }) => <TabIcon emoji="💳" focused={focused} />,
           headerTitle: "Wallet Connection",
