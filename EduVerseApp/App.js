@@ -1,4 +1,3 @@
-// App.js - Fixed Configuration
 import "@walletconnect/react-native-compat";
 import { WagmiProvider } from "wagmi";
 import { mainnet, polygon, arbitrum, sepolia } from "viem/chains";
@@ -12,12 +11,12 @@ import {
 import React, { useState, useEffect, useCallback } from "react";
 import { StyleSheet, LogBox } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { ENV_PROJECT_ID } from "@env";
 import { mantaPacificTestnet } from "./src/constants/blockchain";
-
-import MainScreen from "./src/screens/MainScreen";
+import MainNavigation from "./src/navigation/MainNavigation";
 
 // Ignore specific warnings
 LogBox.ignoreLogs([
@@ -27,6 +26,7 @@ LogBox.ignoreLogs([
   "WalletConnect Core is already initialized",
   "Attempted to import the module",
   "Warning: Failed to create session",
+  "getLoadedFonts is not a function", // Add this to ignore font loader warnings
 ]);
 
 SplashScreen.preventAutoHideAsync();
@@ -34,7 +34,7 @@ SplashScreen.preventAutoHideAsync();
 // Setup queryClient
 const queryClient = new QueryClient();
 
-// Get projectId from Reown Cloud
+// Get projectId from environment
 const projectId = ENV_PROJECT_ID;
 
 // Improved metadata configuration
@@ -62,16 +62,15 @@ const wagmiConfig = defaultWagmiConfig({
 createAppKit({
   projectId,
   wagmiConfig,
-  defaultChain: mainnet, // Start with mainnet instead of custom chain
+  defaultChain: mantaPacificTestnet, // Set Manta Pacific as default
   enableAnalytics: true,
-  debug: false, // Set to true for debugging
+  debug: false,
   features: {
     email: true,
     socials: ["x", "discord", "apple"],
     emailShowWallets: true,
-    swaps: false, // Disable swaps if not needed
+    swaps: false,
   },
-  // Add custom wallet configurations if needed
   featuredWalletIds: [
     "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96", // MetaMask
     "1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369", // Rainbow
@@ -130,7 +129,9 @@ export default function App() {
     <SafeAreaProvider>
       <WagmiWeb3ModalProvider>
         <SafeAreaView style={styles.container} onLayout={onLayoutRootView}>
-          <MainScreen />
+          <NavigationContainer>
+            <MainNavigation />
+          </NavigationContainer>
           <StatusBar style="auto" />
         </SafeAreaView>
       </WagmiWeb3ModalProvider>

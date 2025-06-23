@@ -1,7 +1,12 @@
-// src/components/ActionButtons.js
+// src/components/ActionButtons.js - Updated without @expo/vector-icons
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { useAccount, useDisconnect } from "wagmi";
+
+// Simple icon component using emoji
+const SimpleIcon = ({ emoji, size = 16 }) => (
+  <Text style={{ fontSize: size, marginRight: 8 }}>{emoji}</Text>
+);
 
 export default function ActionButtons() {
   const { address } = useAccount();
@@ -42,29 +47,37 @@ export default function ActionButtons() {
         <TouchableOpacity
           style={styles.actionButton}
           onPress={handleViewCourses}
+          activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>📚 View Courses</Text>
+          <SimpleIcon emoji="📚" />
+          <Text style={styles.buttonText}>View Courses</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.actionButton}
           onPress={handleCreateCourse}
+          activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>➕ Create Course</Text>
+          <SimpleIcon emoji="➕" />
+          <Text style={styles.buttonText}>Create Course</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.actionButton}
           onPress={handleViewCertificates}
+          activeOpacity={0.8}
         >
-          <Text style={styles.buttonText}>🏆 Certificates</Text>
+          <SimpleIcon emoji="🏆" />
+          <Text style={styles.buttonText}>Certificates</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.disconnectButton}
           onPress={handleDisconnect}
+          activeOpacity={0.8}
         >
-          <Text style={styles.disconnectButtonText}>🔌 Disconnect</Text>
+          <SimpleIcon emoji="🔌" />
+          <Text style={styles.disconnectButtonText}>Disconnect</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -96,6 +109,16 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     width: "48%",
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 3,
   },
   buttonText: {
     color: "white",
@@ -110,6 +133,16 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 3,
   },
   disconnectButtonText: {
     color: "white",
