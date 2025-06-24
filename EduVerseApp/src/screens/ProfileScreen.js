@@ -1,4 +1,4 @@
-// src/screens/ProfileScreen.js - Updated MainScreen as Profile
+// src/screens/ProfileScreen.js - Modern Profile Screen with Enhanced UI
 import React from "react";
 import {
   View,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  SafeAreaView,
 } from "react-native";
 import { useAccount, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import { AppKitButton } from "@reown/appkit-wagmi-react-native";
@@ -14,7 +15,7 @@ import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
 import WalletInfo from "../components/WalletInfo";
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const { address, isConnected, connector } = useAccount();
   const { disconnect } = useDisconnect();
   const chainId = useChainId();
@@ -51,170 +52,208 @@ export default function ProfileScreen() {
   };
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
-
   const ProfileOption = ({
     icon,
     title,
     subtitle,
     onPress,
-    color = "#007AFF",
+    color = "#9747FF",
     showArrow = true,
+    badge,
   }) => (
     <TouchableOpacity style={styles.optionCard} onPress={onPress}>
       <View style={styles.optionContent}>
-        <View style={[styles.optionIcon, { backgroundColor: `${color}20` }]}>
-          <Ionicons name={icon} size={20} color={color} />
+        <View style={[styles.optionIcon, { backgroundColor: `${color}15` }]}>
+          <Ionicons name={icon} size={22} color={color} />
         </View>
         <View style={styles.optionText}>
-          <Text style={styles.optionTitle}>{title}</Text>
+          <View style={styles.optionTitleRow}>
+            <Text style={styles.optionTitle}>{title}</Text>
+            {badge && (
+              <View style={[styles.badge, { backgroundColor: color }]}>
+                <Text style={styles.badgeText}>{badge}</Text>
+              </View>
+            )}
+          </View>
           {subtitle && <Text style={styles.optionSubtitle}>{subtitle}</Text>}
         </View>
         {showArrow && (
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={20} color="#999" />
         )}
       </View>
     </TouchableOpacity>
   );
-
   if (!isConnected) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.centeredContent}>
-          <View style={styles.profileIconContainer}>
-            <Ionicons name="person-outline" size={64} color="#ccc" />
-          </View>
-          <Text style={styles.notConnectedTitle}>Profile</Text>
-          <Text style={styles.notConnectedSubtitle}>
-            Connect your wallet to access your profile
-          </Text>
-          <View style={styles.connectSection}>
-            <AppKitButton />
-          </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.customHeader}>
+          <Text style={styles.screenTitle}>Profile</Text>
         </View>
-      </ScrollView>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.disconnectedContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.centeredContent}>
+            <View style={styles.profileIconContainer}>
+              <Ionicons name="person-outline" size={64} color="#9747FF" />
+            </View>
+            <Text style={styles.notConnectedTitle}>Welcome to EduVerse</Text>
+            <Text style={styles.notConnectedSubtitle}>
+              Connect your wallet to access your profile and start learning
+            </Text>
+            <View style={styles.connectSection}>
+              <AppKitButton />
+            </View>
+            <Text style={styles.helpText}>
+              Need help? Tap the connect button above to get started
+            </Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
-
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={32} color="#007AFF" />
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileTitle}>My Profile</Text>
-            <Text style={styles.walletAddress}>
-              {`${address?.slice(0, 8)}...${address?.slice(-6)}`}
-            </Text>
-            <Text style={styles.connectorName}>
-              Connected via {connector?.name || "Unknown"}
-            </Text>
-          </View>
-        </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.customHeader}>
+        <Text style={styles.screenTitle}>Profile</Text>
       </View>
-
-      <View style={styles.networkSection}>
-        <Text style={styles.sectionTitle}>Network Status</Text>
-        <View style={styles.networkCard}>
-          <View style={styles.networkInfo}>
-            <Ionicons
-              name={isOnMantaNetwork ? "checkmark-circle" : "warning"}
-              size={24}
-              color={isOnMantaNetwork ? "#28a745" : "#ff9500"}
-            />
-            <View style={styles.networkDetails}>
-              <Text style={styles.networkName}>Chain ID: {chainId}</Text>
-              <Text style={styles.networkDescription}>
-                {chainId === 1 && "Ethereum Mainnet"}
-                {chainId === 137 && "Polygon"}
-                {chainId === 42161 && "Arbitrum"}
-                {chainId === 11155111 && "Sepolia Testnet"}
-                {chainId === 3441006 && "Manta Pacific Testnet"}
-                {![1, 137, 42161, 11155111, 3441006].includes(chainId) &&
-                  "Unknown Network"}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <View style={styles.profileSection}>
+            <View style={styles.avatarContainer}>
+              <Ionicons name="person" size={32} color="#007AFF" />
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileTitle}>My Profile</Text>
+              <Text style={styles.walletAddress}>
+                {`${address?.slice(0, 8)}...${address?.slice(-6)}`}
+              </Text>
+              <Text style={styles.connectorName}>
+                Connected via {connector?.name || "Unknown"}
               </Text>
             </View>
           </View>
-
-          {!isOnMantaNetwork && (
-            <TouchableOpacity
-              style={styles.switchButton}
-              onPress={handleSwitchToManta}
-              disabled={isPending}
-            >
-              <Text style={styles.switchButtonText}>
-                {isPending ? "Switching..." : "Switch to Manta"}
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
-      </View>
+        <View style={styles.networkSection}>
+          <Text style={styles.sectionTitle}>Network Status</Text>
+          <View style={styles.networkCard}>
+            <View style={styles.networkInfo}>
+              <Ionicons
+                name={isOnMantaNetwork ? "checkmark-circle" : "warning"}
+                size={24}
+                color={isOnMantaNetwork ? "#28a745" : "#ff9500"}
+              />
+              <View style={styles.networkDetails}>
+                <Text style={styles.networkName}>Chain ID: {chainId}</Text>
+                <Text style={styles.networkDescription}>
+                  {chainId === 1
+                    ? "Ethereum Mainnet"
+                    : chainId === 137
+                    ? "Polygon"
+                    : chainId === 42161
+                    ? "Arbitrum"
+                    : chainId === 11155111
+                    ? "Sepolia Testnet"
+                    : chainId === 3441006
+                    ? "Manta Pacific Testnet"
+                    : "Unknown Network"}
+                </Text>
+              </View>
+            </View>
 
-      <WalletInfo address={address} />
+            {!isOnMantaNetwork && (
+              <TouchableOpacity
+                style={styles.switchButton}
+                onPress={handleSwitchToManta}
+                disabled={isPending}
+              >
+                <Text style={styles.switchButtonText}>
+                  {isPending ? "Switching..." : "Switch to Manta"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        <WalletInfo address={address} />
+        <View style={styles.optionsSection}>
+          <Text style={styles.sectionTitle}>Account Options</Text>
+          <ProfileOption
+            icon="settings-outline"
+            title="Settings"
+            subtitle="App preferences and configurations"
+            onPress={() => navigation.navigate("Settings")}
+          />
+          <ProfileOption
+            icon="help-circle-outline"
+            title="Help & Support"
+            subtitle="Get help and contact support"
+            onPress={() => navigation.navigate("HelpSupport")}
+          />
+          <ProfileOption
+            icon="document-text-outline"
+            title="Terms & Privacy"
+            subtitle="Read our terms and privacy policy"
+            onPress={() => navigation.navigate("TermsPrivacy")}
+          />
+          <ProfileOption
+            icon="information-circle-outline"
+            title="About EduVerse"
+            subtitle="Learn more about our platform"
+            onPress={() => navigation.navigate("About")}
+          />
+        </View>
+        <View style={styles.dangerSection}>
+          <Text style={styles.sectionTitle}>Danger Zone</Text>
 
-      <View style={styles.optionsSection}>
-        <Text style={styles.sectionTitle}>Account Options</Text>
-
-        <ProfileOption
-          icon="settings-outline"
-          title="Settings"
-          subtitle="App preferences and configurations"
-          onPress={() => Alert.alert("Settings", "Settings page coming soon!")}
-        />
-
-        <ProfileOption
-          icon="help-circle-outline"
-          title="Help & Support"
-          subtitle="Get help and contact support"
-          onPress={() => Alert.alert("Help", "Help page coming soon!")}
-        />
-
-        <ProfileOption
-          icon="document-text-outline"
-          title="Terms & Privacy"
-          subtitle="Read our terms and privacy policy"
-          onPress={() => Alert.alert("Legal", "Legal documents coming soon!")}
-        />
-
-        <ProfileOption
-          icon="information-circle-outline"
-          title="About EduVerse"
-          subtitle="Learn more about our platform"
-          onPress={() =>
-            Alert.alert(
-              "About EduVerse",
-              "Educational Blockchain Platform\nVersion 1.0.0\n\nBuilt with ❤️ using React Native and Reown AppKit"
-            )
-          }
-        />
-      </View>
-
-      <View style={styles.dangerSection}>
-        <Text style={styles.sectionTitle}>Danger Zone</Text>
-
-        <ProfileOption
-          icon="log-out-outline"
-          title="Disconnect Wallet"
-          subtitle="Sign out from your wallet"
-          onPress={handleDisconnect}
-          color="#FF3B30"
-          showArrow={false}
-        />
-      </View>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Powered by Reown AppKit</Text>
-        <Text style={styles.versionText}>EduVerse v1.0.0</Text>
-      </View>
-    </ScrollView>
+          <ProfileOption
+            icon="log-out-outline"
+            title="Disconnect Wallet"
+            subtitle="Sign out from your wallet"
+            onPress={handleDisconnect}
+            color="#FF3B30"
+            showArrow={false}
+          />
+        </View>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Powered by Reown AppKit</Text>
+          <Text style={styles.versionText}>EduVerse v1.0.0</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
+    flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  customHeader: {
+    backgroundColor: "white",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e9ecef",
+  },
+  screenTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    textAlign: "center",
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 30,
+  },
+  disconnectedContent: {
+    flexGrow: 1,
   },
   centeredContent: {
     flex: 1,
@@ -245,6 +284,13 @@ const styles = StyleSheet.create({
   },
   connectSection: {
     marginTop: 20,
+  },
+  helpText: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 20,
+    fontStyle: "italic",
   },
   header: {
     padding: 20,
@@ -385,6 +431,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
     marginBottom: 2,
+  },
+  optionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2,
+  },
+  badge: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "white",
   },
   optionSubtitle: {
     fontSize: 14,
