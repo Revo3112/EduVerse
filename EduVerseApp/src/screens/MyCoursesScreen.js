@@ -1,5 +1,5 @@
 // src/screens/MyCoursesScreen.js - Fixed Text Component Issues
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -49,7 +49,7 @@ const mockCreatedCourses = [
     title: "React Native for Beginners",
     description: "Learn React Native development from scratch",
     students: 42,
-    revenue: "0.15 ETH",
+    revenue: "0.15",
     status: "Published",
     thumbnailURI: "https://picsum.photos/400/250?random=5",
     thumbnail: "https://picsum.photos/400/250?random=5",
@@ -60,6 +60,23 @@ const mockCreatedCourses = [
     isActive: true,
     createdAt: "2024-01-10T10:00:00.000Z",
     sectionsCount: 15,
+  },
+  {
+    id: 2,
+    title: "Blockchain Development Masterclass",
+    description: "Master blockchain development with Solidity and Web3",
+    students: 28,
+    revenue: "0.084",
+    status: "Published",
+    thumbnailURI: "https://picsum.photos/400/250?random=6",
+    thumbnail: "https://picsum.photos/400/250?random=6",
+    category: "Blockchain",
+    created: "2024-01-05",
+    creator: "0x1111222233334444555566667777888899990000",
+    pricePerMonth: "0.003",
+    isActive: true,
+    createdAt: "2024-01-05T10:00:00.000Z",
+    sectionsCount: 25,
   },
 ];
 
@@ -74,6 +91,54 @@ export default function MyCoursesScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [navigating, setNavigating] = useState(false);
   const navigationTimeoutRef = useRef(null);
+
+  // State untuk kurs ETH -> IDR (sama seperti di Dashboard)
+  const [ethToIdrRate, setEthToIdrRate] = useState(null);
+  const [rateLoading, setRateLoading] = useState(true);
+
+  // Helper untuk format Rupiah (sama seperti di Dashboard)
+  const formatRupiah = (number) => {
+    if (typeof number !== "number" || isNaN(number)) return "Rp 0";
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(number);
+  };
+
+  // Helper function to format price in IDR (konsisten dengan Dashboard)
+  const formatPriceInIDR = (priceInETH) => {
+    if (!priceInETH || priceInETH === "0" || parseFloat(priceInETH) === 0) {
+      return "Gratis";
+    }
+    if (!ethToIdrRate) return "Menghitung...";
+
+    const priceInEth = parseFloat(priceInETH);
+    const priceInIdr = priceInEth * ethToIdrRate;
+    return formatRupiah(priceInIdr);
+  };
+
+  // Fetch ETH to IDR rate (sama seperti di Dashboard)
+  const fetchEthPriceInIdr = useCallback(async () => {
+    try {
+      setRateLoading(true);
+      const response = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr"
+      );
+      const data = await response.json();
+      if (data?.ethereum?.idr) {
+        setEthToIdrRate(data.ethereum.idr);
+      } else {
+        setEthToIdrRate(55000000); // Fallback
+      }
+    } catch (error) {
+      console.error("Failed to fetch ETH to IDR rate:", error);
+      setEthToIdrRate(55000000); // Fallback on error
+    } finally {
+      setRateLoading(false);
+    }
+  }, []);
+
   // Reset navigation state when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
@@ -180,7 +245,6 @@ export default function MyCoursesScreen({ navigation }) {
 
     setLoading(false);
   };
-
   useEffect(() => {
     console.log("MyCoursesScreen mount");
     console.log("Wallet connected:", isConnected);
@@ -188,6 +252,9 @@ export default function MyCoursesScreen({ navigation }) {
     console.log("Address:", address);
     console.log("SmartContract initialized:", isInitialized);
     console.log("SmartContractService available:", !!smartContractService);
+
+    // Fetch ETH rate
+    fetchEthPriceInIdr();
 
     if (isConnected && isOnMantaNetwork && address && isInitialized) {
       loadAllCourses();
@@ -198,6 +265,7 @@ export default function MyCoursesScreen({ navigation }) {
     address,
     isInitialized,
     smartContractService,
+    fetchEthPriceInIdr,
   ]);
 
   // Cleanup timeout when component unmounts
@@ -208,10 +276,9 @@ export default function MyCoursesScreen({ navigation }) {
       }
     };
   }, []);
-
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadAllCourses();
+    await Promise.all([loadAllCourses(), fetchEthPriceInIdr()]);
     setRefreshing(false);
   };
   const handleCoursePress = (course) => {
@@ -423,7 +490,6 @@ export default function MyCoursesScreen({ navigation }) {
                   </View>
                 </View>
               </View>
-
               {/* Enrolled Courses List */}
               <View style={styles.coursesContainer}>
                 {enrolledCourses.map((course) => (
@@ -456,6 +522,8 @@ export default function MyCoursesScreen({ navigation }) {
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryNumber}>
                     {createdCourses.reduce((acc, c) => {
+                      // Karena students belum diimplementasi di smart contract,
+                      // gunakan fallback ke mock data atau 0
                       const students = c.students || 0;
                       return acc + students;
                     }, 0)}
@@ -466,9 +534,8 @@ export default function MyCoursesScreen({ navigation }) {
                   <Text style={styles.summaryNumber}>
                     {
                       createdCourses.filter((c) => {
-                        const status =
-                          c.status || c.isActive ? "Published" : "Draft";
-                        return status === "Published";
+                        // Data isActive berasal dari smart contract
+                        return c.isActive === true;
                       }).length
                     }
                   </Text>
@@ -478,25 +545,21 @@ export default function MyCoursesScreen({ navigation }) {
                   <Text style={styles.summaryNumber}>
                     {createdCourses
                       .reduce((acc, c) => {
-                        let revenue = 0;
-                        if (c.revenue && typeof c.revenue === "string") {
-                          revenue =
-                            parseFloat(c.revenue.replace(" ETH", "")) || 0;
-                        } else if (c.revenue && typeof c.revenue === "number") {
-                          revenue = c.revenue;
-                        } else if (c.pricePerMonth) {
-                          revenue = parseFloat(c.pricePerMonth) || 0;
-                        }
-                        return acc + revenue;
+                        // Karena revenue belum diimplementasi di smart contract,
+                        // hitung estimasi berdasarkan pricePerMonth * students
+                        let estimatedRevenue = 0;
+                        const pricePerMonth = parseFloat(c.pricePerMonth) || 0;
+                        const students = c.students || 0;
+                        estimatedRevenue = pricePerMonth * students;
+                        return acc + estimatedRevenue;
                       }, 0)
-                      .toFixed(4)}
+                      .toFixed(4)}{" "}
                     ETH
                   </Text>
-                  <Text style={styles.summaryLabel}>Total Revenue</Text>
+                  <Text style={styles.summaryLabel}>Est. Revenue</Text>
                 </View>
               </View>
             </View>
-
             {/* Created Courses List */}
             <View style={styles.coursesContainer}>
               {createdCourses.map((course) => (
@@ -506,8 +569,9 @@ export default function MyCoursesScreen({ navigation }) {
                   onDetailPress={handleCoursePress}
                   type="created"
                   showMintButton={false}
-                  hidePrice={true}
-                  priceLoading={navigating}
+                  hidePrice={false}
+                  priceInIdr={formatPriceInIDR(course.pricePerMonth)}
+                  priceLoading={rateLoading || navigating}
                 />
               ))}
             </View>
