@@ -169,7 +169,7 @@ export default function IPFSTestScreen({ navigation }) {
           <Text style={styles.sectionTitle}>File Upload</Text>
           <Text style={styles.sectionDescription}>
             Upload images or documents to IPFS via Pinata
-          </Text>{" "}
+          </Text>
           <IPFSUploader
             onUploadComplete={handleFileUploadComplete}
             onUploadStart={() => console.log("Upload started")}
