@@ -1,4 +1,4 @@
-// src/services/SmartContractService.js - Enhanced and Corrected Smart Contract Integration for ethers v6
+// src/services/SmartContractService.js - Enhanced Smart Contract Integration with Course Sections Count
 import { ethers } from "ethers";
 import { BLOCKCHAIN_CONFIG } from "../constants/blockchain";
 
@@ -136,15 +136,37 @@ class SmartContractService {
     }
   }
 
+  // NEW METHOD: Get course sections count
+  async getCourseSectionsCount(courseId) {
+    this.ensureInitialized();
+    try {
+      const sections = await this.contracts.courseFactory.getCourseSections(
+        courseId
+      );
+      return sections.length;
+    } catch (error) {
+      console.error(
+        `Error fetching sections count for course ${courseId}:`,
+        error
+      );
+      return 0;
+    }
+  }
+
+  // ENHANCED METHOD: Get all courses with sections count
   async getAllCourses() {
     this.ensureInitialized();
     try {
       const totalCourses = await this.contracts.courseFactory.getTotalCourses();
       const courses = [];
+
       for (let i = 1; i <= Number(totalCourses); i++) {
         try {
           const course = await this.contracts.courseFactory.getCourse(i);
           if (course.isActive) {
+            // Get sections count for each course
+            const sectionsCount = await this.getCourseSectionsCount(i);
+
             courses.push({
               id: course.id.toString(),
               title: course.title,
@@ -154,6 +176,7 @@ class SmartContractService {
               pricePerMonth: ethers.formatEther(course.pricePerMonth),
               isActive: course.isActive,
               createdAt: new Date(Number(course.createdAt) * 1000),
+              sectionsCount: sectionsCount, // NEW: Add sections count
             });
           }
         } catch (error) {
@@ -167,10 +190,13 @@ class SmartContractService {
     }
   }
 
+  // ENHANCED METHOD: Get single course with sections count
   async getCourse(courseId) {
     this.ensureInitialized();
     try {
       const course = await this.contracts.courseFactory.getCourse(courseId);
+      const sectionsCount = await this.getCourseSectionsCount(courseId);
+
       return {
         id: course.id.toString(),
         title: course.title,
@@ -180,6 +206,7 @@ class SmartContractService {
         pricePerMonth: ethers.formatEther(course.pricePerMonth),
         isActive: course.isActive,
         createdAt: new Date(Number(course.createdAt) * 1000),
+        sectionsCount: sectionsCount, // NEW: Add sections count
       };
     } catch (error) {
       console.error(`Error fetching course ${courseId}:`, error);
@@ -207,13 +234,14 @@ class SmartContractService {
     }
   }
 
+  // ENHANCED METHOD: Get creator courses with sections count
   async getCreatorCourses(creatorAddress) {
     this.ensureInitialized();
     try {
       const courseIds = await this.contracts.courseFactory.getCreatorCourses(
         creatorAddress
       );
-      // Fetch details for each course ID
+      // Fetch details for each course ID (including sections count)
       const courses = await Promise.all(
         courseIds.map((id) => this.getCourse(id.toString()))
       );
@@ -221,6 +249,50 @@ class SmartContractService {
     } catch (error) {
       console.error("Error fetching creator courses:", error);
       return [];
+    }
+  }
+
+  // NEW METHOD: Get course section by specific index
+  async getCourseSection(courseId, orderIndex) {
+    this.ensureInitialized();
+    try {
+      const section = await this.contracts.courseFactory.getCourseSection(
+        courseId,
+        orderIndex
+      );
+      return {
+        id: section.id.toString(),
+        courseId: section.CourseId.toString(),
+        title: section.title,
+        contentURI: section.contentURI,
+        duration: Number(section.duration),
+      };
+    } catch (error) {
+      console.error(
+        `Error fetching section ${orderIndex} for course ${courseId}:`,
+        error
+      );
+      return null;
+    }
+  }
+
+  // NEW METHOD: Get basic course data (lighter version)
+  async getDataCourse(courseId) {
+    this.ensureInitialized();
+    try {
+      const courseData = await this.contracts.courseFactory.getDataCourse(
+        courseId
+      );
+      return {
+        id: courseData.id.toString(),
+        title: courseData.title,
+        description: courseData.description,
+        pricePerMonth: ethers.formatEther(courseData.pricePerMonth),
+        isActive: courseData.isActive,
+      };
+    } catch (error) {
+      console.error(`Error fetching course data ${courseId}:`, error);
+      return null;
     }
   }
 
@@ -291,14 +363,9 @@ class SmartContractService {
 
   // --- Progress Tracker Methods ---
 
-  /**
-   * PERBAIKAN: Mengganti `updateProgress` dengan `completeSection` sesuai dengan ABI.
-   * Fungsi ini menandai satu bagian kursus sebagai selesai.
-   */
   async completeSection(courseId, sectionId) {
     this.ensureInitialized();
     try {
-      // The contract function is `completeSection`, not `updateProgress`.
       const tx = await this.contracts.progressTracker.completeSection(
         courseId,
         sectionId
@@ -311,15 +378,9 @@ class SmartContractService {
     }
   }
 
-  /**
-   * PERBAIKAN: Mengganti `getUserProgress` dengan kombinasi fungsi yang ada.
-   * Tidak ada fungsi `getUserProgress`. Kita akan menggunakan `getCourseSectionsProgress`
-   * dan `getCourseProgressPercentage` untuk mendapatkan data yang relevan.
-   */
   async getUserProgress(userAddress, courseId) {
     this.ensureInitialized();
     try {
-      // The function `getUserProgress` does not exist. We use existing functions to build the progress data.
       const sectionsProgress =
         await this.contracts.progressTracker.getCourseSectionsProgress(
           userAddress,
@@ -344,7 +405,6 @@ class SmartContractService {
         `Error fetching user progress for course ${courseId}:`,
         error
       );
-      // Return a default object on error so the UI doesn't break
       return {
         courseId: courseId.toString(),
         completedSections: 0,
@@ -356,15 +416,9 @@ class SmartContractService {
 
   // --- Certificate Manager Methods ---
 
-  /**
-   * PERBAIKAN: Menyesuaikan parameter `issueCertificate`.
-   * Kontrak memerlukan `studentName` (string), bukan `studentAddress` (address).
-   */
   async issueCertificate(courseId, studentName) {
     this.ensureInitialized();
     try {
-      // The contract function requires `studentName` as a string, not studentAddress.
-      // We also need to send a fee if required by the contract.
       const fee = await this.contracts.certificateManager.certificateFee();
       const tx = await this.contracts.certificateManager.issueCertificate(
         courseId,
@@ -379,23 +433,15 @@ class SmartContractService {
     }
   }
 
-  /**
-   * PERBAIKAN: Mengganti `getUserCertificates` yang tidak ada.
-   * Kita akan membuat fungsi baru `getCertificateForCourse` untuk mengambil sertifikat
-   * per kursus, karena tidak ada fungsi untuk mengambil semua sertifikat pengguna sekaligus.
-   */
   async getCertificateForCourse(userAddress, courseId) {
     this.ensureInitialized();
     try {
-      // The function `getUserCertificates` does not exist.
-      // We get the certificate ID first, then the certificate details.
       const certificateId =
         await this.contracts.certificateManager.getStudentCertificate(
           userAddress,
           courseId
         );
       if (Number(certificateId) === 0) {
-        // User does not have a certificate for this course
         return null;
       }
 
@@ -413,7 +459,6 @@ class SmartContractService {
         studentName: cert.studentName,
         issuedAt: new Date(Number(cert.issuedAt) * 1000),
         isValid: cert.isValid,
-        // You might want to fetch and add metadataURI content here
       };
     } catch (error) {
       console.error(
@@ -430,11 +475,76 @@ class SmartContractService {
     this.ensureInitialized();
     try {
       const price = await this.contracts.courseFactory.getETHPrice();
-      // The price from Chainlink is usually with 8 decimals for USD pairs
       return ethers.formatUnits(price, 8);
     } catch (error) {
       console.error("Error fetching ETH price:", error);
       return "0";
+    }
+  }
+
+  async getMaxPriceInETH() {
+    this.ensureInitialized();
+    try {
+      const maxPrice = await this.contracts.courseFactory.getMaxPriceInETH();
+      return ethers.formatEther(maxPrice);
+    } catch (error) {
+      console.error("Error fetching max price in ETH:", error);
+      return "0";
+    }
+  }
+
+  async getTotalCourses() {
+    this.ensureInitialized();
+    try {
+      const total = await this.contracts.courseFactory.getTotalCourses();
+      return Number(total);
+    } catch (error) {
+      console.error("Error fetching total courses:", error);
+      return 0;
+    }
+  }
+
+  // --- Course Update Methods ---
+
+  async updateCourse(courseId, courseData) {
+    this.ensureInitialized();
+    try {
+      const { title, description, thumbnailURI, pricePerMonth, isActive } =
+        courseData;
+      const priceInWei = ethers.parseEther(pricePerMonth.toString());
+
+      const tx = await this.contracts.courseFactory.updateCourse(
+        courseId,
+        title,
+        description,
+        thumbnailURI,
+        priceInWei,
+        isActive
+      );
+      const receipt = await tx.wait();
+      return { success: true, transactionHash: receipt.hash };
+    } catch (error) {
+      console.error("Error updating course:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateCourseSection(courseId, sectionId, sectionData) {
+    this.ensureInitialized();
+    try {
+      const { title, contentURI, duration } = sectionData;
+      const tx = await this.contracts.courseFactory.updateCourseSection(
+        courseId,
+        sectionId,
+        title,
+        contentURI,
+        duration
+      );
+      const receipt = await tx.wait();
+      return { success: true, transactionHash: receipt.hash };
+    } catch (error) {
+      console.error("Error updating course section:", error);
+      return { success: false, error: error.message };
     }
   }
 }

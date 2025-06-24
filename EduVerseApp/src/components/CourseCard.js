@@ -1,4 +1,4 @@
-// src/components/CourseCard.js - Reusable and Enhanced Course Card
+// src/components/CourseCard.js - Redesigned Course Card with Horizontal Info Layout
 import React from "react";
 import {
   View,
@@ -54,27 +54,89 @@ const CourseCard = ({ course, onDetailPress, priceInIdr, priceLoading }) => {
           {course.title || "Untitled Course"}
         </Text>
 
-        {/* Informasi tambahan dari smart contract */}
-        <View style={styles.infoRow}>
-          <Ionicons name="layers-outline" size={14} color="#64748b" />
-          {/* CATATAN: Jumlah sesi perlu diambil oleh hook useCourses */}
-          <Text style={styles.infoText}>5 Sesi</Text>
-        </View>
-        {creationDate && (
-          <View style={styles.infoRow}>
-            <Ionicons name="calendar-outline" size={14} color="#64748b" />
-            <Text style={styles.infoText}>Dibuat {creationDate}</Text>
-          </View>
+        {/* Description preview dari blockchain */}
+        {course.description && (
+          <Text style={styles.description} numberOfLines={2}>
+            {course.description}
+          </Text>
         )}
 
+        {/* --- Area Informasi dengan Layout Horizontal --- */}
+        <View style={styles.infoContainer}>
+          <View style={styles.infoItem}>
+            <Ionicons name="book-outline" size={16} color="#8b5cf6" />
+            <Text style={styles.infoText}>
+              {course.sectionsCount !== undefined
+                ? `${course.sectionsCount} Sesi`
+                : "... Sesi"}
+            </Text>
+          </View>
+
+          {creationDate && (
+            <View style={styles.infoItem}>
+              <Ionicons name="time-outline" size={16} color="#8b5cf6" />
+              <Text style={styles.infoText}>{creationDate}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Additional info dari blockchain */}
+        <View style={styles.additionalInfo}>
+          <View style={styles.creatorInfo}>
+            <Ionicons name="person-outline" size={12} color="#6366f1" />
+            <Text style={styles.creatorInfoText}>
+              {`${course.creator.slice(0, 4)}...${course.creator.slice(-4)}`}
+            </Text>
+          </View>
+
+          <View style={styles.pricePreview}>
+            <Ionicons name="diamond-outline" size={12} color="#8b5cf6" />
+            <Text style={styles.pricePreviewText}>
+              {parseFloat(course.pricePerMonth) === 0
+                ? "Gratis"
+                : `${parseFloat(course.pricePerMonth).toFixed(4)} ETH`}
+            </Text>
+          </View>
+
+          <View style={styles.idBadge}>
+            <Ionicons name="pricetag-outline" size={12} color="#64748b" />
+            <Text style={styles.idText}>ID: {course.id}</Text>
+          </View>
+        </View>
+
+        {/* --- Footer dengan Harga dan Status --- */}
         <View style={styles.footer}>
           {priceLoading ? (
             <ActivityIndicator size="small" color="#8b5cf6" />
           ) : (
             <Text style={styles.priceText}>{priceInIdr || "Gratis"}</Text>
           )}
+
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: course.isActive ? "#dcfce7" : "#fee2e2" },
+            ]}
+          >
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: course.isActive ? "#22c55e" : "#ef4444" },
+              ]}
+            />
+            <Text
+              style={[
+                styles.statusText,
+                { color: course.isActive ? "#166534" : "#991b1b" },
+              ]}
+            >
+              {course.isActive ? "Aktif" : "Nonaktif"}
+            </Text>
+          </View>
         </View>
       </View>
+
+      {/* Creator badge tetap di atas */}
       <View style={styles.creatorBadge}>
         <Text style={styles.creatorText} numberOfLines={1}>
           Oleh: {`${course.creator.slice(0, 6)}...${course.creator.slice(-4)}`}
@@ -88,7 +150,7 @@ const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: "#fff",
     borderRadius: 16,
-    marginBottom: 20,
+    marginBottom: 16,
     elevation: 4,
     shadowColor: "#4a044e",
     shadowOffset: { width: 0, height: 4 },
@@ -103,24 +165,98 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
   },
   content: {
-    padding: 16,
+    padding: 14,
   },
   title: {
-    fontSize: 16,
+    fontSize: 21,
     fontWeight: "bold",
     color: "#1e293b",
-    marginBottom: 12,
-    minHeight: 40, // Ruang untuk 2 baris judul
+    marginBottom: 2,
+    minHeight: 33,
+    lineHeight: 20,
   },
-  infoRow: {
+  description: {
+    fontSize: 13,
+    color: "#64748b",
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  // --- New Horizontal Info Container ---
+  infoContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  infoItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    flex: 1,
   },
   infoText: {
     fontSize: 12,
     color: "#64748b",
-    marginLeft: 8,
+    marginLeft: 6,
+    fontWeight: "500",
+  },
+  // Additional info styles - semua dari blockchain
+  additionalInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  creatorInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e0e7ff",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    flex: 1,
+    marginRight: 4,
+  },
+  creatorInfoText: {
+    fontSize: 10,
+    color: "#6366f1",
+    fontWeight: "600",
+    marginLeft: 3,
+  },
+  pricePreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f3e8ff",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    flex: 1,
+    marginHorizontal: 2,
+  },
+  pricePreviewText: {
+    fontSize: 10,
+    color: "#8b5cf6",
+    fontWeight: "600",
+    marginLeft: 3,
+  },
+  idBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    flex: 1,
+    marginLeft: 4,
+  },
+  idText: {
+    fontSize: 10,
+    color: "#64748b",
+    fontWeight: "600",
+    marginLeft: 3,
   },
   footer: {
     flexDirection: "row",
@@ -129,12 +265,28 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
     paddingTop: 12,
-    marginTop: 10,
   },
   priceText: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#8b5cf6",
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   creatorBadge: {
     position: "absolute",

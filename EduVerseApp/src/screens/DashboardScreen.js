@@ -50,7 +50,7 @@ export default function DashboardScreen({ navigation }) {
     refetch: refetchCourses,
   } = useCourses();
   const { mintLicense, loading: mintLoading } = useMintLicense();
-  const { refetch: refetchUserCourses } = useUserCourses();
+  const { refetch: refetchUserCourses, enrolledCourses } = useUserCourses();
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
@@ -173,6 +173,11 @@ export default function DashboardScreen({ navigation }) {
     return formatRupiah(priceInIdr);
   };
 
+  // Cek apakah user punya lisensi untuk selectedCourse
+  const hasLicense = selectedCourse
+    ? enrolledCourses.some((c) => c.id === selectedCourse.id)
+    : false;
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
@@ -203,6 +208,7 @@ export default function DashboardScreen({ navigation }) {
         isMinting={mintLoading}
         priceInIdr={calculateModalPrice()}
         priceLoading={rateLoading}
+        hasLicense={hasLicense} // <-- Tambahkan prop ini
       />
     </SafeAreaView>
   );
