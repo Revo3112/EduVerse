@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   priceText: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#8b5cf6",
+    color: "#212121",
   },
   statusBadge: {
     flexDirection: "row",
