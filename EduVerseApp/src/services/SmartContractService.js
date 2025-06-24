@@ -446,6 +446,11 @@ class SmartContractService {
     }
   }
 
+  // Alias method for compatibility
+  async getUserCourseProgress(userAddress, courseId) {
+    return this.getUserProgress(userAddress, courseId);
+  }
+
   // --- Certificate Manager Methods ---
 
   async issueCertificate(courseId, studentName) {
@@ -579,7 +584,75 @@ class SmartContractService {
       return { success: false, error: error.message };
     }
   }
+
+  // NEW METHOD: Get courses that user has enrolled (has active license)
+  async getUserEnrolledCourses(userAddress) {
+    this.ensureInitialized();
+    try {
+      const totalCourses = await this.contracts.courseFactory.getTotalCourses();
+      const courseIds = Array.from(
+        { length: Number(totalCourses) },
+        (_, i) => i + 1
+      );
+
+      const enrolledCourses = [];
+      for (const courseId of courseIds) {
+        // Check if user has valid license for this course
+        const hasLicense = await this.hasValidLicense(userAddress, courseId);
+
+        if (hasLicense) {
+          // Get course details
+          const course = await this.getCourse(courseId);
+          if (course) {
+            // Get user's progress for this course
+            try {
+              const progress = await this.getUserCourseProgress(
+                userAddress,
+                courseId
+              );
+              enrolledCourses.push({
+                ...course,
+                progress: progress.progressPercentage || 0,
+                totalLessons: course.sectionsCount || 0,
+                completedLessons: progress.completedSections || 0,
+                instructor: `${course.creator.slice(
+                  0,
+                  6
+                )}...${course.creator.slice(-4)}`,
+                thumbnail: course.thumbnailURI,
+                category: "Blockchain", // Default category, could be enhanced
+                enrolled: new Date().toISOString().split("T")[0], // Current date as enrolled date
+              });
+            } catch (progressError) {
+              // If progress tracking fails, still include the course with default progress
+              enrolledCourses.push({
+                ...course,
+                progress: 0,
+                totalLessons: course.sectionsCount || 0,
+                completedLessons: 0,
+                instructor: `${course.creator.slice(
+                  0,
+                  6
+                )}...${course.creator.slice(-4)}`,
+                thumbnail: course.thumbnailURI,
+                category: "Blockchain",
+                enrolled: new Date().toISOString().split("T")[0],
+              });
+            }
+          }
+        }
+      }
+      return enrolledCourses;
+    } catch (error) {
+      console.error("Error fetching user enrolled courses:", error);
+      return [];
+    }
+  }
+
+  // Alias method for compatibility
+  async getUserCourseProgress(userAddress, courseId) {
+    return this.getUserProgress(userAddress, courseId);
+  }
 }
 
-// Export singleton instance
 export default new SmartContractService();

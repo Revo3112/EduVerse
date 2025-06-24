@@ -1,6 +1,7 @@
-// src/navigation/MainNavigation.js - Navigation without @expo/vector-icons
+// src/navigation/MainNavigation.js - Navigation with Stack and Tab Navigation
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createStackNavigator } from "@react-navigation/stack";
 import { Text } from "react-native";
 
 // Import screens
@@ -8,8 +9,11 @@ import DashboardScreen from "../screens/DashboardScreen";
 import CreateCourseScreen from "../screens/CreateCourseScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import MyCoursesScreen from "../screens/MyCoursesScreen";
+import CourseDetailScreen from "../screens/CourseDetailScreen";
+import SectionDetailScreen from "../screens/SectionDetailScreen";
 
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
 // Simple tab bar icon component using emojis
 const TabIcon = ({ emoji, focused }) => (
@@ -22,6 +26,21 @@ const TabIcon = ({ emoji, focused }) => (
     {emoji}
   </Text>
 );
+
+// Stack Navigator for MyCourses flow
+function MyCoursesStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen name="MyCoursesMain" component={MyCoursesScreen} />
+      <Stack.Screen name="CourseDetail" component={CourseDetailScreen} />
+      <Stack.Screen name="SectionDetail" component={SectionDetailScreen} />
+    </Stack.Navigator>
+  );
+}
 
 export default function MainNavigation() {
   return (
@@ -68,7 +87,7 @@ export default function MainNavigation() {
       />
       <Tab.Screen
         name="MyCourses"
-        component={MyCoursesScreen}
+        component={MyCoursesStack}
         options={{
           tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
           headerTitle: "My Courses",

@@ -8,46 +8,37 @@ import {
   TouchableOpacity,
   SafeAreaView,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { useAccount, useChainId } from "wagmi";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
 import CourseCard from "../components/CourseCard";
+import {
+  useSmartContract,
+  useUserCourses,
+  useCreatorCourses,
+} from "../hooks/useBlockchain";
 
-// Mock data - replace with real data from smart contracts
+// Mock data sebagai fallback jika terjadi error blockchain
 const mockEnrolledCourses = [
   {
     id: 1,
     title: "Introduction to Blockchain",
+    description: "Learn the fundamentals of blockchain technology",
     instructor: "John Doe",
     progress: 75,
     totalLessons: 20,
     completedLessons: 15,
+    thumbnailURI: "https://picsum.photos/400/250?random=1",
     thumbnail: "https://picsum.photos/400/250?random=1",
     category: "Blockchain",
     enrolled: "2024-01-15",
-  },
-  {
-    id: 2,
-    title: "Smart Contract Development",
-    instructor: "Jane Smith",
-    progress: 30,
-    totalLessons: 25,
-    completedLessons: 8,
-    thumbnail: "https://picsum.photos/400/250?random=2",
-    category: "Development",
-    enrolled: "2024-02-01",
-  },
-  {
-    id: 3,
-    title: "Web3 Frontend Development",
-    instructor: "Mike Johnson",
-    progress: 90,
-    totalLessons: 18,
-    completedLessons: 16,
-    thumbnail: "https://picsum.photos/400/250?random=3",
-    category: "Frontend",
-    enrolled: "2024-01-20",
+    creator: "0x1234567890abcdef1234567890abcdef12345678",
+    pricePerMonth: "0.01",
+    isActive: true,
+    createdAt: "2024-01-15T10:00:00.000Z",
+    sectionsCount: 20,
   },
 ];
 
@@ -55,60 +46,73 @@ const mockCreatedCourses = [
   {
     id: 1,
     title: "React Native for Beginners",
+    description: "Learn React Native development from scratch",
     students: 42,
     revenue: "0.15 ETH",
     status: "Published",
+    thumbnailURI: "https://picsum.photos/400/250?random=5",
     thumbnail: "https://picsum.photos/400/250?random=5",
     category: "Mobile Development",
     created: "2024-01-10",
-  },
-  {
-    id: 2,
-    title: "Advanced JavaScript Concepts",
-    students: 28,
-    revenue: "0.08 ETH",
-    status: "Published",
-    thumbnail: "https://picsum.photos/400/250?random=6",
-    category: "Programming",
-    created: "2024-02-15",
+    creator: "0x1111222233334444555566667777888899990000",
+    pricePerMonth: "0.005",
+    isActive: true,
+    createdAt: "2024-01-10T10:00:00.000Z",
+    sectionsCount: 15,
   },
 ];
 
 export default function MyCoursesScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const { smartContractService, isInitialized } = useSmartContract();
   const [activeTab, setActiveTab] = useState("enrolled");
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [createdCourses, setCreatedCourses] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Helper function to format price
+  const formatPrice = (priceInETH) => {
+    if (!priceInETH || priceInETH === "0" || parseFloat(priceInETH) === 0) {
+      return "Gratis";
+    }
+    return `${parseFloat(priceInETH).toFixed(4)} ETH`;
+  };
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
-
   // Load user's courses from blockchain
   const loadEnrolledCourses = async () => {
     try {
-      // TODO: Implement actual blockchain data fetching
-      // const userCourses = await SmartContractService.getUserEnrolledCourses(address);
-      // setEnrolledCourses(userCourses);
+      if (!smartContractService || !address) {
+        console.log("SmartContractService not available or no address");
+        return;
+      }
 
-      // For now, use mock data
-      setEnrolledCourses(mockEnrolledCourses);
+      const userEnrolledCourses =
+        await smartContractService.getUserEnrolledCourses(address);
+      setEnrolledCourses(userEnrolledCourses);
     } catch (error) {
       console.error("Error loading enrolled courses:", error);
+      // Fallback to mock data if there's an error
+      setEnrolledCourses(mockEnrolledCourses);
     }
   };
 
   const loadCreatedCourses = async () => {
     try {
-      // TODO: Implement actual blockchain data fetching
-      // const userCreatedCourses = await SmartContractService.getCreatorCourses(address);
-      // setCreatedCourses(userCreatedCourses);
+      if (!smartContractService || !address) {
+        console.log("SmartContractService not available or no address");
+        return;
+      }
 
-      // For now, use mock data
-      setCreatedCourses(mockCreatedCourses);
+      const userCreatedCourses = await smartContractService.getCreatorCourses(
+        address
+      );
+      setCreatedCourses(userCreatedCourses);
     } catch (error) {
       console.error("Error loading created courses:", error);
+      // Fallback to mock data if there's an error
+      setCreatedCourses(mockCreatedCourses);
     }
   };
 
@@ -117,23 +121,23 @@ export default function MyCoursesScreen({ navigation }) {
     await Promise.all([loadEnrolledCourses(), loadCreatedCourses()]);
     setLoading(false);
   };
-
   useEffect(() => {
-    if (isConnected && isOnMantaNetwork && address) {
+    if (isConnected && isOnMantaNetwork && address && isInitialized) {
       loadAllCourses();
     }
-  }, [isConnected, isOnMantaNetwork, address]);
+  }, [isConnected, isOnMantaNetwork, address, isInitialized]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadAllCourses();
     setRefreshing(false);
   };
-
   const handleCoursePress = (course) => {
-    // Navigate to course detail or learning screen
-    console.log("Opening course:", course.title);
-    // navigation.navigate('CourseDetail', { courseId: course.id });
+    // Navigate to course detail screen yang menampilkan sections
+    navigation.navigate("CourseDetail", {
+      courseId: course.id,
+      courseTitle: course.title,
+    });
   };
 
   const TabButton = ({ title, isActive, onPress, count = 0 }) => (
@@ -263,7 +267,14 @@ export default function MyCoursesScreen({ navigation }) {
         }
       >
         {activeTab === "enrolled" ? (
-          enrolledCourses.length > 0 ? (
+          loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#9747FF" />
+              <Text style={styles.loadingText}>
+                Loading enrolled courses...
+              </Text>
+            </View>
+          ) : enrolledCourses.length > 0 ? (
             <View style={styles.coursesContainer}>
               {enrolledCourses.map((course) => (
                 <CourseCard
@@ -272,12 +283,19 @@ export default function MyCoursesScreen({ navigation }) {
                   onDetailPress={handleCoursePress}
                   type="enrolled"
                   showMintButton={false}
+                  priceInIdr={formatPrice(course.pricePerMonth)}
+                  priceLoading={false}
                 />
               ))}
             </View>
           ) : (
             <EmptyState type="enrolled" />
           )
+        ) : loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#9747FF" />
+            <Text style={styles.loadingText}>Loading created courses...</Text>
+          </View>
         ) : createdCourses.length > 0 ? (
           <View style={styles.coursesContainer}>
             {createdCourses.map((course) => (
@@ -287,6 +305,8 @@ export default function MyCoursesScreen({ navigation }) {
                 onDetailPress={handleCoursePress}
                 type="created"
                 showMintButton={false}
+                priceInIdr={formatPrice(course.pricePerMonth)}
+                priceLoading={false}
               />
             ))}
           </View>
@@ -328,7 +348,6 @@ export default function MyCoursesScreen({ navigation }) {
             </View>
           </View>
         )}
-
         {activeTab === "created" && createdCourses.length > 0 && (
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Creator Stats</Text>
@@ -372,6 +391,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
   },
   centeredContent: {
     flex: 1,

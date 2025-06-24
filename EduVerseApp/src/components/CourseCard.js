@@ -85,19 +85,21 @@ const CourseCard = ({ course, onDetailPress, priceInIdr, priceLoading }) => {
           <View style={styles.creatorInfo}>
             <Ionicons name="person-outline" size={12} color="#6366f1" />
             <Text style={styles.creatorInfoText}>
-              {`${course.creator.slice(0, 4)}...${course.creator.slice(-4)}`}
+              {course.creator
+                ? `${course.creator.slice(0, 4)}...${course.creator.slice(-4)}`
+                : "Unknown Creator"}
             </Text>
           </View>
-
           <View style={styles.pricePreview}>
             <Ionicons name="diamond-outline" size={12} color="#8b5cf6" />
             <Text style={styles.pricePreviewText}>
-              {parseFloat(course.pricePerMonth) === 0
+              {course.pricePerMonth && parseFloat(course.pricePerMonth) === 0
                 ? "Gratis"
-                : `${parseFloat(course.pricePerMonth).toFixed(4)} ETH`}
+                : course.pricePerMonth
+                ? `${parseFloat(course.pricePerMonth).toFixed(4)} ETH`
+                : "Gratis"}
             </Text>
           </View>
-
           <View style={styles.idBadge}>
             <Ionicons name="pricetag-outline" size={12} color="#64748b" />
             <Text style={styles.idText}>ID: {course.id}</Text>
@@ -115,31 +117,39 @@ const CourseCard = ({ course, onDetailPress, priceInIdr, priceLoading }) => {
           <View
             style={[
               styles.statusBadge,
-              { backgroundColor: course.isActive ? "#dcfce7" : "#fee2e2" },
+              {
+                backgroundColor:
+                  course.isActive !== false ? "#dcfce7" : "#fee2e2",
+              },
             ]}
           >
             <View
               style={[
                 styles.statusDot,
-                { backgroundColor: course.isActive ? "#22c55e" : "#ef4444" },
+                {
+                  backgroundColor:
+                    course.isActive !== false ? "#22c55e" : "#ef4444",
+                },
               ]}
             />
             <Text
               style={[
                 styles.statusText,
-                { color: course.isActive ? "#166534" : "#991b1b" },
+                { color: course.isActive !== false ? "#166534" : "#991b1b" },
               ]}
             >
-              {course.isActive ? "Aktif" : "Nonaktif"}
+              {course.isActive !== false ? "Aktif" : "Nonaktif"}
             </Text>
           </View>
         </View>
       </View>
-
       {/* Creator badge tetap di atas */}
       <View style={styles.creatorBadge}>
         <Text style={styles.creatorText} numberOfLines={1}>
-          Oleh: {`${course.creator.slice(0, 6)}...${course.creator.slice(-4)}`}
+          Oleh:{" "}
+          {course.creator
+            ? `${course.creator.slice(0, 6)}...${course.creator.slice(-4)}`
+            : "Unknown Creator"}
         </Text>
       </View>
     </TouchableOpacity>
