@@ -274,10 +274,10 @@ const CourseDetailModal = ({
                           { color: course.isActive ? "#22c55e" : "#ef4444" },
                         ]}
                       >
-                        {course.isActive ? "Aktif & Tersedia" : "Nonaktif"}
+                        {course.isActive ? "Aktif & Tersedia" : "Nonaktif"}{" "}
                       </Text>
                     </View>
-                  </View>{" "}
+                  </View>
                   {/* Tambahkan pesan lisensi di sini */}
                   {licenseLoading ? (
                     <View style={{ alignItems: "center", marginVertical: 8 }}>
@@ -344,7 +344,6 @@ const CourseDetailModal = ({
 
               {/* Footer dengan Pricing */}
               <View style={styles.footer}>
-                {" "}
                 <View style={styles.priceSection}>
                   <Text style={styles.priceLabel}>
                     Harga Total{" "}
@@ -374,7 +373,7 @@ const CourseDetailModal = ({
                       </>
                     )}
                   </View>
-                </View>{" "}
+                </View>
                 <TouchableOpacity
                   style={[
                     styles.purchaseButton,
