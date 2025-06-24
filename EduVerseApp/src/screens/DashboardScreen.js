@@ -255,7 +255,6 @@ export default function DashboardScreen({ navigation }) {
 
   const calculateModalPrice = () => {
     if (!selectedCourse || !ethToIdrRate) return "Menghitung...";
-    // PERBAIKAN: Sama seperti di renderItem, langsung gunakan nilai yang ada.
     const priceInEth = parseFloat(selectedCourse.pricePerMonth || "0");
     const priceInIdr = priceInEth * ethToIdrRate;
     return formatRupiah(priceInIdr);
