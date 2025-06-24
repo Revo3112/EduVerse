@@ -38,17 +38,18 @@ function walletClientToSigner(walletClient, publicClient) {
 
 // Hooks for managing smart contract service initialization
 export const useSmartContract = () => {
-  const { isConnected } = useAccount();
+  const { isConnected, status } = useAccount(); // DITAMBAHKAN: Ambil juga 'status'
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // DITAMBAHKAN: Wrapper untuk logika inisialisasi
     const initializeService = async () => {
-      if (isConnected && publicClient && walletClient) {
+      // Pengecekan tetap sama, memastikan semua client ada
+      if (publicClient && walletClient) {
         try {
-          // Convert Viem client to ethers provider (v6)
           const provider = publicClientToProvider(publicClient);
           const browserProvider = walletClientToSigner(
             walletClient,
@@ -58,17 +59,35 @@ export const useSmartContract = () => {
           await SmartContractService.initialize(provider, browserProvider);
           setIsInitialized(true);
           setError(null);
+          console.log("SmartContractService Initialized Successfully.");
         } catch (err) {
           console.error("SmartContractService initialization error:", err);
           setError(err.message);
           setIsInitialized(false);
         }
-      } else {
-        setIsInitialized(false);
       }
     };
-    initializeService();
-  }, [isConnected, publicClient, walletClient]);
+
+    // DIUBAH: Logika utama untuk menangani race condition
+    let initializationTimer;
+
+    // Hanya coba inisialisasi jika statusnya 'connected'
+    if (status === "connected") {
+      // Beri jeda singkat untuk memastikan provider stabil
+      initializationTimer = setTimeout(initializeService, 500); // Jeda 500ms
+    } else {
+      // Jika tidak terhubung, pastikan state kembali ke awal
+      setIsInitialized(false);
+    }
+
+    // DITAMBAHKAN: Fungsi cleanup untuk membersihkan timer
+    return () => {
+      if (initializationTimer) {
+        clearTimeout(initializationTimer);
+      }
+    };
+    // DIUBAH: Dependensi utama sekarang adalah 'status' dan client
+  }, [status, publicClient, walletClient]);
 
   return { isInitialized, error };
 };

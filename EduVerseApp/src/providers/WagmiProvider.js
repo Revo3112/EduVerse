@@ -9,10 +9,10 @@ import {
   AppKit,
 } from "@reown/appkit-wagmi-react-native";
 import { mantaPacificTestnet } from "../constants/blockchain";
+import { ENV_PROJECT_ID } from "@env";
 
 // 1. Get projectId at https://cloud.walletconnect.com
-const projectId = "a6b1e4821d77dfee543a4c6dda3f4ca0";
-
+const projectId = ENV_PROJECT_ID;
 // 2. Create wagmiConfig with proper chains setup
 const metadata = {
   name: "EduVerse",
