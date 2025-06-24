@@ -84,28 +84,14 @@ export default function CourseDetailScreen({ route, navigation }) {
           "courseId:",
           courseId
         );
-
         try {
-          // Tambahkan delay kecil untuk memastikan blockchain state consistency
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
+          // Check license (now with caching for better performance)
           const licenseValid = await smartContractService.hasValidLicense(
             address,
             courseId
           );
           console.log("License check result:", licenseValid);
           setHasValidLicense(licenseValid);
-
-          // Jika license tidak valid, coba check sekali lagi setelah delay
-          if (!licenseValid) {
-            console.log("License not valid, retrying after 1 second...");
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-
-            const licenseRetryResult =
-              await smartContractService.hasValidLicense(address, courseId);
-            console.log("License retry result:", licenseRetryResult);
-            setHasValidLicense(licenseRetryResult);
-          }
         } catch (licenseError) {
           console.error("Error checking license:", licenseError);
           // Set false sebagai fallback tapi tidak throw error
@@ -181,12 +167,10 @@ export default function CourseDetailScreen({ route, navigation }) {
       }
       console.log("Real-time license check for section access...");
 
-      // Set loading state instead of alert
+      // Set loading state
       setLoading(true);
 
-      // Wait a moment for blockchain state consistency
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
+      // Check license immediately (caching will handle performance)
       const licenseValid = await smartContractService.hasValidLicense(
         address,
         courseId

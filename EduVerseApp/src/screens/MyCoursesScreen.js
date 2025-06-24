@@ -1,5 +1,5 @@
 // src/screens/MyCoursesScreen.js - Fixed Text Component Issues
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useAccount, useChainId } from "wagmi";
+import { useFocusEffect } from "@react-navigation/native";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
 import CourseCard from "../components/CourseCard";
@@ -71,6 +72,24 @@ export default function MyCoursesScreen({ navigation }) {
   const [createdCourses, setCreatedCourses] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [navigating, setNavigating] = useState(false);
+  const navigationTimeoutRef = useRef(null);
+
+  // Reset navigation state when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (navigating) {
+        console.log("Resetting navigation state on focus");
+        setNavigating(false);
+      }
+
+      // Clear any pending navigation timeout
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+        navigationTimeoutRef.current = null;
+      }
+    }, [navigating])
+  );
 
   // Helper function to format price
   const formatPrice = (priceInETH) => {
@@ -81,8 +100,7 @@ export default function MyCoursesScreen({ navigation }) {
   };
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
-
-  // Load user's courses from blockchain
+  // Load user's courses from blockchain dengan optimization
   const loadEnrolledCourses = async () => {
     try {
       if (!smartContractService) {
@@ -96,8 +114,20 @@ export default function MyCoursesScreen({ navigation }) {
       }
 
       console.log("Fetching enrolled courses for address:", address);
-      const userEnrolledCourses =
-        await smartContractService.getUserEnrolledCourses(address);
+
+      // Tambahkan timeout untuk prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Request timeout after 10 seconds")),
+          10000
+        )
+      );
+
+      const userEnrolledCourses = await Promise.race([
+        smartContractService.getUserEnrolledCourses(address),
+        timeoutPromise,
+      ]);
+
       console.log("Enrolled courses fetched:", userEnrolledCourses.length);
       setEnrolledCourses(userEnrolledCourses);
     } catch (error) {
@@ -106,7 +136,6 @@ export default function MyCoursesScreen({ navigation }) {
       setEnrolledCourses(mockEnrolledCourses);
     }
   };
-
   const loadCreatedCourses = async () => {
     try {
       if (!smartContractService || !address) {
@@ -114,9 +143,19 @@ export default function MyCoursesScreen({ navigation }) {
         return;
       }
 
-      const userCreatedCourses = await smartContractService.getCreatorCourses(
-        address
+      // Tambahkan timeout untuk prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Request timeout after 10 seconds")),
+          10000
+        )
       );
+
+      const userCreatedCourses = await Promise.race([
+        smartContractService.getCreatorCourses(address),
+        timeoutPromise,
+      ]);
+
       setCreatedCourses(userCreatedCourses);
     } catch (error) {
       console.error("Error loading created courses:", error);
@@ -124,10 +163,30 @@ export default function MyCoursesScreen({ navigation }) {
       setCreatedCourses(mockCreatedCourses);
     }
   };
-
   const loadAllCourses = async () => {
+    if (loading) {
+      console.log("Loading already in progress, skipping");
+      return;
+    }
+
     setLoading(true);
-    await Promise.all([loadEnrolledCourses(), loadCreatedCourses()]);
+
+    // Use Promise.allSettled untuk better error handling
+    const results = await Promise.allSettled([
+      loadEnrolledCourses(),
+      loadCreatedCourses(),
+    ]);
+
+    // Log failed operations
+    results.forEach((result, index) => {
+      if (result.status === "rejected") {
+        console.error(
+          `Failed to load ${index === 0 ? "enrolled" : "created"} courses:`,
+          result.reason
+        );
+      }
+    });
+
     setLoading(false);
   };
 
@@ -150,18 +209,51 @@ export default function MyCoursesScreen({ navigation }) {
     smartContractService,
   ]);
 
+  // Cleanup timeout when component unmounts
+  useEffect(() => {
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadAllCourses();
     setRefreshing(false);
   };
-
   const handleCoursePress = (course) => {
-    // Navigate to course detail screen yang menampilkan sections
-    navigation.navigate("CourseDetail", {
-      courseId: course.id,
-      courseTitle: course.title,
-    });
+    if (navigating) {
+      console.log("Navigation already in progress, preventing duplicate press");
+      return;
+    }
+
+    console.log("Navigating to course detail:", course.id);
+    setNavigating(true);
+
+    // Clear any existing timeout
+    if (navigationTimeoutRef.current) {
+      clearTimeout(navigationTimeoutRef.current);
+    }
+
+    // Navigate immediately untuk improve responsiveness
+    try {
+      navigation.navigate("CourseDetail", {
+        courseId: course.id,
+        courseTitle: course.title,
+      });
+    } catch (navigationError) {
+      console.error("Navigation error:", navigationError);
+      setNavigating(false);
+      return;
+    }
+
+    // Reset navigating state dengan timeout yang lebih pendek
+    navigationTimeoutRef.current = setTimeout(() => {
+      setNavigating(false);
+      navigationTimeoutRef.current = null;
+    }, 500); // Reduced from 1000ms to 500ms
   };
 
   const TabButton = ({ title, isActive, onPress, count = 0 }) => (
@@ -308,7 +400,7 @@ export default function MyCoursesScreen({ navigation }) {
                   type="enrolled"
                   showMintButton={false}
                   priceInIdr={formatPrice(course.pricePerMonth)}
-                  priceLoading={false}
+                  priceLoading={navigating}
                 />
               ))}
             </View>
@@ -330,7 +422,7 @@ export default function MyCoursesScreen({ navigation }) {
                 type="created"
                 showMintButton={false}
                 priceInIdr={formatPrice(course.pricePerMonth)}
-                priceLoading={false}
+                priceLoading={navigating}
               />
             ))}
           </View>

@@ -14,6 +14,8 @@ class SmartContractService {
     this.signer = null;
     this.contracts = {};
     this.isInitialized = false;
+    this.licenseCache = new Map();
+    this.cacheExpiry = 30000; // 30 seconds cache
   }
   // Initialize the service with providers (ethers v6)
   async initialize(provider, browserProvider) {
@@ -413,10 +415,20 @@ class SmartContractService {
       return [];
     }
   }
+
   // Method untuk mengecek apakah user memiliki lisensi yang valid dan aktif untuk course tertentu
   // Enhanced untuk ethers v6 dan wagmi v2 dengan better error handling
   async hasValidLicense(userAddress, courseId) {
     this.ensureInitialized();
+
+    // Check cache first untuk improve performance
+    const cacheKey = `${userAddress}-${courseId}`;
+    const cached = this.licenseCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
+      console.log("License check from cache:", cached.result);
+      return cached.result;
+    }
+
     try {
       console.log("Checking license for:", { userAddress, courseId });
 
@@ -425,6 +437,10 @@ class SmartContractService {
         console.error("Invalid parameters for license check:", {
           userAddress,
           courseId,
+        });
+        this.licenseCache.set(cacheKey, {
+          result: false,
+          timestamp: Date.now(),
         });
         return false;
       }
@@ -457,27 +473,38 @@ class SmartContractService {
             isActive: licenseData.isActive,
             expiryTimestamp: licenseData.expiryTimestamp.toString(),
             currentTime: Math.floor(Date.now() / 1000),
-          });
-
-          // Cek apakah lisensi masih aktif dan belum expired
+          }); // Cek apakah lisensi masih aktif dan belum expired
           const now = Math.floor(Date.now() / 1000);
           const isActive =
             licenseData.isActive && Number(licenseData.expiryTimestamp) > now;
 
           console.log("License validity result:", isActive);
+
+          // Cache the result untuk improve performance
+          this.licenseCache.set(cacheKey, {
+            result: isActive,
+            timestamp: Date.now(),
+          });
+
           return isActive;
         } catch (licenseDataError) {
           console.error("Error fetching license data:", licenseDataError);
           // Jika error dalam mengambil data license tapi balance > 0, anggap valid
           console.log("Assuming valid license due to positive balance");
+          this.licenseCache.set(cacheKey, {
+            result: true,
+            timestamp: Date.now(),
+          });
           return true;
         }
       }
 
       console.log("No license balance found");
+      this.licenseCache.set(cacheKey, { result: false, timestamp: Date.now() });
       return false;
     } catch (error) {
       console.error("Error checking license validity:", error);
+      this.licenseCache.set(cacheKey, { result: false, timestamp: Date.now() });
       return false;
     }
   }
