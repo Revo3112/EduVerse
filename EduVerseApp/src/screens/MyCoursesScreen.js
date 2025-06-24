@@ -83,13 +83,20 @@ export default function MyCoursesScreen({ navigation }) {
   // Load user's courses from blockchain
   const loadEnrolledCourses = async () => {
     try {
-      if (!smartContractService || !address) {
-        console.log("SmartContractService not available or no address");
+      if (!smartContractService) {
+        console.log("SmartContractService not available");
         return;
       }
 
+      if (!address) {
+        console.log("Address not available");
+        return;
+      }
+
+      console.log("Fetching enrolled courses for address:", address);
       const userEnrolledCourses =
         await smartContractService.getUserEnrolledCourses(address);
+      console.log("Enrolled courses fetched:", userEnrolledCourses.length);
       setEnrolledCourses(userEnrolledCourses);
     } catch (error) {
       console.error("Error loading enrolled courses:", error);
@@ -122,10 +129,23 @@ export default function MyCoursesScreen({ navigation }) {
     setLoading(false);
   };
   useEffect(() => {
+    console.log("MyCoursesScreen mount");
+    console.log("Wallet connected:", isConnected);
+    console.log("On Manta Network:", isOnMantaNetwork);
+    console.log("Address:", address);
+    console.log("SmartContract initialized:", isInitialized);
+    console.log("SmartContractService available:", !!smartContractService);
+
     if (isConnected && isOnMantaNetwork && address && isInitialized) {
       loadAllCourses();
     }
-  }, [isConnected, isOnMantaNetwork, address, isInitialized]);
+  }, [
+    isConnected,
+    isOnMantaNetwork,
+    address,
+    isInitialized,
+    smartContractService,
+  ]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

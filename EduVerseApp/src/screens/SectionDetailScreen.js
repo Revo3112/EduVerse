@@ -34,11 +34,25 @@ export default function SectionDetailScreen({ route, navigation }) {
 
   const videoRef = useRef(null);
   const audioRef = useRef(null);
-
   useEffect(() => {
+    console.log("SectionDetailScreen useEffect triggered:", {
+      courseId,
+      sectionId,
+      address,
+      isInitialized,
+      smartContractServiceAvailable: !!smartContractService,
+    });
+
+    // Load section data terlebih dahulu
     loadSectionData();
-    checkLicenseAndProgress();
-  }, [courseId, sectionId, address]);
+
+    // Check license hanya jika semua requirement terpenuhi
+    if (address && isInitialized && smartContractService) {
+      checkLicenseAndProgress();
+    } else {
+      console.log("Skipping license check - requirements not met");
+    }
+  }, [courseId, sectionId, address, isInitialized, smartContractService]);
   const loadSectionData = async () => {
     try {
       setLoading(true);
@@ -100,21 +114,66 @@ export default function SectionDetailScreen({ route, navigation }) {
   };
   const checkLicenseAndProgress = async () => {
     try {
-      if (!address || !smartContractService) return;
-
-      // Check if user has valid license
-      const licenseValid = await smartContractService.hasValidLicense(
+      console.log("SectionDetailScreen - Checking license and progress:", {
         address,
-        courseId
-      );
-      setHasValidLicense(licenseValid);
+        courseId,
+        smartContractServiceAvailable: !!smartContractService,
+      });
+
+      if (!address || !smartContractService) {
+        console.log("Missing address or smart contract service");
+        return;
+      }
+
+      // Check if user has valid license dengan retry logic
+      try {
+        const licenseValid = await smartContractService.hasValidLicense(
+          address,
+          courseId
+        );
+        console.log("Section screen license check result:", licenseValid);
+        setHasValidLicense(licenseValid);
+
+        // Jika license tidak valid, coba sekali lagi setelah delay
+        if (!licenseValid) {
+          console.log("License not valid, retrying in section screen...");
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          const retryResult = await smartContractService.hasValidLicense(
+            address,
+            courseId
+          );
+          console.log("Section screen license retry result:", retryResult);
+          setHasValidLicense(retryResult);
+        }
+      } catch (licenseError) {
+        console.error(
+          "Error checking license in section screen:",
+          licenseError
+        );
+        setHasValidLicense(false);
+      }
 
       // Get user progress
-      const userProgress = await smartContractService.getUserProgress(
-        address,
-        courseId
-      );
-      setProgress(userProgress);
+      try {
+        const userProgress = await smartContractService.getUserProgress(
+          address,
+          courseId
+        );
+        console.log("Section screen user progress:", userProgress);
+        setProgress(userProgress);
+      } catch (progressError) {
+        console.error(
+          "Error getting user progress in section screen:",
+          progressError
+        );
+        setProgress({
+          courseId: courseId.toString(),
+          completedSections: 0,
+          totalSections: 0,
+          progressPercentage: 0,
+        });
+      }
 
       // Check if this specific section is completed
       // This would require additional smart contract method to check individual section completion

@@ -38,58 +38,68 @@ function walletClientToSigner(walletClient, publicClient) {
 
 // Hooks for managing smart contract service initialization
 export const useSmartContract = () => {
-  const { isConnected, status } = useAccount(); // DITAMBAHKAN: Ambil juga 'status'
+  const { isConnected, status } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState(null);
 
+  // Tambahkan debugging info
   useEffect(() => {
-    // DITAMBAHKAN: Wrapper untuk logika inisialisasi
-    const initializeService = async () => {
-      // Pengecekan tetap sama, memastikan semua client ada
-      if (publicClient && walletClient) {
-        try {
-          const provider = publicClientToProvider(publicClient);
-          const browserProvider = walletClientToSigner(
-            walletClient,
-            publicClient
-          );
+    console.log("Status wallet:", status);
+    console.log("Public client:", !!publicClient);
+    console.log("Wallet client:", !!walletClient);
+  }, [status, publicClient, walletClient]);
 
-          await SmartContractService.initialize(provider, browserProvider);
-          setIsInitialized(true);
-          setError(null);
-          console.log("SmartContractService Initialized Successfully.");
-        } catch (err) {
-          console.error("SmartContractService initialization error:", err);
-          setError(err.message);
-          setIsInitialized(false);
-        }
+  useEffect(() => {
+    const initializeService = async () => {
+      if (!publicClient || !walletClient) {
+        console.log("Client tidak tersedia:", {
+          publicClient: !!publicClient,
+          walletClient: !!walletClient,
+        });
+        return;
+      }
+
+      try {
+        console.log("Mencoba initialize SmartContractService...");
+        const provider = publicClientToProvider(publicClient);
+        const browserProvider = walletClientToSigner(
+          walletClient,
+          publicClient
+        );
+
+        await SmartContractService.initialize(provider, browserProvider);
+        console.log("SmartContractService berhasil diinisialisasi!");
+        setIsInitialized(true);
+        setError(null);
+      } catch (err) {
+        console.error("ERROR inisialisasi SmartContractService:", err);
+        setError(err.message);
+        setIsInitialized(false);
       }
     };
 
-    // DIUBAH: Logika utama untuk menangani race condition
-    let initializationTimer;
-
-    // Hanya coba inisialisasi jika statusnya 'connected'
-    if (status === "connected") {
-      // Beri jeda singkat untuk memastikan provider stabil
-      initializationTimer = setTimeout(initializeService, 500); // Jeda 500ms
+    let initTimer;
+    if (status === "connected" && publicClient && walletClient) {
+      console.log("Wallet connected, menginisialisasi SmartContractService...");
+      // Tambahkan delay lebih lama untuk memastikan provider stabil
+      initTimer = setTimeout(initializeService, 1500); // Tunda 1.5 detik
     } else {
-      // Jika tidak terhubung, pastikan state kembali ke awal
       setIsInitialized(false);
     }
 
-    // DITAMBAHKAN: Fungsi cleanup untuk membersihkan timer
     return () => {
-      if (initializationTimer) {
-        clearTimeout(initializationTimer);
-      }
+      if (initTimer) clearTimeout(initTimer);
     };
-    // DIUBAH: Dependensi utama sekarang adalah 'status' dan client
   }, [status, publicClient, walletClient]);
 
-  return { isInitialized, error };
+  // PERBAIKAN: Return SmartContractService instance jika sudah diinisialisasi
+  return {
+    smartContractService: isInitialized ? SmartContractService : null,
+    isInitialized,
+    error,
+  };
 };
 
 // Hook Fetching all courses

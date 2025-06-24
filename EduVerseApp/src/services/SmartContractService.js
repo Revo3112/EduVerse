@@ -15,12 +15,48 @@ class SmartContractService {
     this.contracts = {};
     this.isInitialized = false;
   }
-
   // Initialize the service with providers (ethers v6)
   async initialize(provider, browserProvider) {
     try {
       this.provider = provider;
-      this.signer = await browserProvider.getSigner();
+
+      // Log network info untuk debugging - FIX untuk ethers v6
+      try {
+        const network = await provider.getNetwork();
+        console.log("Connected to network:", {
+          chainId: Number(network.chainId), // Konversi BigInt ke Number
+          name: network.name || "Unknown",
+        });
+      } catch (networkError) {
+        console.warn("Failed to get network info:", networkError.message);
+      }
+
+      // Log contract addresses
+      console.log("Contract addresses:", {
+        courseFactory: BLOCKCHAIN_CONFIG.CONTRACTS.courseFactory,
+        courseLicense: BLOCKCHAIN_CONFIG.CONTRACTS.courseLicense,
+        progressTracker: BLOCKCHAIN_CONFIG.CONTRACTS.progressTracker,
+        certificateManager: BLOCKCHAIN_CONFIG.CONTRACTS.certificateManager,
+      });
+
+      // Get signer dengan proper error handling - FIX untuk wagmi v2
+      try {
+        // Untuk wagmi v2 dan ethers v6, penggunaan signer yang benar
+        if (
+          browserProvider &&
+          typeof browserProvider.getSigner === "function"
+        ) {
+          this.signer = await browserProvider.getSigner();
+          const address = await this.signer.getAddress();
+          console.log("Signer address:", address);
+        } else {
+          // Fallback jika browserProvider bukan provider ethers v6 standar
+          throw new Error("Invalid browser provider format");
+        }
+      } catch (signerError) {
+        console.error("Failed to get signer:", signerError);
+        throw new Error("Failed to get wallet signer: " + signerError.message);
+      }
 
       // Initialize contract instances with the signer
       this.contracts = {
@@ -50,6 +86,7 @@ class SmartContractService {
       console.log("SmartContractService initialized successfully");
     } catch (error) {
       console.error("Failed to initialize SmartContractService:", error);
+      this.isInitialized = false;
       throw error;
     }
   }
@@ -360,32 +397,68 @@ class SmartContractService {
       return [];
     }
   }
-
   // Method untuk mengecek apakah user memiliki lisensi yang valid dan aktif untuk course tertentu
+  // Enhanced untuk ethers v6 dan wagmi v2 dengan better error handling
   async hasValidLicense(userAddress, courseId) {
     this.ensureInitialized();
     try {
-      // Cek balance user untuk course ID tertentu (ERC1155)
-      const balance = await this.contracts.courseLicense.balanceOf(
-        userAddress,
-        courseId
-      );
+      console.log("Checking license for:", { userAddress, courseId });
+
+      // Validate input parameters
+      if (!userAddress || !courseId) {
+        console.error("Invalid parameters for license check:", {
+          userAddress,
+          courseId,
+        });
+        return false;
+      }
+
+      // Ensure courseId is string for consistency
+      const courseIdStr = courseId.toString();
+
+      // Cek balance user untuk course ID tertentu (ERC1155) dengan error handling
+      let balance;
+      try {
+        balance = await this.contracts.courseLicense.balanceOf(
+          userAddress,
+          courseIdStr
+        );
+        console.log("License balance:", balance.toString());
+      } catch (balanceError) {
+        console.error("Error checking balance:", balanceError);
+        return false;
+      }
 
       if (Number(balance) > 0) {
         // Jika punya balance, cek apakah lisensinya masih aktif
-        const licenseData = await this.contracts.courseLicense.getLicense(
-          userAddress,
-          courseId
-        );
+        try {
+          const licenseData = await this.contracts.courseLicense.getLicense(
+            userAddress,
+            courseIdStr
+          );
 
-        // Cek apakah lisensi masih aktif dan belum expired
-        const now = Math.floor(Date.now() / 1000);
-        const isActive =
-          licenseData.isActive && Number(licenseData.expiryTimestamp) > now;
+          console.log("License data:", {
+            isActive: licenseData.isActive,
+            expiryTimestamp: licenseData.expiryTimestamp.toString(),
+            currentTime: Math.floor(Date.now() / 1000),
+          });
 
-        return isActive;
+          // Cek apakah lisensi masih aktif dan belum expired
+          const now = Math.floor(Date.now() / 1000);
+          const isActive =
+            licenseData.isActive && Number(licenseData.expiryTimestamp) > now;
+
+          console.log("License validity result:", isActive);
+          return isActive;
+        } catch (licenseDataError) {
+          console.error("Error fetching license data:", licenseDataError);
+          // Jika error dalam mengambil data license tapi balance > 0, anggap valid
+          console.log("Assuming valid license due to positive balance");
+          return true;
+        }
       }
 
+      console.log("No license balance found");
       return false;
     } catch (error) {
       console.error("Error checking license validity:", error);

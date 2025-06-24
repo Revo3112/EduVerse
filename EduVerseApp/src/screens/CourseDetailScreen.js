@@ -25,80 +25,207 @@ export default function CourseDetailScreen({ route, navigation }) {
   const [hasValidLicense, setHasValidLicense] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
+  // useEffect dengan dependency yang lebih spesifik dan logging
   useEffect(() => {
-    loadCourseData();
-  }, [courseId, address]);
+    console.log("CourseDetailScreen useEffect triggered:", {
+      courseId,
+      address,
+      isInitialized,
+      smartContractServiceAvailable: !!smartContractService,
+    });
+
+    // Hanya load data jika semua kondisi terpenuhi
+    if (courseId && address && isInitialized && smartContractService) {
+      loadCourseData();
+    } else {
+      console.log("Skipping loadCourseData - conditions not met");
+    }
+  }, [courseId, address, isInitialized, smartContractService]);
+
   const loadCourseData = async () => {
     try {
       setLoading(true);
+      console.log(
+        "Loading course data for courseId:",
+        courseId,
+        "address:",
+        address
+      );
 
-      if (!smartContractService) {
-        Alert.alert("Error", "Smart contract service not available");
+      if (!smartContractService || !isInitialized) {
+        console.error("SmartContractService not ready:", {
+          serviceAvailable: !!smartContractService,
+          isInitialized,
+        });
+        Alert.alert(
+          "Error",
+          "Smart contract service not ready. Please try again."
+        );
         return;
       }
 
-      // Load course details
+      // Load course details dengan error handling yang lebih baik
       const courseData = await smartContractService.getCourse(courseId);
+      console.log("Course data loaded:", courseData?.title || "No title");
       setCourse(courseData);
 
       // Load course sections
       const sectionsData = await smartContractService.getCourseSections(
         courseId
       );
+      console.log("Sections loaded:", sectionsData?.length || 0, "sections");
       setSections(sectionsData);
 
       if (address) {
-        // Check license validity
-        const licenseValid = await smartContractService.hasValidLicense(
+        // Check license validity dengan retry logic untuk ethers v6
+        console.log(
+          "Checking license validity for address:",
           address,
+          "courseId:",
           courseId
         );
-        setHasValidLicense(licenseValid);
+
+        try {
+          // Tambahkan delay kecil untuk memastikan blockchain state consistency
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          const licenseValid = await smartContractService.hasValidLicense(
+            address,
+            courseId
+          );
+          console.log("License check result:", licenseValid);
+          setHasValidLicense(licenseValid);
+
+          // Jika license tidak valid, coba check sekali lagi setelah delay
+          if (!licenseValid) {
+            console.log("License not valid, retrying after 1 second...");
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+
+            const licenseRetryResult =
+              await smartContractService.hasValidLicense(address, courseId);
+            console.log("License retry result:", licenseRetryResult);
+            setHasValidLicense(licenseRetryResult);
+          }
+        } catch (licenseError) {
+          console.error("Error checking license:", licenseError);
+          // Set false sebagai fallback tapi tidak throw error
+          setHasValidLicense(false);
+        }
 
         // Get user progress
-        const userProgress = await smartContractService.getUserProgress(
-          address,
-          courseId
-        );
-        setProgress(userProgress);
+        try {
+          const userProgress = await smartContractService.getUserProgress(
+            address,
+            courseId
+          );
+          console.log("User progress loaded:", userProgress);
+          setProgress(userProgress);
+        } catch (progressError) {
+          console.error("Error loading user progress:", progressError);
+          // Set default progress jika error
+          setProgress({
+            courseId: courseId.toString(),
+            completedSections: 0,
+            totalSections: 0,
+            progressPercentage: 0,
+          });
+        }
       }
     } catch (error) {
       console.error("Error loading course data:", error);
-      Alert.alert("Error", "Failed to load course data");
+      Alert.alert("Error", "Failed to load course data: " + error.message);
     } finally {
       setLoading(false);
     }
   };
-
   const handleRefresh = async () => {
+    console.log("Manual refresh triggered");
     setRefreshing(true);
+
+    // Reset license state before reload untuk memastikan fresh check
+    setHasValidLicense(false);
+
     await loadCourseData();
     setRefreshing(false);
   };
 
   const handleSectionPress = (section, index) => {
+    console.log("Section pressed:", {
+      sectionId: section.id,
+      hasValidLicense,
+      address,
+    });
+
+    // Double check license sebelum navigasi untuk memastikan akses
     if (!hasValidLicense) {
-      Alert.alert(
-        "Access Denied",
-        "You need a valid license for this course to access sections.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Get License",
-            onPress: () => navigation.navigate("Dashboard"),
-          },
-        ]
-      );
+      // Coba check license sekali lagi secara real-time
+      checkLicenseRealTime(section, index);
       return;
     }
 
+    // Jika license valid, navigasi ke section detail
     navigation.navigate("SectionDetail", {
       courseId: courseId,
       sectionId: section.id,
       sectionIndex: index,
       courseTitle: course?.title || courseTitle,
     });
+  };
+
+  // Fungsi untuk check license secara real-time sebelum akses section
+  const checkLicenseRealTime = async (section, index) => {
+    try {
+      if (!address || !smartContractService) {
+        Alert.alert("Error", "Wallet not connected or service not available");
+        return;
+      }
+      console.log("Real-time license check for section access...");
+
+      // Set loading state instead of alert
+      setLoading(true);
+
+      // Wait a moment for blockchain state consistency
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const licenseValid = await smartContractService.hasValidLicense(
+        address,
+        courseId
+      );
+      console.log("Real-time license check result:", licenseValid);
+
+      setLoading(false);
+
+      if (licenseValid) {
+        // Update state dan navigasi
+        setHasValidLicense(true);
+        navigation.navigate("SectionDetail", {
+          courseId: courseId,
+          sectionId: section.id,
+          sectionIndex: index,
+          courseTitle: course?.title || courseTitle,
+        });
+      } else {
+        Alert.alert(
+          "Access Denied",
+          "You need a valid license for this course to access sections.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Refresh",
+              onPress: () => handleRefresh(),
+            },
+            {
+              text: "Get License",
+              onPress: () => navigation.navigate("Dashboard"),
+            },
+          ]
+        );
+      }
+    } catch (error) {
+      console.error("Error in real-time license check:", error);
+      setLoading(false);
+      Alert.alert("Error", "Failed to verify license. Please try refreshing.");
+    }
   };
 
   const formatDuration = (seconds) => {
