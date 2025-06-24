@@ -1,4 +1,4 @@
-// src/services/SmartContractService.js - Enhanced Smart Contract Integration for ethers v6
+// src/services/SmartContractService.js - Enhanced and Corrected Smart Contract Integration for ethers v6
 import { ethers } from "ethers";
 import { BLOCKCHAIN_CONFIG } from "../constants/blockchain";
 
@@ -12,7 +12,6 @@ class SmartContractService {
   constructor() {
     this.provider = null;
     this.signer = null;
-    this.browserProvider = null;
     this.contracts = {};
     this.isInitialized = false;
   }
@@ -21,10 +20,9 @@ class SmartContractService {
   async initialize(provider, browserProvider) {
     try {
       this.provider = provider;
-      this.browserProvider = browserProvider;
       this.signer = await browserProvider.getSigner();
 
-      // Initialize contract instances with ethers v6 syntax
+      // Initialize contract instances with the signer
       this.contracts = {
         courseFactory: new ethers.Contract(
           BLOCKCHAIN_CONFIG.CONTRACTS.courseFactory,
@@ -65,14 +63,12 @@ class SmartContractService {
     }
   }
 
-  // Course Factory Methods
+  // --- Course Factory Methods ---
+
   async createCourse(courseData) {
     this.ensureInitialized();
-
     try {
       const { title, description, thumbnailURI, pricePerMonth } = courseData;
-
-      // Convert price to wei if it's in ETH (ethers v6)
       const priceInWei = ethers.parseEther(pricePerMonth.toString());
 
       const tx = await this.contracts.courseFactory.createCourse(
@@ -81,113 +77,89 @@ class SmartContractService {
         thumbnailURI,
         priceInWei
       );
-
       const receipt = await tx.wait();
 
-      // Extract course ID from event logs (ethers v6)
-      let courseId = null;
+      // Find the event to get the course ID
       for (const log of receipt.logs) {
         try {
           const parsedLog =
             this.contracts.courseFactory.interface.parseLog(log);
           if (parsedLog && parsedLog.name === "CourseCreated") {
-            courseId = parsedLog.args.CourseId.toString();
-            break;
+            return {
+              success: true,
+              courseId: parsedLog.args.CourseId.toString(),
+              transactionHash: receipt.hash,
+            };
           }
         } catch (e) {
-          // Skip logs that can't be parsed
-          continue;
+          continue; // Not a CourseFactory event, skip
         }
       }
-
-      return {
-        success: true,
-        courseId: courseId,
-        transactionHash: receipt.hash,
-      };
+      throw new Error("CourseCreated event not found.");
     } catch (error) {
       console.error("Error creating course:", error);
-      return {
-        success: false,
-        error: error.message,
-      };
+      return { success: false, error: error.message };
     }
   }
 
   async addCourseSection(courseId, sectionData) {
     this.ensureInitialized();
-
     try {
       const { title, contentURI, duration } = sectionData;
-
       const tx = await this.contracts.courseFactory.addCourseSection(
         courseId,
         title,
         contentURI,
         duration
       );
-
       const receipt = await tx.wait();
 
-      // Extract section ID from event logs (ethers v6)
-      let sectionId = null;
       for (const log of receipt.logs) {
         try {
           const parsedLog =
             this.contracts.courseFactory.interface.parseLog(log);
           if (parsedLog && parsedLog.name === "SectionAdded") {
-            sectionId = parsedLog.args.sectionId.toString();
-            break;
+            return {
+              success: true,
+              sectionId: parsedLog.args.sectionId.toString(),
+              transactionHash: receipt.hash,
+            };
           }
         } catch (e) {
-          // Skip logs that can't be parsed
           continue;
         }
       }
-
-      return {
-        success: true,
-        sectionId: sectionId,
-        transactionHash: receipt.hash,
-      };
+      throw new Error("SectionAdded event not found.");
     } catch (error) {
       console.error("Error adding course section:", error);
-      return {
-        success: false,
-        error: error.message,
-      };
+      return { success: false, error: error.message };
     }
   }
 
   async getAllCourses() {
     this.ensureInitialized();
-
     try {
       const totalCourses = await this.contracts.courseFactory.getTotalCourses();
       const courses = [];
-
       for (let i = 1; i <= Number(totalCourses); i++) {
         try {
           const course = await this.contracts.courseFactory.getCourse(i);
-
-          // Format course data (ethers v6)
-          const formattedCourse = {
-            id: course.id.toString(),
-            title: course.title,
-            description: course.description,
-            thumbnailURI: course.thumbnailURI,
-            creator: course.creator,
-            pricePerMonth: ethers.formatEther(course.pricePerMonth),
-            isActive: course.isActive,
-            createdAt: new Date(Number(course.createdAt) * 1000),
-          };
-
-          courses.push(formattedCourse);
+          if (course.isActive) {
+            courses.push({
+              id: course.id.toString(),
+              title: course.title,
+              description: course.description,
+              thumbnailURI: course.thumbnailURI,
+              creator: course.creator,
+              pricePerMonth: ethers.formatEther(course.pricePerMonth),
+              isActive: course.isActive,
+              createdAt: new Date(Number(course.createdAt) * 1000),
+            });
+          }
         } catch (error) {
           console.warn(`Failed to fetch course ${i}:`, error);
         }
       }
-
       return courses;
     } catch (error) {
       console.error("Error fetching all courses:", error);
@@ -197,10 +169,8 @@ class SmartContractService {
 
   async getCourse(courseId) {
     this.ensureInitialized();
-
     try {
       const course = await this.contracts.courseFactory.getCourse(courseId);
-
       return {
         id: course.id.toString(),
         title: course.title,
@@ -212,19 +182,17 @@ class SmartContractService {
         createdAt: new Date(Number(course.createdAt) * 1000),
       };
     } catch (error) {
-      console.error("Error fetching course:", error);
+      console.error(`Error fetching course ${courseId}:`, error);
       return null;
     }
   }
 
   async getCourseSections(courseId) {
     this.ensureInitialized();
-
     try {
       const sections = await this.contracts.courseFactory.getCourseSections(
         courseId
       );
-
       return sections.map((section) => ({
         id: section.id.toString(),
         courseId: section.CourseId.toString(),
@@ -234,48 +202,35 @@ class SmartContractService {
         orderId: Number(section.orderId),
       }));
     } catch (error) {
-      console.error("Error fetching course sections:", error);
+      console.error(`Error fetching sections for course ${courseId}:`, error);
       return [];
     }
   }
 
   async getCreatorCourses(creatorAddress) {
     this.ensureInitialized();
-
     try {
       const courseIds = await this.contracts.courseFactory.getCreatorCourses(
         creatorAddress
       );
-      const courses = [];
-
-      for (const courseId of courseIds) {
-        try {
-          const course = await this.getCourse(courseId.toString());
-          if (course) {
-            courses.push(course);
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch creator course ${courseId}:`, error);
-        }
-      }
-
-      return courses;
+      // Fetch details for each course ID
+      const courses = await Promise.all(
+        courseIds.map((id) => this.getCourse(id.toString()))
+      );
+      return courses.filter((course) => course !== null); // Filter out any nulls from failed fetches
     } catch (error) {
       console.error("Error fetching creator courses:", error);
       return [];
     }
   }
 
-  // Course License Methods
+  // --- Course License Methods ---
+
   async mintLicense(courseId, duration = 1) {
     this.ensureInitialized();
-
     try {
-      // Get course price
       const course = await this.getCourse(courseId);
-      if (!course) {
-        throw new Error("Course not found");
-      }
+      if (!course) throw new Error("Course not found");
 
       const priceInWei = ethers.parseEther(course.pricePerMonth);
       const totalPrice = priceInWei * BigInt(duration);
@@ -285,42 +240,48 @@ class SmartContractService {
         duration,
         { value: totalPrice }
       );
-
       const receipt = await tx.wait();
-
-      return {
-        success: true,
-        transactionHash: receipt.hash,
-      };
+      return { success: true, transactionHash: receipt.hash };
     } catch (error) {
       console.error("Error minting license:", error);
-      return {
-        success: false,
-        error: error.message,
-      };
+      return { success: false, error: error.message };
     }
   }
 
   async getUserLicenses(userAddress) {
     this.ensureInitialized();
-
     try {
-      // Dapatkan semua courseId yang tersedia
       const totalCourses = await this.contracts.courseFactory.getTotalCourses();
-      const licenses = [];
+      const courseIds = Array.from(
+        { length: Number(totalCourses) },
+        (_, i) => i + 1
+      );
 
-      for (let i = 1; i <= Number(totalCourses); i++) {
-        const balance = await this.contracts.courseLicense.balanceOf(userAddress, i);
-        if (balance > 0) {
-          // Perbaiki di sini: getLicense butuh 2 parameter
-          const license = await this.contracts.courseLicense.getLicense(userAddress, i);
-          licenses.push({
-            courseId: i,
-            ...license,
-          });
+      const licenses = [];
+      for (const courseId of courseIds) {
+        // Check if the user has a license for this course
+        const balance = await this.contracts.courseLicense.balanceOf(
+          userAddress,
+          courseId
+        );
+        if (Number(balance) > 0) {
+          const licenseData = await this.contracts.courseLicense.getLicense(
+            userAddress,
+            courseId
+          );
+          if (licenseData.isActive) {
+            licenses.push({
+              courseId: licenseData.courseId.toString(),
+              student: licenseData.student,
+              durationLicense: licenseData.durationLicense.toString(),
+              expiryTimestamp: new Date(
+                Number(licenseData.expiryTimestamp) * 1000
+              ),
+              isActive: licenseData.isActive,
+            });
+          }
         }
       }
-
       return licenses;
     } catch (error) {
       console.error("Error fetching user licenses:", error);
@@ -328,147 +289,152 @@ class SmartContractService {
     }
   }
 
-  // Progress Tracker Methods
-  async updateProgress(courseId, sectionId, completed = true) {
+  // --- Progress Tracker Methods ---
+
+  /**
+   * PERBAIKAN: Mengganti `updateProgress` dengan `completeSection` sesuai dengan ABI.
+   * Fungsi ini menandai satu bagian kursus sebagai selesai.
+   */
+  async completeSection(courseId, sectionId) {
     this.ensureInitialized();
-
     try {
-      const tx = await this.contracts.progressTracker.updateProgress(
+      // The contract function is `completeSection`, not `updateProgress`.
+      const tx = await this.contracts.progressTracker.completeSection(
         courseId,
-        sectionId,
-        completed
+        sectionId
       );
-
       const receipt = await tx.wait();
+      return { success: true, transactionHash: receipt.hash };
+    } catch (error) {
+      console.error("Error completing section:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * PERBAIKAN: Mengganti `getUserProgress` dengan kombinasi fungsi yang ada.
+   * Tidak ada fungsi `getUserProgress`. Kita akan menggunakan `getCourseSectionsProgress`
+   * dan `getCourseProgressPercentage` untuk mendapatkan data yang relevan.
+   */
+  async getUserProgress(userAddress, courseId) {
+    this.ensureInitialized();
+    try {
+      // The function `getUserProgress` does not exist. We use existing functions to build the progress data.
+      const sectionsProgress =
+        await this.contracts.progressTracker.getCourseSectionsProgress(
+          userAddress,
+          courseId
+        );
+      const completedSections = sectionsProgress.filter((p) => p).length;
+
+      const progressPercentage =
+        await this.contracts.progressTracker.getCourseProgressPercentage(
+          userAddress,
+          courseId
+        );
 
       return {
-        success: true,
-        transactionHash: receipt.hash,
+        courseId: courseId.toString(),
+        completedSections: completedSections,
+        totalSections: sectionsProgress.length,
+        progressPercentage: Number(progressPercentage),
       };
     } catch (error) {
-      console.error("Error updating progress:", error);
+      console.error(
+        `Error fetching user progress for course ${courseId}:`,
+        error
+      );
+      // Return a default object on error so the UI doesn't break
       return {
-        success: false,
-        error: error.message,
+        courseId: courseId.toString(),
+        completedSections: 0,
+        totalSections: 0,
+        progressPercentage: 0,
       };
     }
   }
 
-  async getUserProgress(userAddress, courseId) {
-    this.ensureInitialized();
+  // --- Certificate Manager Methods ---
 
+  /**
+   * PERBAIKAN: Menyesuaikan parameter `issueCertificate`.
+   * Kontrak memerlukan `studentName` (string), bukan `studentAddress` (address).
+   */
+  async issueCertificate(courseId, studentName) {
+    this.ensureInitialized();
     try {
-      const progress = await this.contracts.progressTracker.getUserProgress(
-        userAddress,
-        courseId
+      // The contract function requires `studentName` as a string, not studentAddress.
+      // We also need to send a fee if required by the contract.
+      const fee = await this.contracts.certificateManager.certificateFee();
+      const tx = await this.contracts.certificateManager.issueCertificate(
+        courseId,
+        studentName,
+        { value: fee }
       );
+      const receipt = await tx.wait();
+      return { success: true, transactionHash: receipt.hash };
+    } catch (error) {
+      console.error("Error issuing certificate:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * PERBAIKAN: Mengganti `getUserCertificates` yang tidak ada.
+   * Kita akan membuat fungsi baru `getCertificateForCourse` untuk mengambil sertifikat
+   * per kursus, karena tidak ada fungsi untuk mengambil semua sertifikat pengguna sekaligus.
+   */
+  async getCertificateForCourse(userAddress, courseId) {
+    this.ensureInitialized();
+    try {
+      // The function `getUserCertificates` does not exist.
+      // We get the certificate ID first, then the certificate details.
+      const certificateId =
+        await this.contracts.certificateManager.getStudentCertificate(
+          userAddress,
+          courseId
+        );
+      if (Number(certificateId) === 0) {
+        // User does not have a certificate for this course
+        return null;
+      }
+
+      const cert = await this.contracts.certificateManager.getCertificate(
+        certificateId
+      );
+      if (!cert.isValid) {
+        return null;
+      }
 
       return {
-        courseId: progress.courseId.toString(),
-        completedSections: progress.completedSections.map((id) =>
-          id.toString()
-        ),
-        totalSections: Number(progress.totalSections),
-        progressPercentage: Number(progress.progressPercentage),
-        lastUpdated: new Date(Number(progress.lastUpdated) * 1000),
+        id: cert.certificateId.toString(),
+        courseId: cert.courseId.toString(),
+        student: cert.student,
+        studentName: cert.studentName,
+        issuedAt: new Date(Number(cert.issuedAt) * 1000),
+        isValid: cert.isValid,
+        // You might want to fetch and add metadataURI content here
       };
     } catch (error) {
-      console.error("Error fetching user progress:", error);
+      console.error(
+        `Error fetching certificate for course ${courseId}:`,
+        error
+      );
       return null;
     }
   }
 
-  // Certificate Manager Methods
-  async issueCertificate(courseId, studentAddress) {
-    this.ensureInitialized();
+  // --- Utility Methods ---
 
-    try {
-      const tx = await this.contracts.certificateManager.issueCertificate(
-        courseId,
-        studentAddress
-      );
-
-      const receipt = await tx.wait();
-
-      return {
-        success: true,
-        transactionHash: receipt.hash,
-      };
-    } catch (error) {
-      console.error("Error issuing certificate:", error);
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-  }
-
-  async getUserCertificates(userAddress) {
-    this.ensureInitialized();
-
-    try {
-      const certificates =
-        await this.contracts.certificateManager.getUserCertificates(
-          userAddress
-        );
-
-      return certificates.map((cert) => ({
-        id: cert.id.toString(),
-        courseId: cert.courseId.toString(),
-        student: cert.student,
-        issuer: cert.issuer,
-        issuedAt: new Date(Number(cert.issuedAt) * 1000),
-        metadataURI: cert.metadataURI,
-      }));
-    } catch (error) {
-      console.error("Error fetching user certificates:", error);
-      return [];
-    }
-  }
-
-  // Utility Methods
   async getETHPrice() {
     this.ensureInitialized();
-
     try {
       const price = await this.contracts.courseFactory.getETHPrice();
-      return ethers.formatUnits(price, 8); // Price feed usually has 8 decimals
+      // The price from Chainlink is usually with 8 decimals for USD pairs
+      return ethers.formatUnits(price, 8);
     } catch (error) {
       console.error("Error fetching ETH price:", error);
       return "0";
-    }
-  }
-
-  async estimateGas(contractMethod, ...args) {
-    this.ensureInitialized();
-
-    try {
-      const gasEstimate = await contractMethod.estimateGas(...args);
-      return gasEstimate.toString();
-    } catch (error) {
-      console.error("Error estimating gas:", error);
-      return "0";
-    }
-  }
-
-  // Event Listeners (ethers v6)
-  subscribeToEvents(eventName, callback) {
-    this.ensureInitialized();
-
-    try {
-      this.contracts.courseFactory.on(eventName, callback);
-    } catch (error) {
-      console.error("Error subscribing to events:", error);
-    }
-  }
-
-  unsubscribeFromEvents(eventName) {
-    this.ensureInitialized();
-
-    try {
-      this.contracts.courseFactory.removeAllListeners(eventName);
-    } catch (error) {
-      console.error("Error unsubscribing from events:", error);
     }
   }
 }
