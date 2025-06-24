@@ -30,7 +30,13 @@ const timeAgo = (timestamp) => {
   return Math.floor(seconds) + " detik lalu";
 };
 
-const CourseCard = ({ course, onDetailPress, priceInIdr, priceLoading }) => {
+const CourseCard = ({
+  course,
+  onDetailPress,
+  priceInIdr,
+  priceLoading,
+  hidePrice = false,
+}) => {
   if (!course) return null;
 
   const creationDate = timeAgo(course.createdAt);
@@ -53,14 +59,12 @@ const CourseCard = ({ course, onDetailPress, priceInIdr, priceLoading }) => {
         <Text style={styles.title} numberOfLines={2}>
           {course.title || "Untitled Course"}
         </Text>
-
         {/* Description preview dari blockchain */}
         {course.description && (
           <Text style={styles.description} numberOfLines={2}>
             {course.description}
           </Text>
         )}
-
         {/* --- Area Informasi dengan Layout Horizontal --- */}
         <View style={styles.infoContainer}>
           <View style={styles.infoItem}>
@@ -79,7 +83,6 @@ const CourseCard = ({ course, onDetailPress, priceInIdr, priceLoading }) => {
             </View>
           )}
         </View>
-
         {/* Additional info dari blockchain */}
         <View style={styles.additionalInfo}>
           <View style={styles.creatorInfo}>
@@ -105,14 +108,14 @@ const CourseCard = ({ course, onDetailPress, priceInIdr, priceLoading }) => {
             <Text style={styles.idText}>ID: {course.id}</Text>
           </View>
         </View>
-
         {/* --- Footer dengan Harga dan Status --- */}
-        <View style={styles.footer}>
-          {priceLoading ? (
-            <ActivityIndicator size="small" color="#8b5cf6" />
-          ) : (
-            <Text style={styles.priceText}>{priceInIdr || "Gratis"}</Text>
-          )}
+        <View style={[styles.footer, hidePrice && styles.footerWithoutPrice]}>
+          {!hidePrice &&
+            (priceLoading ? (
+              <ActivityIndicator size="small" color="#8b5cf6" />
+            ) : (
+              <Text style={styles.priceText}>{priceInIdr || "Gratis"}</Text>
+            ))}
 
           <View
             style={[
@@ -278,6 +281,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
     paddingTop: 12,
+  },
+  footerWithoutPrice: {
+    justifyContent: "flex-end",
   },
   priceText: {
     fontSize: 18,

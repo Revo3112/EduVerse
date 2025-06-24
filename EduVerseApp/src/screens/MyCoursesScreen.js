@@ -74,7 +74,6 @@ export default function MyCoursesScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [navigating, setNavigating] = useState(false);
   const navigationTimeoutRef = useRef(null);
-
   // Reset navigation state when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
@@ -90,14 +89,6 @@ export default function MyCoursesScreen({ navigation }) {
       }
     }, [navigating])
   );
-
-  // Helper function to format price
-  const formatPrice = (priceInETH) => {
-    if (!priceInETH || priceInETH === "0" || parseFloat(priceInETH) === 0) {
-      return "Gratis";
-    }
-    return `${parseFloat(priceInETH).toFixed(4)} ETH`;
-  };
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
   // Load user's courses from blockchain dengan optimization
@@ -351,7 +342,6 @@ export default function MyCoursesScreen({ navigation }) {
         <Text style={styles.title}>My Courses</Text>
         <Text style={styles.subtitle}>Track your learning journey</Text>
       </View>
-
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
         <TabButton
@@ -367,7 +357,6 @@ export default function MyCoursesScreen({ navigation }) {
           count={createdCourses.length}
         />
       </View>
-
       {/* Content */}
       <ScrollView
         style={styles.content}
@@ -391,19 +380,65 @@ export default function MyCoursesScreen({ navigation }) {
               </Text>
             </View>
           ) : enrolledCourses.length > 0 ? (
-            <View style={styles.coursesContainer}>
-              {enrolledCourses.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  onDetailPress={handleCoursePress}
-                  type="enrolled"
-                  showMintButton={false}
-                  priceInIdr={formatPrice(course.pricePerMonth)}
-                  priceLoading={navigating}
-                />
-              ))}
-            </View>
+            <>
+              {/* Learning Progress Stats - Moved to top */}
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryTitle}>Learning Progress</Text>
+                <View style={styles.summaryStats}>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryNumber}>
+                      {
+                        enrolledCourses.filter((c) => {
+                          const progress = c.progress || 0;
+                          return progress === 100;
+                        }).length
+                      }
+                    </Text>
+                    <Text style={styles.summaryLabel}>Completed</Text>
+                  </View>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryNumber}>
+                      {
+                        enrolledCourses.filter((c) => {
+                          const progress = c.progress || 0;
+                          return progress > 0 && progress < 100;
+                        }).length
+                      }
+                    </Text>
+                    <Text style={styles.summaryLabel}>In Progress</Text>
+                  </View>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryNumber}>
+                      {enrolledCourses.length > 0
+                        ? Math.round(
+                            enrolledCourses.reduce((acc, c) => {
+                              const progress = c.progress || 0;
+                              return acc + progress;
+                            }, 0) / enrolledCourses.length
+                          )
+                        : 0}
+                      %
+                    </Text>
+                    <Text style={styles.summaryLabel}>Avg Progress</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Enrolled Courses List */}
+              <View style={styles.coursesContainer}>
+                {enrolledCourses.map((course) => (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    onDetailPress={handleCoursePress}
+                    type="enrolled"
+                    showMintButton={false}
+                    hidePrice={true}
+                    priceLoading={navigating}
+                  />
+                ))}
+              </View>
+            </>
           ) : (
             <EmptyState type="enrolled" />
           )
@@ -413,121 +448,72 @@ export default function MyCoursesScreen({ navigation }) {
             <Text style={styles.loadingText}>Loading created courses...</Text>
           </View>
         ) : createdCourses.length > 0 ? (
-          <View style={styles.coursesContainer}>
-            {createdCourses.map((course) => (
-              <CourseCard
-                key={course.id}
-                course={course}
-                onDetailPress={handleCoursePress}
-                type="created"
-                showMintButton={false}
-                priceInIdr={formatPrice(course.pricePerMonth)}
-                priceLoading={navigating}
-              />
-            ))}
-          </View>
+          <>
+            {/* Creator Stats - Moved to top */}
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Creator Stats</Text>
+              <View style={styles.summaryStats}>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryNumber}>
+                    {createdCourses.reduce((acc, c) => {
+                      const students = c.students || 0;
+                      return acc + students;
+                    }, 0)}
+                  </Text>
+                  <Text style={styles.summaryLabel}>Total Students</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryNumber}>
+                    {
+                      createdCourses.filter((c) => {
+                        const status =
+                          c.status || c.isActive ? "Published" : "Draft";
+                        return status === "Published";
+                      }).length
+                    }
+                  </Text>
+                  <Text style={styles.summaryLabel}>Published</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryNumber}>
+                    {createdCourses
+                      .reduce((acc, c) => {
+                        let revenue = 0;
+                        if (c.revenue && typeof c.revenue === "string") {
+                          revenue =
+                            parseFloat(c.revenue.replace(" ETH", "")) || 0;
+                        } else if (c.revenue && typeof c.revenue === "number") {
+                          revenue = c.revenue;
+                        } else if (c.pricePerMonth) {
+                          revenue = parseFloat(c.pricePerMonth) || 0;
+                        }
+                        return acc + revenue;
+                      }, 0)
+                      .toFixed(4)}
+                    ETH
+                  </Text>
+                  <Text style={styles.summaryLabel}>Total Revenue</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Created Courses List */}
+            <View style={styles.coursesContainer}>
+              {createdCourses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  course={course}
+                  onDetailPress={handleCoursePress}
+                  type="created"
+                  showMintButton={false}
+                  hidePrice={true}
+                  priceLoading={navigating}
+                />
+              ))}
+            </View>
+          </>
         ) : (
           <EmptyState type="created" />
-        )}
-
-        {/* Summary Stats */}
-        {activeTab === "enrolled" && enrolledCourses.length > 0 && (
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Learning Progress</Text>
-            <View style={styles.summaryStats}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>
-                  {
-                    enrolledCourses.filter((c) => {
-                      const progress = c.progress || 0;
-                      return progress === 100;
-                    }).length
-                  }
-                </Text>
-                <Text style={styles.summaryLabel}>Completed</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>
-                  {
-                    enrolledCourses.filter((c) => {
-                      const progress = c.progress || 0;
-                      return progress > 0 && progress < 100;
-                    }).length
-                  }
-                </Text>
-                <Text style={styles.summaryLabel}>In Progress</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>
-                  {enrolledCourses.length > 0
-                    ? Math.round(
-                        enrolledCourses.reduce((acc, c) => {
-                          const progress = c.progress || 0;
-                          return acc + progress;
-                        }, 0) / enrolledCourses.length
-                      )
-                    : 0}
-                  %
-                </Text>
-                <Text style={styles.summaryLabel}>Avg Progress</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {activeTab === "created" && createdCourses.length > 0 && (
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Creator Stats</Text>
-            <View style={styles.summaryStats}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>
-                  {createdCourses.reduce((acc, c) => {
-                    // Safe students count dengan fallback
-                    const students = c.students || 0;
-                    return acc + students;
-                  }, 0)}
-                </Text>
-                <Text style={styles.summaryLabel}>Total Students</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>
-                  {
-                    createdCourses.filter((c) => {
-                      // Safe status check dengan fallback
-                      const status =
-                        c.status || c.isActive ? "Published" : "Draft";
-                      return status === "Published";
-                    }).length
-                  }
-                </Text>
-                <Text style={styles.summaryLabel}>Published</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>
-                  {createdCourses
-                    .reduce((acc, c) => {
-                      // Safe revenue parsing dengan null check
-                      let revenue = 0;
-                      if (c.revenue && typeof c.revenue === "string") {
-                        // Jika revenue adalah string seperti "0.15 ETH"
-                        revenue =
-                          parseFloat(c.revenue.replace(" ETH", "")) || 0;
-                      } else if (c.revenue && typeof c.revenue === "number") {
-                        // Jika revenue adalah number
-                        revenue = c.revenue;
-                      } else if (c.pricePerMonth) {
-                        // Fallback ke pricePerMonth jika revenue tidak ada
-                        revenue = parseFloat(c.pricePerMonth) || 0;
-                      }
-                      return acc + revenue;
-                    }, 0)
-                    .toFixed(4)}{" "}
-                  ETH
-                </Text>
-                <Text style={styles.summaryLabel}>Total Revenue</Text>
-              </View>
-            </View>
-          </View>
         )}
       </ScrollView>
     </SafeAreaView>
