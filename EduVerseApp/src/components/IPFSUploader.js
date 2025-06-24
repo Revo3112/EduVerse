@@ -1,12 +1,11 @@
 import React, { useState } from "react";
 import {
-  View,
-  Text,
   TouchableOpacity,
-  Alert,
+  Text,
   StyleSheet,
+  Alert,
   ActivityIndicator,
-  Platform,
+  View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -14,33 +13,36 @@ import { pinataService } from "../services/PinataService";
 import { Colors } from "../constants/Colors";
 
 /**
- * Reusable component for uploading files to IPFS via Pinata
- * Supports both image and document selection with progress tracking
+ * IPFSUploader Component
+ * Component untuk upload file ke IPFS via Pinata
  */
 export const IPFSUploader = ({
   onUploadComplete,
   onUploadStart,
   onUploadProgress,
-  accept = "all", // 'images', 'documents', 'all'
+  onUploadError,
+  accept = "all", // 'all', 'images', 'documents'
   maxSizeBytes = 10 * 1024 * 1024, // 10MB default
+  buttonText = "Upload File",
   style,
-  buttonText = "Upload to IPFS",
-  metadata = {},
-  keyValues = [],
   disabled = false,
+  metadata = {},
+  keyValues = {},
+  network = "private",
+  groupId,
+  buttonStyle,
+  textStyle,
 }) => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const handleFileSelection = async () => {
+    if (disabled || uploading) return;
 
-  /**
-   * Handle file selection based on type
-   */
-  const selectFile = async () => {
     try {
-      let result;
+      let file = null;
 
       if (accept === "images") {
-        // Request camera/media library permissions
+        // Request media library permissions
         const { status } =
           await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
@@ -48,89 +50,61 @@ export const IPFSUploader = ({
             "Permission Required",
             "Please grant media library access to upload images."
           );
-          return null;
-        }
-
-        // Show action sheet for image source
-        Alert.alert("Select Image", "Choose an image source", [
-          { text: "Camera", onPress: () => pickImage("camera") },
-          { text: "Photo Library", onPress: () => pickImage("library") },
-          { text: "Cancel", style: "cancel" },
-        ]);
-        return;
-      } else {
-        // Document picker for other file types
-        result = await DocumentPicker.getDocumentAsync({
-          type: accept === "documents" ? "application/*" : "*/*",
-          copyToCacheDirectory: true,
-          multiple: false,
-        });
-      }
-
-      if (result && !result.canceled && result.assets && result.assets[0]) {
-        await handleFileUpload(result.assets[0]);
-      }
-    } catch (error) {
-      console.error("File selection error:", error);
-      Alert.alert("Error", "Failed to select file. Please try again.");
-    }
-  };
-
-  /**
-   * Handle image picking from camera or library
-   */
-  const pickImage = async (source) => {
-    try {
-      let result;
-
-      if (source === "camera") {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert(
-            "Permission Required",
-            "Please grant camera access to take photos."
-          );
           return;
         }
 
-        result = await ImagePicker.launchCameraAsync({
+        // Use ImagePicker for images
+        const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          aspect: [16, 9],
+          aspect: [4, 3],
           quality: 0.8,
         });
-      } else {
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [16, 9],
-          quality: 0.8,
-        });
-      }
 
-      if (result && !result.canceled && result.assets && result.assets[0]) {
-        await handleFileUpload(result.assets[0]);
+        if (!result.canceled && result.assets && result.assets[0]) {
+          const asset = result.assets[0];
+          file = {
+            uri: asset.uri,
+            type: asset.type || "image/jpeg",
+            name: asset.fileName || "image.jpg",
+            size: asset.fileSize,
+          };
+          uploadFile(file);
+        }
+      } else {
+        // Use DocumentPicker for all files or documents
+        const result = await DocumentPicker.getDocumentAsync({
+          type: accept === "documents" ? "application/*" : "*/*",
+          copyToCacheDirectory: true,
+        });
+
+        if (!result.canceled && result.assets && result.assets[0]) {
+          const asset = result.assets[0];
+          file = {
+            uri: asset.uri,
+            type: asset.mimeType,
+            name: asset.name,
+            size: asset.size,
+          };
+          uploadFile(file);
+        }
       }
     } catch (error) {
-      console.error("Image picker error:", error);
-      Alert.alert("Error", "Failed to pick image. Please try again.");
+      console.error("File selection error:", error);
+      Alert.alert("Error", "Gagal memilih file");
+      if (onUploadError) {
+        onUploadError(error);
+      }
     }
   };
 
-  /**
-   * Handle the actual file upload to IPFS
-   */
-  const handleFileUpload = async (fileInfo) => {
+  const uploadFile = async (file) => {
     try {
-      // Validate file size
-      if (fileInfo.size && fileInfo.size > maxSizeBytes) {
-        const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1);
-        Alert.alert(
-          "File Too Large",
-          `Please select a file smaller than ${maxSizeMB}MB.`
-        );
-        return;
-      }
+      // Validate file
+      pinataService.validateFile(file, {
+        maxSize: maxSizeBytes,
+        allowedTypes: getAllowedTypes(accept),
+      });
 
       setUploading(true);
       setProgress(0);
@@ -139,143 +113,129 @@ export const IPFSUploader = ({
         onUploadStart();
       }
 
-      // Convert URI to Blob for upload
-      const file = await uriToBlob(fileInfo.uri);
-      const fileName =
-        fileInfo.name || `file_${Date.now()}.${getFileExtension(fileInfo.uri)}`;
-
-      // Upload options
-      const uploadOptions = {
-        name: fileName,
-        metadata: {
-          name: fileName,
-          description: metadata.description || "Uploaded via EduVerse App",
-          ...metadata,
-        },
-        keyValues: [
-          { key: "app", value: "eduverse" },
-          { key: "uploadedAt", value: new Date().toISOString() },
-          { key: "platform", value: Platform.OS },
-          ...keyValues,
-        ],
-        onProgress: (progressPercent) => {
-          setProgress(progressPercent);
-          if (onUploadProgress) {
-            onUploadProgress(progressPercent);
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return prev;
           }
+          return prev + 10;
+        });
+      }, 200);
+
+      // Convert file to File object for upload
+      const fileBlob = await fetch(file.uri).then((r) => r.blob());
+      const fileObject = new File([fileBlob], file.name, { type: file.type });
+
+      const result = await pinataService.uploadFile(fileObject, {
+        name: file.name,
+        network,
+        groupId,
+        keyValues,
+        metadata: {
+          ...metadata,
+          originalSize: file.size,
+          uploadDate: new Date().toISOString(),
         },
-      };
+      });
 
-      // Upload to Pinata
-      const result = await pinataService.uploadFile(file, uploadOptions);
+      clearInterval(progressInterval);
+      setProgress(100);
 
-      if (result.success) {
-        Alert.alert("Success", "File uploaded to IPFS successfully!");
-        if (onUploadComplete) {
-          onUploadComplete({
-            ...result,
-            fileName,
-            originalUri: fileInfo.uri,
-            fileSize: fileInfo.size,
-          });
-        }
-      } else {
-        throw new Error(result.error || "Upload failed");
+      if (onUploadComplete) {
+        onUploadComplete(result);
       }
+
+      Alert.alert("Success", "File berhasil diupload ke IPFS!");
     } catch (error) {
       console.error("Upload error:", error);
-      Alert.alert("Upload Failed", error.message || "Please try again.");
+      Alert.alert("Error", error.message || "Gagal upload file");
+
+      if (onUploadError) {
+        onUploadError(error);
+      }
     } finally {
       setUploading(false);
       setProgress(0);
     }
   };
 
-  /**
-   * Convert URI to Blob for upload
-   */
-  const uriToBlob = async (uri) => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    return blob;
-  };
-
-  /**
-   * Get file extension from URI
-   */
-  const getFileExtension = (uri) => {
-    const lastDot = uri.lastIndexOf(".");
-    return lastDot !== -1 ? uri.substring(lastDot + 1) : "bin";
+  const getAllowedTypes = (accept) => {
+    switch (accept) {
+      case "images":
+        return ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      case "documents":
+        return [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ];
+      default:
+        return []; // Allow all types
+    }
   };
 
   return (
-    <View style={[styles.container, style]}>
-      <TouchableOpacity
-        style={[
-          styles.uploadButton,
-          disabled && styles.disabledButton,
-          uploading && styles.uploadingButton,
-        ]}
-        onPress={selectFile}
-        disabled={disabled || uploading}
-        activeOpacity={0.7}
-      >
-        {uploading ? (
-          <View style={styles.uploadingContent}>
-            <ActivityIndicator size="small" color={Colors.white} />
-            <Text style={styles.uploadingText}>Uploading... {progress}%</Text>
-          </View>
-        ) : (
-          <Text style={[styles.buttonText, disabled && styles.disabledText]}>
-            {buttonText}
+    <TouchableOpacity
+      style={[
+        styles.uploadButton,
+        buttonStyle,
+        style,
+        (disabled || uploading) && styles.disabledButton,
+      ]}
+      onPress={handleFileSelection}
+      disabled={disabled || uploading}
+    >
+      {uploading ? (
+        <View style={styles.uploadingContainer}>
+          <ActivityIndicator size="small" color={Colors.white} />
+          <Text style={[styles.buttonText, textStyle, { marginLeft: 8 }]}>
+            Uploading... {progress}%
           </Text>
-        )}
-      </TouchableOpacity>
-
-      {uploading && (
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
-          </View>
-          <Text style={styles.progressText}>{progress}%</Text>
         </View>
+      ) : (
+        <Text style={[styles.buttonText, textStyle]}>{buttonText}</Text>
       )}
-    </View>
+    </TouchableOpacity>
   );
 };
 
 /**
- * Hook for uploading JSON data to IPFS
+ * Custom hook untuk upload JSON data
  */
 export const useIPFSJsonUpload = () => {
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-  const uploadJson = async (data, options = {}) => {
+  const uploadJson = async (jsonData, options = {}) => {
     try {
       setUploading(true);
+      setProgress(0);
 
-      const uploadOptions = {
-        name: options.name || `data_${Date.now()}.json`,
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return prev;
+          }
+          return prev + 15;
+        });
+      }, 100);
+
+      const result = await pinataService.uploadJson(jsonData, {
+        network: "private",
+        ...options,
         metadata: {
-          name: options.name || "JSON Data",
-          description:
-            options.description || "JSON data uploaded via EduVerse App",
           ...options.metadata,
+          uploadDate: new Date().toISOString(),
+          dataType: "json",
         },
-        keyValues: [
-          { key: "app", value: "eduverse" },
-          { key: "uploadedAt", value: new Date().toISOString() },
-          { key: "platform", value: Platform.OS },
-          { key: "dataType", value: "json" },
-          ...(options.keyValues || []),
-        ],
-      };
+      });
 
-      const result = await pinataService.uploadJSON(data, uploadOptions);
-
-      if (!result.success) {
-        throw new Error(result.error || "Upload failed");
-      }
+      clearInterval(progressInterval);
+      setProgress(100);
 
       return result;
     } catch (error) {
@@ -283,16 +243,81 @@ export const useIPFSJsonUpload = () => {
       throw error;
     } finally {
       setUploading(false);
+      setProgress(0);
     }
   };
 
-  return { uploadJson, uploading };
+  return {
+    uploadJson,
+    uploading,
+    progress,
+  };
+};
+
+/**
+ * Custom hook untuk file operations
+ */
+export const useIPFSFileOperations = () => {
+  const [loading, setLoading] = useState(false);
+
+  const listFiles = async (options = {}) => {
+    try {
+      setLoading(true);
+      return await pinataService.listFiles(options);
+    } catch (error) {
+      console.error("List files error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteFile = async (fileId, network = "private") => {
+    try {
+      setLoading(true);
+      return await pinataService.deleteFile(fileId, network);
+    } catch (error) {
+      console.error("Delete file error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getFile = async (fileId, network = "private") => {
+    try {
+      setLoading(true);
+      return await pinataService.getFile(fileId, network);
+    } catch (error) {
+      console.error("Get file error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateFile = async (fileId, updates, network = "private") => {
+    try {
+      setLoading(true);
+      return await pinataService.updateFile(fileId, updates, network);
+    } catch (error) {
+      console.error("Update file error:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    listFiles,
+    deleteFile,
+    getFile,
+    updateFile,
+    loading,
+  };
 };
 
 const styles = StyleSheet.create({
-  container: {
-    marginVertical: 10,
-  },
   uploadButton: {
     backgroundColor: Colors.primary,
     paddingVertical: 14,
@@ -300,61 +325,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 2,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    minHeight: 50,
   },
   disabledButton: {
     backgroundColor: Colors.gray,
-    elevation: 0,
-    shadowOpacity: 0,
-  },
-  uploadingButton: {
-    backgroundColor: Colors.secondary,
+    opacity: 0.6,
   },
   buttonText: {
     color: Colors.white,
     fontSize: 16,
     fontWeight: "600",
   },
-  disabledText: {
-    color: Colors.lightGray,
-  },
-  uploadingContent: {
+  uploadingContainer: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  uploadingText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 10,
-  },
-  progressContainer: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  progressBar: {
-    flex: 1,
-    height: 6,
-    backgroundColor: Colors.lightGray,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: Colors.primary,
-  },
-  progressText: {
-    marginLeft: 10,
-    fontSize: 12,
-    color: Colors.gray,
-    fontWeight: "500",
-    minWidth: 35,
-    textAlign: "right",
+    justifyContent: "center",
   },
 });
 

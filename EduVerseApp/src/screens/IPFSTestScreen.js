@@ -30,14 +30,25 @@ export default function IPFSTestScreen({ navigation }) {
   useEffect(() => {
     testPinataConnection();
   }, []);
-
   const testPinataConnection = async () => {
     setTestingConnection(true);
+    console.log("Starting Pinata connection test...");
+
     try {
       const result = await pinataService.testConnection();
+      console.log("Connection test result:", result);
       setConnectionStatus(result);
+
+      if (result.success) {
+        Alert.alert("Success", "Successfully connected to Pinata!");
+      } else {
+        Alert.alert("Connection Failed", result.error || "Unknown error");
+      }
     } catch (error) {
-      setConnectionStatus({ success: false, error: error.message });
+      console.error("Connection test exception:", error);
+      const errorResult = { success: false, error: error.message };
+      setConnectionStatus(errorResult);
+      Alert.alert("Connection Error", error.message);
     } finally {
       setTestingConnection(false);
     }
@@ -53,15 +64,15 @@ export default function IPFSTestScreen({ navigation }) {
       const data = JSON.parse(jsonData);
       const result = await uploadJson(data, {
         name: "test-data.json",
-        description: "Test JSON data from IPFS demo screen",
         metadata: {
+          description: "Test JSON data from IPFS demo screen",
           category: "test",
           source: "demo-screen",
         },
-        keyValues: [
-          { key: "category", value: "test" },
-          { key: "source", value: "demo" },
-        ],
+        keyValues: {
+          category: "test",
+          source: "demo",
+        },
       });
 
       Alert.alert("Success", "JSON data uploaded to IPFS successfully!");
@@ -85,8 +96,10 @@ export default function IPFSTestScreen({ navigation }) {
   const listPinnedFiles = async () => {
     try {
       const result = await pinataService.listFiles({
-        pageLimit: 10,
-        metadata: { app: "eduverse" },
+        limit: 10,
+        metadata: {
+          app: "eduverse",
+        },
       });
 
       if (result.success) {
@@ -156,14 +169,14 @@ export default function IPFSTestScreen({ navigation }) {
           <Text style={styles.sectionTitle}>File Upload</Text>
           <Text style={styles.sectionDescription}>
             Upload images or documents to IPFS via Pinata
-          </Text>
-
+          </Text>{" "}
           <IPFSUploader
             onUploadComplete={handleFileUploadComplete}
             onUploadStart={() => console.log("Upload started")}
             onUploadProgress={(progress) =>
               console.log("Upload progress:", progress)
             }
+            onUploadError={(error) => console.error("Upload error:", error)}
             accept="all"
             maxSizeBytes={10 * 1024 * 1024} // 10MB
             buttonText="📁 Upload File"
@@ -171,14 +184,15 @@ export default function IPFSTestScreen({ navigation }) {
               description: "Test file from IPFS demo screen",
               category: "test",
             }}
-            keyValues={[
-              { key: "category", value: "test" },
-              { key: "source", value: "demo" },
-            ]}
+            keyValues={{
+              category: "test",
+              source: "demo",
+            }}
+            network="private"
           />
-
           <IPFSUploader
             onUploadComplete={handleFileUploadComplete}
+            onUploadError={(error) => console.error("Upload error:", error)}
             accept="images"
             buttonText="📸 Upload Image"
             style={styles.uploadButton}
@@ -186,6 +200,11 @@ export default function IPFSTestScreen({ navigation }) {
               description: "Test image from IPFS demo screen",
               category: "image",
             }}
+            keyValues={{
+              category: "image",
+              source: "demo",
+            }}
+            network="private"
           />
         </View>
 
