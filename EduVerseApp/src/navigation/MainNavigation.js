@@ -5,9 +5,9 @@ import { Text } from "react-native";
 
 // Import screens
 import DashboardScreen from "../screens/DashboardScreen";
-import MainScreen from "../screens/MainScreen";
 import CreateCourseScreen from "../screens/CreateCourseScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import MyCoursesScreen from "../screens/MyCoursesScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -55,7 +55,7 @@ export default function MainNavigation() {
         component={DashboardScreen}
         options={{
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} />,
-          headerTitle: "EduVerse Dashboard",
+          headerShown: false, // Menghilangkan header untuk Dashboard
         }}
       />
       <Tab.Screen
@@ -64,6 +64,15 @@ export default function MainNavigation() {
         options={{
           tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
           headerTitle: "Courses",
+        }}
+      />
+      <Tab.Screen
+        name="MyCourses"
+        component={MyCoursesScreen}
+        options={{
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
+          headerTitle: "My Courses",
+          tabBarLabel: "My Courses",
         }}
       />
       <Tab.Screen

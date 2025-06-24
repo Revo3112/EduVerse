@@ -1,33 +1,46 @@
-// src/screens/DashboardScreen.js - Final Integrated Dashboard with Blockchain
-import React, { useState } from "react";
+// src/screens/DashboardScreen.js - Final Integrated Dashboard with Blockchain for React Native
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  Platform,
-  RefreshControl,
+  FlatList,
+  ActivityIndicator,
+  TouchableOpacity,
   Alert,
 } from "react-native";
 import { useAccount, useChainId } from "wagmi";
-import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
-import CourseCard from "../components/CourseCard";
-import CourseDetailModal from "../components/CourseDetailModal";
+import { mantaPacificTestnet } from "../constants/blockchain";
 import {
   useCourses,
   useMintLicense,
   useUserCourses,
 } from "../hooks/useBlockchain";
+import CourseCard from "../components/CourseCard";
+import CourseDetailModal from "../components/CourseDetailModal";
+
+// Helper untuk format Rupiah
+const formatRupiah = (number) => {
+  if (typeof number !== "number" || isNaN(number)) return "Rp 0";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(number);
+};
 
 export default function DashboardScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const [showCourseDetailModal, setShowCourseDetailModal] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
+
+  // State untuk kurs ETH -> IDR
+  const [ethToIdrRate, setEthToIdrRate] = useState(null);
+  const [rateLoading, setRateLoading] = useState(true);
 
   // Blockchain hooks
   const {
@@ -41,231 +54,156 @@ export default function DashboardScreen({ navigation }) {
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
-  const handleCourseDetail = (course) => {
+  // Mengambil kurs ETH ke IDR saat komponen dimuat
+  const fetchEthPriceInIdr = useCallback(async () => {
+    try {
+      setRateLoading(true);
+      const response = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr"
+      );
+      const data = await response.json();
+      if (data?.ethereum?.idr) {
+        setEthToIdrRate(data.ethereum.idr);
+      } else {
+        setEthToIdrRate(55000000); // Fallback
+      }
+    } catch (error) {
+      console.error("Failed to fetch ETH to IDR rate:", error);
+      setEthToIdrRate(55000000); // Fallback on error
+    } finally {
+      setRateLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchEthPriceInIdr();
+  }, [fetchEthPriceInIdr]);
+
+  const handleRefresh = useCallback(() => {
+    refetchCourses();
+    fetchEthPriceInIdr();
+  }, [refetchCourses, fetchEthPriceInIdr]);
+
+  const handleOpenDetail = (course) => {
     setSelectedCourse(course);
-    setShowCourseDetailModal(true);
+    setModalVisible(true);
   };
 
   const handleMintLicense = async (course) => {
     if (!isOnMantaNetwork) {
       Alert.alert(
-        "Network Error",
-        "Please switch to Manta Pacific Testnet to mint license",
-        [{ text: "OK" }]
+        "Jaringan Salah",
+        "Silakan pindah ke Manta Pacific Testnet untuk membeli lisensi."
       );
       return;
     }
-
     try {
-      const result = await mintLicense(course.id, 1); // Mint for 1 month
-
+      const result = await mintLicense(course.id, 1); // Mint untuk 1 bulan
       if (result.success) {
         Alert.alert(
-          "Success!",
-          `License minted successfully for "${course.title}"`,
-          [
-            {
-              text: "View My Courses",
-              onPress: () => navigation.navigate("MyCourses"),
-            },
-            { text: "OK" },
-          ]
+          "Berhasil!",
+          `Lisensi untuk "${course.title}" berhasil dibeli.`
         );
-
-        // Refresh user courses
-        refetchUserCourses();
+        refetchUserCourses(); // Refresh data kursus pengguna
+        setModalVisible(false); // Tutup modal setelah berhasil
+        navigation.navigate("MyCourses");
       } else {
-        Alert.alert("Error", result.error || "Failed to mint license");
+        Alert.alert("Gagal", result.error || "Gagal membeli lisensi.");
       }
     } catch (error) {
       console.error("Error minting license:", error);
-      Alert.alert("Error", "Failed to mint license. Please try again.");
+      Alert.alert("Gagal", "Terjadi kesalahan saat membeli lisensi.");
     }
   };
-
-  const handleRefresh = async () => {
-    await refetchCourses();
-  };
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Ionicons name="school-outline" size={64} color="#ccc" />
-      <Text style={styles.emptyStateTitle}>
-        {!isConnected
-          ? "Wallet Not Connected"
-          : !isOnMantaNetwork
-          ? "Wrong Network"
-          : coursesError
-          ? "Error Loading Courses"
-          : "No Courses Available"}
-      </Text>
-      <Text style={styles.emptyStateText}>
-        {!isConnected
-          ? "Connect your wallet to explore courses"
-          : !isOnMantaNetwork
-          ? "Switch to Manta Pacific Testnet to view courses"
-          : coursesError
-          ? coursesError
-          : "No courses found. Check back later!"}
-      </Text>
-      {coursesError && (
-        <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <View style={styles.welcomeSection}>
-        <Text style={styles.welcomeText}>Welcome back! 👋</Text>
-        {address && (
-          <Text style={styles.addressText}>
-            {`${address.slice(0, 8)}...${address.slice(-6)}`}
-          </Text>
-        )}
+      <View>
+        <Text style={styles.headerTitle}>Jelajahi Kursus</Text>
+        <Text style={styles.headerSubtitle}>
+          Temukan pengetahuan baru di dunia blockchain
+        </Text>
       </View>
-
-      {isConnected && !isOnMantaNetwork && (
+      {!isOnMantaNetwork && isConnected && (
         <View style={styles.networkWarning}>
-          <Ionicons name="warning" size={16} color="#fff" />
-          <Text style={styles.warningText}>
-            Switch to Manta Pacific Testnet
-          </Text>
+          <Ionicons name="warning-outline" size={14} color="#92400e" />
         </View>
       )}
     </View>
   );
 
-  const renderQuickStats = () => {
-    if (!isConnected || !isOnMantaNetwork) return null;
+  const renderItem = ({ item }) => {
+    // PERBAIKAN: Langsung gunakan `item.pricePerMonth` karena sudah dalam format ETH (string desimal) dari service.
+    // Tidak perlu memanggil `ethers.formatEther` lagi.
+    const priceInEth = parseFloat(item.pricePerMonth || "0");
+    const priceInIdr = ethToIdrRate ? priceInEth * ethToIdrRate : 0;
 
     return (
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{courses.length}</Text>
-          <Text style={styles.statLabel}>Available</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>
-            {courses.filter((c) => c.isActive).length}
-          </Text>
-          <Text style={styles.statLabel}>Active</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>
-            {courses.filter((c) => parseFloat(c.pricePerMonth) === 0).length}
-          </Text>
-          <Text style={styles.statLabel}>Free</Text>
-        </View>
-      </View>
+      <CourseCard
+        course={item}
+        onDetailPress={handleOpenDetail}
+        priceInIdr={formatRupiah(priceInIdr)}
+        priceLoading={rateLoading}
+      />
     );
   };
 
-  const renderCoursesList = () => {
-    if (coursesLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <Ionicons name="refresh" size={32} color="#9747FF" />
-          <Text style={styles.loadingText}>Loading courses...</Text>
-        </View>
-      );
-    }
+  const renderEmptyState = () => (
+    <View style={styles.centered}>
+      <Ionicons name="library-outline" size={50} color="#cbd5e1" />
+      <Text style={styles.emptyTitle}>
+        {coursesError ? "Gagal Memuat" : "Belum Ada Kursus"}
+      </Text>
+      <Text style={styles.emptySubtitle}>
+        {coursesError
+          ? coursesError.message
+          : "Cek kembali nanti untuk kursus baru."}
+      </Text>
+      <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+        <Text style={styles.retryText}>Coba Lagi</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
-    if (
-      !isConnected ||
-      !isOnMantaNetwork ||
-      coursesError ||
-      courses.length === 0
-    ) {
-      return renderEmptyState();
-    }
-
-    return (
-      <View style={styles.coursesContainer}>
-        {courses.map((course) => (
-          <CourseCard
-            key={course.id}
-            course={{
-              ...course,
-              // Format data for CourseCard component
-              price: parseFloat(course.pricePerMonth),
-              creatorName: `${course.creator.slice(
-                0,
-                8
-              )}...${course.creator.slice(-6)}`,
-              students: Math.floor(Math.random() * 1000), // Mock data
-              rating: (4 + Math.random()).toFixed(1), // Mock data
-              duration: "8 weeks", // Mock data
-              category: "Blockchain", // Mock data
-            }}
-            onDetailPress={handleCourseDetail}
-            onMintPress={handleMintLicense}
-            type="default"
-          />
-        ))}
-      </View>
-    );
+  const calculateModalPrice = () => {
+    if (!selectedCourse || !ethToIdrRate) return "Menghitung...";
+    // PERBAIKAN: Sama seperti di renderItem, langsung gunakan nilai yang ada.
+    const priceInEth = parseFloat(selectedCourse.pricePerMonth || "0");
+    const priceInIdr = priceInEth * ethToIdrRate;
+    return formatRupiah(priceInIdr);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="#9747FF"
-        translucent={false}
-      />
-
+      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
       {renderHeader()}
-      {renderQuickStats()}
-
-      <ScrollView
-        style={styles.mainContent}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={coursesLoading}
-            onRefresh={handleRefresh}
-            colors={["#9747FF"]}
-            tintColor="#9747FF"
-          />
-        }
-      >
-        {/* Section Header */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Explore Courses</Text>
-          <TouchableOpacity onPress={handleRefresh}>
-            <Ionicons name="refresh" size={20} color="#9747FF" />
-          </TouchableOpacity>
+      {coursesLoading && !courses.length ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#8b5cf6" />
+          <Text style={styles.loadingText}>
+            Mengambil data dari blockchain...
+          </Text>
         </View>
-
-        {/* Courses List */}
-        {renderCoursesList()}
-      </ScrollView>
-
-      {/* Course Detail Modal */}
-      <CourseDetailModal
-        visible={showCourseDetailModal}
-        course={selectedCourse}
-        onClose={() => setShowCourseDetailModal(false)}
-        onMintLicense={handleMintLicense}
-        isOnMantaNetwork={isOnMantaNetwork}
-      />
-
-      {/* Mint Loading Overlay */}
-      {mintLoading && (
-        <View style={styles.loadingOverlay}>
-          <View style={styles.loadingModal}>
-            <Ionicons name="refresh" size={32} color="#9747FF" />
-            <Text style={styles.loadingModalText}>Minting License...</Text>
-            <Text style={styles.loadingModalSubtext}>
-              Please confirm the transaction in your wallet
-            </Text>
-          </View>
-        </View>
+      ) : (
+        <FlatList
+          data={courses.filter((c) => c.isActive)} // Hanya tampilkan kursus yang aktif
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={renderEmptyState}
+          onRefresh={handleRefresh}
+          refreshing={coursesLoading}
+        />
       )}
+      <CourseDetailModal
+        visible={modalVisible}
+        course={selectedCourse}
+        onClose={() => setModalVisible(false)}
+        onMintLicense={handleMintLicense}
+        isMinting={mintLoading}
+        priceInIdr={calculateModalPrice()}
+        priceLoading={rateLoading}
+      />
     </SafeAreaView>
   );
 }
@@ -276,161 +214,66 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
   },
   header: {
-    backgroundColor: "#9747FF",
-    padding: 20,
-    paddingBottom: 25,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
-  },
-  welcomeSection: {
-    marginBottom: 15,
-  },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 5,
-  },
-  addressText: {
-    fontSize: 14,
-    color: "#E8D8FF",
-    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  networkWarning: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  warningText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "500",
-    marginLeft: 8,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    marginTop: -15,
-  },
-  statCard: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 12,
-    alignItems: "center",
-    minWidth: 80,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#9747FF",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#64748b",
-    fontWeight: "500",
-  },
-  mainContent: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-  sectionHeader: {
+    paddingTop: 20,
+    paddingBottom: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 15,
-    marginTop: 10,
+    backgroundColor: "#f8fafc",
   },
-  sectionTitle: {
-    fontSize: 20,
+  headerTitle: {
+    fontSize: 24,
     fontWeight: "bold",
     color: "#1e293b",
   },
-  coursesContainer: {
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#64748b",
+    marginTop: 4,
+  },
+  networkWarning: {
+    backgroundColor: "#fef3c7",
+    padding: 8,
+    borderRadius: 999,
+  },
+  listContent: {
     paddingHorizontal: 20,
+    paddingBottom: 20,
   },
-  loadingContainer: {
-    alignItems: "center",
-    paddingVertical: 60,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: "#64748b",
-    marginTop: 12,
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#1e293b",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: "#64748b",
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  retryButton: {
-    backgroundColor: "#9747FF",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  loadingOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  centered: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
   },
-  loadingModal: {
-    backgroundColor: "#fff",
-    padding: 30,
-    borderRadius: 16,
-    alignItems: "center",
-    marginHorizontal: 40,
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#64748b",
   },
-  loadingModalText: {
+  emptyTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#1e293b",
+    fontWeight: "600",
+    color: "#334155",
     marginTop: 16,
-    marginBottom: 8,
+    textAlign: "center",
   },
-  loadingModalSubtext: {
+  emptySubtitle: {
     fontSize: 14,
     color: "#64748b",
     textAlign: "center",
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#ede9fe",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: "#8b5cf6",
+    fontWeight: "600",
   },
 });
