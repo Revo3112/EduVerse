@@ -95,7 +95,10 @@ const CourseDetailModal = ({
   if (!course) return null;
 
   const creationDate = timeAgo(course.createdAt);
+  // Memastikan bahwa ethPrice menggunakan course.pricePerMonth yang sudah diformat ke ETH
   const ethPrice = parseFloat(course.pricePerMonth || "0");
+  // Menyimpan nilai wei asli untuk debugging dan verifikasi kalkulasi transaksi
+  const ethPriceWei = course.pricePerMonthWei || "0";
   const isFree = ethPrice === 0;
 
   // Calculate price based on selected duration
@@ -103,11 +106,14 @@ const CourseDetailModal = ({
     (opt) => opt.months === selectedDuration
   );
   const finalEthPrice = ethPrice * (selectedOption?.multiplier || 1);
+  // Untuk tampilan yang konsisten dengan CourseCard
+  const finalEthDisplay = finalEthPrice.toFixed(4) + " ETH";
+
+  // Menampilkan harga sesuai durasi yang dipilih
   const finalIdrPrice =
     priceInIdr && !isFree
-      ? parseFloat(priceInIdr.replace(/[^0-9]/g, "")) *
-        (selectedOption?.multiplier || 1)
-      : 0;
+      ? priceInIdr // Gunakan format asli, tidak perlu konversi
+      : "";
 
   return (
     <Modal
@@ -345,29 +351,29 @@ const CourseDetailModal = ({
               {/* Footer dengan Pricing */}
               <View style={styles.footer}>
                 <View style={styles.priceSection}>
+                  {/* REMOVED the {" "} from here */}
                   <Text style={styles.priceLabel}>
-                    Harga Total{" "}
-                    {!isFree && selectedDuration > 1
-                      ? `(${selectedDuration} Bulan)`
-                      : ""}
+                    Harga{" "}
+                    {selectedDuration > 1
+                      ? `Total (${selectedDuration} bulan)`
+                      : "per Bulan"}
                   </Text>
                   <View style={styles.priceContainer}>
                     {priceLoading ? (
                       <ActivityIndicator color="#8b5cf6" size="small" />
                     ) : (
                       <>
+                        {/* REMOVED the {" "} from here */}
                         <Text style={styles.priceMain}>
-                          {!isFree && finalIdrPrice > 0
-                            ? new Intl.NumberFormat("id-ID", {
-                                style: "currency",
-                                currency: "IDR",
-                                minimumFractionDigits: 0,
-                              }).format(finalIdrPrice)
-                            : priceInIdr || "Gratis"}
+                          {!isFree
+                            ? selectedDuration > 1
+                              ? `${finalIdrPrice} × ${selectedDuration} bulan`
+                              : finalIdrPrice
+                            : "Gratis"}
                         </Text>
                         {!isFree && (
                           <Text style={styles.priceEth}>
-                            ≈ {finalEthPrice.toFixed(4)} ETH
+                            ≈ {finalEthDisplay}
                           </Text>
                         )}
                       </>
