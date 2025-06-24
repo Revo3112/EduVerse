@@ -166,14 +166,14 @@ class SmartContractService {
           if (course.isActive) {
             // Get sections count for each course
             const sectionsCount = await this.getCourseSectionsCount(i);
-
             courses.push({
               id: course.id.toString(),
               title: course.title,
               description: course.description,
               thumbnailURI: course.thumbnailURI,
               creator: course.creator,
-              pricePerMonth: ethers.formatEther(course.pricePerMonth),
+              pricePerMonth: ethers.formatEther(course.pricePerMonth), // Convert wei to ETH for display
+              pricePerMonthWei: course.pricePerMonth.toString(), // Keep original wei value for calculations
               isActive: course.isActive,
               createdAt: new Date(Number(course.createdAt) * 1000),
               sectionsCount: sectionsCount, // NEW: Add sections count
@@ -196,14 +196,14 @@ class SmartContractService {
     try {
       const course = await this.contracts.courseFactory.getCourse(courseId);
       const sectionsCount = await this.getCourseSectionsCount(courseId);
-
       return {
         id: course.id.toString(),
         title: course.title,
         description: course.description,
         thumbnailURI: course.thumbnailURI,
         creator: course.creator,
-        pricePerMonth: ethers.formatEther(course.pricePerMonth),
+        pricePerMonth: ethers.formatEther(course.pricePerMonth), // For display
+        pricePerMonthWei: course.pricePerMonth.toString(), // For calculations
         isActive: course.isActive,
         createdAt: new Date(Number(course.createdAt) * 1000),
         sectionsCount: sectionsCount, // NEW: Add sections count
@@ -297,15 +297,15 @@ class SmartContractService {
   }
 
   // --- Course License Methods ---
-
   async mintLicense(courseId, duration = 1) {
     this.ensureInitialized();
     try {
       const course = await this.getCourse(courseId);
       if (!course) throw new Error("Course not found");
 
-      const priceInWei = ethers.parseEther(course.pricePerMonth);
-      const totalPrice = priceInWei * BigInt(duration);
+      // Use the wei value for calculations
+      const pricePerMonthInWei = BigInt(course.pricePerMonthWei);
+      const totalPrice = pricePerMonthInWei * BigInt(duration);
 
       const tx = await this.contracts.courseLicense.mintLicense(
         courseId,
@@ -358,6 +358,38 @@ class SmartContractService {
     } catch (error) {
       console.error("Error fetching user licenses:", error);
       return [];
+    }
+  }
+
+  // Method untuk mengecek apakah user memiliki lisensi yang valid dan aktif untuk course tertentu
+  async hasValidLicense(userAddress, courseId) {
+    this.ensureInitialized();
+    try {
+      // Cek balance user untuk course ID tertentu (ERC1155)
+      const balance = await this.contracts.courseLicense.balanceOf(
+        userAddress,
+        courseId
+      );
+
+      if (Number(balance) > 0) {
+        // Jika punya balance, cek apakah lisensinya masih aktif
+        const licenseData = await this.contracts.courseLicense.getLicense(
+          userAddress,
+          courseId
+        );
+
+        // Cek apakah lisensi masih aktif dan belum expired
+        const now = Math.floor(Date.now() / 1000);
+        const isActive =
+          licenseData.isActive && Number(licenseData.expiryTimestamp) > now;
+
+        return isActive;
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Error checking license validity:", error);
+      return false;
     }
   }
 

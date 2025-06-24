@@ -18,6 +18,7 @@ import {
   useCourses,
   useMintLicense,
   useUserCourses,
+  useHasActiveLicense,
 } from "../hooks/useBlockchain";
 import CourseCard from "../components/CourseCard";
 import CourseDetailModal from "../components/CourseDetailModal";
@@ -41,7 +42,6 @@ export default function DashboardScreen({ navigation }) {
   // State untuk kurs ETH -> IDR
   const [ethToIdrRate, setEthToIdrRate] = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
-
   // Blockchain hooks
   const {
     courses,
@@ -51,6 +51,13 @@ export default function DashboardScreen({ navigation }) {
   } = useCourses();
   const { mintLicense, loading: mintLoading } = useMintLicense();
   const { refetch: refetchUserCourses, enrolledCourses } = useUserCourses();
+
+  // Hook untuk mengecek lisensi aktif untuk course yang dipilih
+  const {
+    hasLicense,
+    loading: licenseLoading,
+    refetch: refetchLicense,
+  } = useHasActiveLicense(selectedCourse?.id);
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
@@ -88,8 +95,7 @@ export default function DashboardScreen({ navigation }) {
     setSelectedCourse(course);
     setModalVisible(true);
   };
-
-  const handleMintLicense = async (course) => {
+  const handleMintLicense = async (course, selectedDuration = 1) => {
     if (!isOnMantaNetwork) {
       Alert.alert(
         "Jaringan Salah",
@@ -98,13 +104,16 @@ export default function DashboardScreen({ navigation }) {
       return;
     }
     try {
-      const result = await mintLicense(course.id, 1); // Mint untuk 1 bulan
+      const result = await mintLicense(course.id, selectedDuration);
       if (result.success) {
+        const durationText =
+          selectedDuration === 1 ? "1 bulan" : `${selectedDuration} bulan`;
         Alert.alert(
           "Berhasil!",
-          `Lisensi untuk "${course.title}" berhasil dibeli.`
+          `Lisensi ${durationText} untuk "${course.title}" berhasil dibeli.`
         );
         refetchUserCourses(); // Refresh data kursus pengguna
+        refetchLicense(); // Refresh status lisensi untuk course ini
         setModalVisible(false); // Tutup modal setelah berhasil
         navigation.navigate("MyCourses");
       } else {
@@ -164,7 +173,6 @@ export default function DashboardScreen({ navigation }) {
       </TouchableOpacity>
     </View>
   );
-
   const calculateModalPrice = () => {
     if (!selectedCourse || !ethToIdrRate) return "Menghitung...";
     // PERBAIKAN: Sama seperti di renderItem, langsung gunakan nilai yang ada.
@@ -172,11 +180,6 @@ export default function DashboardScreen({ navigation }) {
     const priceInIdr = priceInEth * ethToIdrRate;
     return formatRupiah(priceInIdr);
   };
-
-  // Cek apakah user punya lisensi untuk selectedCourse
-  const hasLicense = selectedCourse
-    ? enrolledCourses.some((c) => c.id === selectedCourse.id)
-    : false;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -200,6 +203,7 @@ export default function DashboardScreen({ navigation }) {
           refreshing={coursesLoading}
         />
       )}
+
       <CourseDetailModal
         visible={modalVisible}
         course={selectedCourse}
@@ -208,7 +212,8 @@ export default function DashboardScreen({ navigation }) {
         isMinting={mintLoading}
         priceInIdr={calculateModalPrice()}
         priceLoading={rateLoading}
-        hasLicense={hasLicense} // <-- Tambahkan prop ini
+        hasLicense={hasLicense}
+        licenseLoading={licenseLoading}
       />
     </SafeAreaView>
   );

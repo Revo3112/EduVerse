@@ -47,12 +47,22 @@ const CourseDetailModal = ({
   priceInIdr,
   priceLoading,
   hasLicense, // <-- Tambahkan prop ini
+  licenseLoading, // <-- Tambahkan prop untuk loading state pengecekan lisensi
 }) => {
   const scaleValue = new Animated.Value(0);
   const opacityValue = new Animated.Value(0);
-
+  const [selectedDuration, setSelectedDuration] = React.useState(1);
+  // Duration options with exact multiplier (matching smart contract logic)
+  const durationOptions = [
+    { months: 1, label: "1 Bulan", multiplier: 1 },
+    { months: 3, label: "3 Bulan", multiplier: 3 }, // 3 months = 3x price
+    { months: 6, label: "6 Bulan", multiplier: 6 }, // 6 months = 6x price
+    { months: 12, label: "12 Bulan", multiplier: 12 }, // 12 months = 12x price
+  ];
   React.useEffect(() => {
     if (visible) {
+      // Reset duration selection when modal opens
+      setSelectedDuration(1);
       Animated.parallel([
         Animated.spring(scaleValue, {
           toValue: 1,
@@ -82,12 +92,22 @@ const CourseDetailModal = ({
       ]).start();
     }
   }, [visible]);
-
   if (!course) return null;
 
   const creationDate = timeAgo(course.createdAt);
   const ethPrice = parseFloat(course.pricePerMonth || "0");
   const isFree = ethPrice === 0;
+
+  // Calculate price based on selected duration
+  const selectedOption = durationOptions.find(
+    (opt) => opt.months === selectedDuration
+  );
+  const finalEthPrice = ethPrice * (selectedOption?.multiplier || 1);
+  const finalIdrPrice =
+    priceInIdr && !isFree
+      ? parseFloat(priceInIdr.replace(/[^0-9]/g, "")) *
+        (selectedOption?.multiplier || 1)
+      : 0;
 
   return (
     <Modal
@@ -167,7 +187,6 @@ const CourseDetailModal = ({
                 <View style={styles.contentSection}>
                   {/* Title */}
                   <Text style={styles.courseTitle}>{course.title}</Text>
-
                   {/* Creator Info */}
                   <View style={styles.creatorSection}>
                     <View style={styles.creatorIcon}>
@@ -184,7 +203,6 @@ const CourseDetailModal = ({
                       </Text>
                     </View>
                   </View>
-
                   {/* Stats Cards */}
                   <View style={styles.statsContainer}>
                     <View style={styles.statCard}>
@@ -223,7 +241,6 @@ const CourseDetailModal = ({
                       </Text>
                     </View>
                   </View>
-
                   {/* Description */}
                   <View style={styles.descriptionSection}>
                     <Text style={styles.sectionTitle}>Deskripsi</Text>
@@ -232,7 +249,6 @@ const CourseDetailModal = ({
                         "Belum ada deskripsi untuk kursus ini."}
                     </Text>
                   </View>
-
                   {/* Blockchain Info */}
                   <View style={styles.blockchainInfo}>
                     <Text style={styles.sectionTitle}>
@@ -261,51 +277,133 @@ const CourseDetailModal = ({
                         {course.isActive ? "Aktif & Tersedia" : "Nonaktif"}
                       </Text>
                     </View>
-                  </View>
-
+                  </View>{" "}
                   {/* Tambahkan pesan lisensi di sini */}
-                  {hasLicense && (
-                    <Text style={{ color: "#22c55e", textAlign: "center", marginVertical: 8 }}>
-                      Anda sudah memiliki lisensi aktif untuk kursus ini.
-                    </Text>
+                  {licenseLoading ? (
+                    <View style={{ alignItems: "center", marginVertical: 8 }}>
+                      <ActivityIndicator color="#8b5cf6" size="small" />
+                      <Text
+                        style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}
+                      >
+                        Mengecek status lisensi...
+                      </Text>
+                    </View>
+                  ) : hasLicense ? (
+                    <View
+                      style={{
+                        backgroundColor: "#dcfce7",
+                        padding: 12,
+                        borderRadius: 8,
+                        marginVertical: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#166534",
+                          textAlign: "center",
+                          fontWeight: "500",
+                        }}
+                      >
+                        ✅ Anda sudah memiliki lisensi aktif untuk kursus ini.
+                      </Text>
+                    </View>
+                  ) : null}
+                  {/* Duration Selector - hanya tampil jika user belum punya lisensi */}
+                  {!hasLicense && !licenseLoading && !isFree && (
+                    <View style={styles.durationSection}>
+                      <Text style={styles.durationTitle}>
+                        Pilih Durasi Lisensi
+                      </Text>
+                      <View style={styles.durationOptions}>
+                        {durationOptions.map((option) => (
+                          <TouchableOpacity
+                            key={option.months}
+                            style={[
+                              styles.durationOption,
+                              selectedDuration === option.months &&
+                                styles.durationOptionSelected,
+                            ]}
+                            onPress={() => setSelectedDuration(option.months)}
+                          >
+                            <Text
+                              style={[
+                                styles.durationOptionText,
+                                selectedDuration === option.months &&
+                                  styles.durationOptionTextSelected,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
                   )}
                 </View>
               </ScrollView>
 
               {/* Footer dengan Pricing */}
               <View style={styles.footer}>
+                {" "}
                 <View style={styles.priceSection}>
-                  <Text style={styles.priceLabel}>Harga Total</Text>
+                  <Text style={styles.priceLabel}>
+                    Harga Total{" "}
+                    {!isFree && selectedDuration > 1
+                      ? `(${selectedDuration} Bulan)`
+                      : ""}
+                  </Text>
                   <View style={styles.priceContainer}>
                     {priceLoading ? (
                       <ActivityIndicator color="#8b5cf6" size="small" />
                     ) : (
                       <>
                         <Text style={styles.priceMain}>
-                          {priceInIdr || "Gratis"}
+                          {!isFree && finalIdrPrice > 0
+                            ? new Intl.NumberFormat("id-ID", {
+                                style: "currency",
+                                currency: "IDR",
+                                minimumFractionDigits: 0,
+                              }).format(finalIdrPrice)
+                            : priceInIdr || "Gratis"}
                         </Text>
                         {!isFree && (
                           <Text style={styles.priceEth}>
-                            ≈ {ethPrice.toFixed(4)} ETH
+                            ≈ {finalEthPrice.toFixed(4)} ETH
                           </Text>
                         )}
                       </>
                     )}
                   </View>
-                </View>
-
+                </View>{" "}
                 <TouchableOpacity
                   style={[
                     styles.purchaseButton,
-                    (isMinting || !course.isActive || hasLicense) && styles.purchaseButtonDisabled,
+                    (isMinting ||
+                      !course.isActive ||
+                      hasLicense ||
+                      licenseLoading) &&
+                      styles.purchaseButtonDisabled,
                   ]}
                   onPress={() => {
-                    if (!hasLicense) onMintLicense(course);
+                    if (!hasLicense && !licenseLoading)
+                      onMintLicense(course, selectedDuration);
                   }}
-                  disabled={isMinting || !course.isActive || hasLicense}
+                  disabled={
+                    isMinting ||
+                    !course.isActive ||
+                    hasLicense ||
+                    licenseLoading
+                  }
                 >
                   {isMinting ? (
                     <ActivityIndicator color="#ffffff" size="small" />
+                  ) : licenseLoading ? (
+                    <View style={styles.buttonContent}>
+                      <ActivityIndicator color="#ffffff" size="small" />
+                      <Text style={styles.purchaseButtonText}>
+                        Mengecek lisensi...
+                      </Text>
+                    </View>
                   ) : hasLicense ? (
                     <Text style={styles.purchaseButtonText}>
                       Anda sudah memiliki lisensi aktif
@@ -581,6 +679,54 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     marginLeft: 8,
+  },
+  durationSection: {
+    padding: 16,
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    marginVertical: 12,
+  },
+  durationTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 12,
+  },
+  durationOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  durationOption: {
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 8,
+    padding: 12,
+    minWidth: "48%",
+    marginBottom: 8,
+    alignItems: "center",
+  },
+  durationOptionSelected: {
+    borderColor: "#8b5cf6",
+    backgroundColor: "#f3f4f6",
+  },
+  durationOptionText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  durationOptionTextSelected: {
+    color: "#8b5cf6",
+  },
+  durationDiscount: {
+    fontSize: 12,
+    color: "#059669",
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  durationDiscountSelected: {
+    color: "#059669",
   },
 });
 

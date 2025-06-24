@@ -263,4 +263,18 @@ contract CourseFactory is Ownable {
     function getTotalCourses() external view returns (uint256) {
         return _courseIds;
     }
+
+    /**
+     * @dev Get all courses
+     * @return Array of all courses
+     */
+    function getAllCourses() external view returns (Course[] memory) {
+        Course[] memory allCourses = new Course[](_courseIds);
+        
+        for (uint256 i = 1; i <= _courseIds; i++) {
+            allCourses[i - 1] = courses[i];
+        }
+        
+        return allCourses;
+    }
 }

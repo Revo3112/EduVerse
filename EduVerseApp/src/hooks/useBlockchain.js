@@ -466,3 +466,48 @@ export const useETHPrice = () => {
     refetch: fetchPrice,
   };
 };
+
+// Hook untuk mengecek apakah user memiliki lisensi aktif untuk course tertentu
+export const useHasActiveLicense = (courseId) => {
+  const { address } = useAccount();
+  const [hasLicense, setHasLicense] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const { isInitialized } = useSmartContract();
+
+  const checkLicense = useCallback(async () => {
+    if (!isInitialized || !address || !courseId) {
+      setHasLicense(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Menggunakan method hasValidLicense yang baru untuk pengecekan yang efisien
+      const isValid = await SmartContractService.hasValidLicense(
+        address,
+        courseId
+      );
+      setHasLicense(isValid);
+    } catch (err) {
+      console.error("Error checking license:", err);
+      setError(err.message);
+      setHasLicense(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, address, courseId]);
+
+  useEffect(() => {
+    checkLicense();
+  }, [checkLicense]);
+
+  return {
+    hasLicense,
+    loading,
+    error,
+    refetch: checkLicense,
+  };
+};
