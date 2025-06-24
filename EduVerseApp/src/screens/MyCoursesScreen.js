@@ -353,9 +353,11 @@ export default function MyCoursesScreen({ navigation }) {
         style={styles.emptyActionButton}
         onPress={() => {
           if (type === "enrolled") {
-            navigation.navigate("Dashboard");
+            // Navigate to Dashboard tab
+            navigation.getParent()?.navigate("Dashboard");
           } else {
-            navigation.navigate("CreateCourse");
+            // Navigate to Create Course tab
+            navigation.getParent()?.navigate("Create Course");
           }
         }}
       >

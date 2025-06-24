@@ -15,6 +15,7 @@ import HelpSupportScreen from "../screens/HelpSupportScreen";
 import AboutScreen from "../screens/AboutScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import TermsPrivacyScreen from "../screens/TermsPrivacyScreen";
+import IPFSTestScreen from "../screens/IPFSTestScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -93,6 +94,13 @@ function ProfileStack() {
       <Stack.Screen
         name="TermsPrivacy"
         component={TermsPrivacyScreen}
+        options={{
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="IPFSTest"
+        component={IPFSTestScreen}
         options={{
           headerShown: false,
         }}

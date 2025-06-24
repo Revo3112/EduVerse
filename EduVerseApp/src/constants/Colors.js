@@ -1,5 +1,35 @@
 // src/constants/Colors.js
 export const Colors = {
+  // Main theme colors
+  primary: "#007AFF",
+  secondary: "#5856D6",
+  background: "#f8f9fa",
+  surface: "#ffffff",
+  white: "#ffffff",
+  black: "#000000",
+
+  // Text colors
+  text: "#333333",
+  textSecondary: "#666666",
+  textMuted: "#999999",
+
+  // Gray scale
+  gray: "#666666",
+  lightGray: "#e0e0e0",
+
+  // Status colors
+  success: "#28a745",
+  warning: "#ff9500",
+  error: "#FF3B30",
+  info: "#17a2b8",
+  purple: "#6f42c1",
+
+  // Border
+  border: "#e0e0e0",
+};
+
+// Theme variants for future use
+export const ColorThemes = {
   light: {
     primary: "#007AFF",
     secondary: "#5856D6",

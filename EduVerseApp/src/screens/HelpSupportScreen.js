@@ -162,19 +162,17 @@ export default function HelpSupportScreen({ navigation }) {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-
+          <Text style={styles.sectionTitle}>Quick Actions</Text>{" "}
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => navigation.navigate("Dashboard")}
+            onPress={() => navigation.getParent()?.navigate("Dashboard")}
           >
             <Ionicons name="home" size={20} color="#fff" />
             <Text style={styles.actionButtonText}>Back to Dashboard</Text>
           </TouchableOpacity>
-
           <TouchableOpacity
             style={[styles.actionButton, styles.secondaryButton]}
-            onPress={() => navigation.navigate("MyCourses")}
+            onPress={() => navigation.getParent()?.navigate("MyCourses")}
           >
             <Ionicons name="book" size={20} color="#9747FF" />
             <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>

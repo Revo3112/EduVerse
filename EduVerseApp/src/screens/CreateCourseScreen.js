@@ -15,6 +15,7 @@ import {
 import { useAccount, useChainId } from "wagmi";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
+import { IPFSUploader } from "../components/IPFSUploader";
 
 export default function CreateCourseScreen({ navigation }) {
   const { address, isConnected } = useAccount();
@@ -40,12 +41,21 @@ export default function CreateCourseScreen({ navigation }) {
   });
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
-
   const handleInputChange = (field, value) => {
     setCourseData((prev) => ({
       ...prev,
       [field]: value,
     }));
+  };
+
+  const handleThumbnailUpload = (result) => {
+    if (result.success) {
+      // Use the IPFS hash as the thumbnail URI
+      handleInputChange("thumbnailURI", `ipfs://${result.ipfsHash}`);
+      Alert.alert("Success", "Thumbnail uploaded to IPFS successfully!");
+    } else {
+      Alert.alert("Error", result.error || "Failed to upload thumbnail");
+    }
   };
 
   const handleSectionInputChange = (field, value) => {
@@ -313,7 +323,6 @@ export default function CreateCourseScreen({ navigation }) {
           {/* Basic Course Information */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>📚 Course Information</Text>
-
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Course Title *</Text>
               <TextInput
@@ -324,7 +333,6 @@ export default function CreateCourseScreen({ navigation }) {
                 placeholderTextColor="#999"
               />
             </View>
-
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Description *</Text>
               <TextInput
@@ -338,7 +346,6 @@ export default function CreateCourseScreen({ navigation }) {
                 placeholderTextColor="#999"
               />
             </View>
-
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Category</Text>
               <TextInput
@@ -349,7 +356,6 @@ export default function CreateCourseScreen({ navigation }) {
                 placeholderTextColor="#999"
               />
             </View>
-
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Thumbnail URI</Text>
               <TextInput
@@ -359,13 +365,30 @@ export default function CreateCourseScreen({ navigation }) {
                 onChangeText={(text) => handleInputChange("thumbnailURI", text)}
                 placeholderTextColor="#999"
               />
+              <Text style={styles.helpText}>
+                You can enter a URL or upload an image to IPFS using the button
+                below
+              </Text>
+              <IPFSUploader
+                onUploadComplete={handleThumbnailUpload}
+                accept="images"
+                buttonText="📸 Upload Thumbnail to IPFS"
+                maxSizeBytes={5 * 1024 * 1024} // 5MB for thumbnails
+                metadata={{
+                  description: "Course thumbnail image",
+                  category: "thumbnail",
+                }}
+                keyValues={[
+                  { key: "category", value: "thumbnail" },
+                  { key: "courseTitle", value: courseData.title || "untitled" },
+                ]}
+                style={styles.ipfsUploader}
+              />
             </View>
-
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Difficulty Level</Text>
               <DifficultySelector />
             </View>
-
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Duration (in hours)</Text>
               <TextInput
@@ -776,5 +799,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginLeft: 8,
+  },
+  helpText: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  ipfsUploader: {
+    marginTop: 8,
   },
 });

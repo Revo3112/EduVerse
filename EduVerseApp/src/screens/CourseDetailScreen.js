@@ -200,7 +200,7 @@ export default function CourseDetailScreen({ route, navigation }) {
             },
             {
               text: "Get License",
-              onPress: () => navigation.navigate("Dashboard"),
+              onPress: () => navigation.getParent()?.navigate("Dashboard"),
             },
           ]
         );

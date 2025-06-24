@@ -104,7 +104,6 @@ export default function SettingsScreen({ navigation }) {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <SectionHeader title="General" />
-
         <SettingItem
           icon="notifications"
           title="Push Notifications"
@@ -119,7 +118,6 @@ export default function SettingsScreen({ navigation }) {
             />
           }
         />
-
         <SettingItem
           icon="moon"
           title="Dark Mode"
@@ -134,9 +132,7 @@ export default function SettingsScreen({ navigation }) {
             />
           }
         />
-
         <SectionHeader title="Learning Preferences" />
-
         <SettingItem
           icon="play"
           title="Auto-play Videos"
@@ -151,7 +147,6 @@ export default function SettingsScreen({ navigation }) {
             />
           }
         />
-
         <SettingItem
           icon="download"
           title="Download Quality"
@@ -164,9 +159,7 @@ export default function SettingsScreen({ navigation }) {
           }
           color="#F59E0B"
         />
-
         <SectionHeader title="Data & Storage" />
-
         <SettingItem
           icon="cellular"
           title="Use Cellular Data"
@@ -181,7 +174,6 @@ export default function SettingsScreen({ navigation }) {
             />
           }
         />
-
         <SettingItem
           icon="trash"
           title="Clear Cache"
@@ -189,7 +181,6 @@ export default function SettingsScreen({ navigation }) {
           onPress={handleClearCache}
           color="#8B5CF6"
         />
-
         <SettingItem
           icon="cloud-download"
           title="Manage Downloads"
@@ -199,9 +190,7 @@ export default function SettingsScreen({ navigation }) {
           }
           color="#06B6D4"
         />
-
         <SectionHeader title="Account" />
-
         <SettingItem
           icon="person"
           title="Profile Settings"
@@ -209,7 +198,6 @@ export default function SettingsScreen({ navigation }) {
           onPress={() => Alert.alert("Profile", "Profile editing coming soon!")}
           color="#9747FF"
         />
-
         <SettingItem
           icon="shield-checkmark"
           title="Privacy & Security"
@@ -219,9 +207,7 @@ export default function SettingsScreen({ navigation }) {
           }
           color="#059669"
         />
-
         <SectionHeader title="Advanced" />
-
         <SettingItem
           icon="bug"
           title="Debug Mode"
@@ -229,7 +215,13 @@ export default function SettingsScreen({ navigation }) {
           onPress={() => Alert.alert("Debug", "Debug mode coming soon!")}
           color="#DC2626"
         />
-
+        <SettingItem
+          icon="cloud-upload"
+          title="IPFS Test"
+          subtitle="Test Pinata IPFS integration"
+          onPress={() => navigation.navigate("IPFSTest")}
+          color="#6366F1"
+        />
         <SettingItem
           icon="refresh"
           title="Reset Settings"
@@ -237,7 +229,6 @@ export default function SettingsScreen({ navigation }) {
           onPress={handleResetSettings}
           color="#F97316"
         />
-
         <View style={styles.section}>
           <Text style={styles.infoText}>
             App Version: 1.0.0{"\n"}
