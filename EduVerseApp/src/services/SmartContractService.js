@@ -270,18 +270,34 @@ class SmartContractService {
       return [];
     }
   }
-
-  // ENHANCED METHOD: Get creator courses with sections count
+  // ENHANCED METHOD: Get creator courses with sections count dan metadata untuk UI
   async getCreatorCourses(creatorAddress) {
     this.ensureInitialized();
     try {
       const courseIds = await this.contracts.courseFactory.getCreatorCourses(
         creatorAddress
       );
+
       // Fetch details for each course ID (including sections count)
       const courses = await Promise.all(
-        courseIds.map((id) => this.getCourse(id.toString()))
+        courseIds.map(async (id) => {
+          const course = await this.getCourse(id.toString());
+          if (course) {
+            // Add additional metadata untuk created courses UI
+            return {
+              ...course,
+              students: 0, // TODO: Implement student count tracking in smart contract
+              revenue: "0.00", // TODO: Implement revenue tracking in smart contract
+              status: course.isActive ? "Published" : "Draft",
+              created: course.createdAt.toISOString().split("T")[0],
+              thumbnail: course.thumbnailURI,
+              category: "Blockchain", // Default category
+            };
+          }
+          return null;
+        })
       );
+
       return courses.filter((course) => course !== null); // Filter out any nulls from failed fetches
     } catch (error) {
       console.error("Error fetching creator courses:", error);

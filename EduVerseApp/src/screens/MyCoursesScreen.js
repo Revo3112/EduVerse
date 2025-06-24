@@ -1,4 +1,4 @@
-// src/screens/MyCoursesScreen.js - Improved MyCourses with Reusable Components
+// src/screens/MyCoursesScreen.js - Fixed Text Component Issues
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -71,6 +71,7 @@ export default function MyCoursesScreen({ navigation }) {
   const [createdCourses, setCreatedCourses] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
+
   // Helper function to format price
   const formatPrice = (priceInETH) => {
     if (!priceInETH || priceInETH === "0" || parseFloat(priceInETH) === 0) {
@@ -80,6 +81,7 @@ export default function MyCoursesScreen({ navigation }) {
   };
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
+
   // Load user's courses from blockchain
   const loadEnrolledCourses = async () => {
     try {
@@ -128,6 +130,7 @@ export default function MyCoursesScreen({ navigation }) {
     await Promise.all([loadEnrolledCourses(), loadCreatedCourses()]);
     setLoading(false);
   };
+
   useEffect(() => {
     console.log("MyCoursesScreen mount");
     console.log("Wallet connected:", isConnected);
@@ -152,6 +155,7 @@ export default function MyCoursesScreen({ navigation }) {
     await loadAllCourses();
     setRefreshing(false);
   };
+
   const handleCoursePress = (course) => {
     // Navigate to course detail screen yang menampilkan sections
     navigation.navigate("CourseDetail", {
@@ -341,26 +345,36 @@ export default function MyCoursesScreen({ navigation }) {
             <View style={styles.summaryStats}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryNumber}>
-                  {enrolledCourses.filter((c) => c.progress === 100).length}
+                  {
+                    enrolledCourses.filter((c) => {
+                      const progress = c.progress || 0;
+                      return progress === 100;
+                    }).length
+                  }
                 </Text>
                 <Text style={styles.summaryLabel}>Completed</Text>
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryNumber}>
                   {
-                    enrolledCourses.filter(
-                      (c) => c.progress > 0 && c.progress < 100
-                    ).length
+                    enrolledCourses.filter((c) => {
+                      const progress = c.progress || 0;
+                      return progress > 0 && progress < 100;
+                    }).length
                   }
                 </Text>
                 <Text style={styles.summaryLabel}>In Progress</Text>
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryNumber}>
-                  {Math.round(
-                    enrolledCourses.reduce((acc, c) => acc + c.progress, 0) /
-                      enrolledCourses.length
-                  )}
+                  {enrolledCourses.length > 0
+                    ? Math.round(
+                        enrolledCourses.reduce((acc, c) => {
+                          const progress = c.progress || 0;
+                          return acc + progress;
+                        }, 0) / enrolledCourses.length
+                      )
+                    : 0}
                   %
                 </Text>
                 <Text style={styles.summaryLabel}>Avg Progress</Text>
@@ -368,21 +382,30 @@ export default function MyCoursesScreen({ navigation }) {
             </View>
           </View>
         )}
+
         {activeTab === "created" && createdCourses.length > 0 && (
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Creator Stats</Text>
             <View style={styles.summaryStats}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryNumber}>
-                  {createdCourses.reduce((acc, c) => acc + c.students, 0)}
+                  {createdCourses.reduce((acc, c) => {
+                    // Safe students count dengan fallback
+                    const students = c.students || 0;
+                    return acc + students;
+                  }, 0)}
                 </Text>
                 <Text style={styles.summaryLabel}>Total Students</Text>
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryNumber}>
                   {
-                    createdCourses.filter((c) => c.status === "Published")
-                      .length
+                    createdCourses.filter((c) => {
+                      // Safe status check dengan fallback
+                      const status =
+                        c.status || c.isActive ? "Published" : "Draft";
+                      return status === "Published";
+                    }).length
                   }
                 </Text>
                 <Text style={styles.summaryLabel}>Published</Text>
@@ -391,10 +414,22 @@ export default function MyCoursesScreen({ navigation }) {
                 <Text style={styles.summaryNumber}>
                   {createdCourses
                     .reduce((acc, c) => {
-                      const revenue = parseFloat(c.revenue.replace(" ETH", ""));
+                      // Safe revenue parsing dengan null check
+                      let revenue = 0;
+                      if (c.revenue && typeof c.revenue === "string") {
+                        // Jika revenue adalah string seperti "0.15 ETH"
+                        revenue =
+                          parseFloat(c.revenue.replace(" ETH", "")) || 0;
+                      } else if (c.revenue && typeof c.revenue === "number") {
+                        // Jika revenue adalah number
+                        revenue = c.revenue;
+                      } else if (c.pricePerMonth) {
+                        // Fallback ke pricePerMonth jika revenue tidak ada
+                        revenue = parseFloat(c.pricePerMonth) || 0;
+                      }
                       return acc + revenue;
                     }, 0)
-                    .toFixed(2)}{" "}
+                    .toFixed(4)}{" "}
                   ETH
                 </Text>
                 <Text style={styles.summaryLabel}>Total Revenue</Text>
