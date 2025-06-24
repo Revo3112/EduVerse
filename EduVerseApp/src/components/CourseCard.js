@@ -34,12 +34,12 @@ const CourseCard = ({ course, onDetailPress, priceInIdr, priceLoading }) => {
   if (!course) return null;
 
   const creationDate = timeAgo(course.createdAt);
-
   return (
     <TouchableOpacity
-      style={styles.cardContainer}
-      onPress={() => onDetailPress(course)}
-      activeOpacity={0.8}
+      style={[styles.cardContainer, priceLoading && styles.cardDisabled]}
+      onPress={() => !priceLoading && onDetailPress(course)}
+      activeOpacity={priceLoading ? 1 : 0.8}
+      disabled={priceLoading}
     >
       <Image
         source={{
@@ -166,6 +166,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
+  },
+  cardDisabled: {
+    opacity: 0.6,
   },
   cardImage: {
     width: "100%",

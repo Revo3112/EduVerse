@@ -1,5 +1,5 @@
-// src/screens/DashboardScreen.js - Final Integrated Dashboard with Blockchain for React Native
-import React, { useState, useEffect, useCallback } from "react";
+// src/screens/DashboardScreen.js - Fixed Dashboard with proper Text wrapping
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import {
   useCourses,
   useMintLicense,
   useUserCourses,
-  useHasActiveLicense,
+  useSmartContract,
 } from "../hooks/useBlockchain";
 import CourseCard from "../components/CourseCard";
 import CourseDetailModal from "../components/CourseDetailModal";
@@ -38,10 +38,17 @@ export default function DashboardScreen({ navigation }) {
   const chainId = useChainId();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [modalInteracting, setModalInteracting] = useState(false);
+  const modalTimeoutRef = useRef(null);
 
   // State untuk kurs ETH -> IDR
   const [ethToIdrRate, setEthToIdrRate] = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
+
+  // State untuk license checking yang dioptimasi
+  const [licenseStatus, setLicenseStatus] = useState({});
+  const [licenseLoading, setLicenseLoading] = useState(false);
+
   // Blockchain hooks
   const {
     courses,
@@ -51,13 +58,7 @@ export default function DashboardScreen({ navigation }) {
   } = useCourses();
   const { mintLicense, loading: mintLoading } = useMintLicense();
   const { refetch: refetchUserCourses, enrolledCourses } = useUserCourses();
-
-  // Hook untuk mengecek lisensi aktif untuk course yang dipilih
-  const {
-    hasLicense,
-    loading: licenseLoading,
-    refetch: refetchLicense,
-  } = useHasActiveLicense(selectedCourse?.id);
+  const { smartContractService, isInitialized } = useSmartContract();
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
@@ -91,10 +92,81 @@ export default function DashboardScreen({ navigation }) {
     fetchEthPriceInIdr();
   }, [refetchCourses, fetchEthPriceInIdr]);
 
+  // Cleanup timeout when component unmounts
+  useEffect(() => {
+    return () => {
+      if (modalTimeoutRef.current) {
+        clearTimeout(modalTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Optimized license checking function
+  const checkLicenseForCourse = useCallback(
+    async (courseId) => {
+      if (!address || !courseId || !smartContractService || !isInitialized) {
+        return false;
+      }
+
+      // Check cache first
+      if (licenseStatus[courseId] !== undefined) {
+        return licenseStatus[courseId];
+      }
+
+      try {
+        setLicenseLoading(true);
+        const hasLicense = await smartContractService.hasValidLicense(
+          address,
+          courseId
+        );
+
+        // Update cache
+        setLicenseStatus((prev) => ({
+          ...prev,
+          [courseId]: hasLicense,
+        }));
+
+        return hasLicense;
+      } catch (error) {
+        console.error("Error checking license:", error);
+        return false;
+      } finally {
+        setLicenseLoading(false);
+      }
+    },
+    [address, licenseStatus, smartContractService, isInitialized]
+  );
+
   const handleOpenDetail = (course) => {
+    if (modalInteracting) {
+      console.log(
+        "Modal interaction already in progress, preventing duplicate press"
+      );
+      return;
+    }
+
+    console.log("Opening course detail modal:", course.id);
+    setModalInteracting(true);
+
+    // Clear any existing timeout
+    if (modalTimeoutRef.current) {
+      clearTimeout(modalTimeoutRef.current);
+    }
+
+    // Show modal immediately untuk improve responsiveness
     setSelectedCourse(course);
     setModalVisible(true);
+
+    // Check license in background (parallel, not blocking)
+    checkLicenseForCourse(course.id);
+
+    // Reset interaction state dengan timeout yang lebih panjang
+    modalTimeoutRef.current = setTimeout(() => {
+      setModalInteracting(false);
+      modalTimeoutRef.current = null;
+    }, 1500); // Increased from 300ms to 1500ms
   };
+
   const handleMintLicense = async (course, selectedDuration = 1) => {
     if (!isOnMantaNetwork) {
       Alert.alert(
@@ -112,8 +184,16 @@ export default function DashboardScreen({ navigation }) {
           "Berhasil!",
           `Lisensi ${durationText} untuk "${course.title}" berhasil dibeli.`
         );
+
+        // Refresh data dan cache
         refetchUserCourses(); // Refresh data kursus pengguna
-        refetchLicense(); // Refresh status lisensi untuk course ini
+
+        // Update license cache to reflect new purchase
+        setLicenseStatus((prev) => ({
+          ...prev,
+          [course.id]: true,
+        }));
+
         setModalVisible(false); // Tutup modal setelah berhasil
         navigation.navigate("MyCourses");
       } else {
@@ -146,13 +226,12 @@ export default function DashboardScreen({ navigation }) {
     // Tidak perlu memanggil `ethers.formatEther` lagi.
     const priceInEth = parseFloat(item.pricePerMonth || "0");
     const priceInIdr = ethToIdrRate ? priceInEth * ethToIdrRate : 0;
-
     return (
       <CourseCard
         course={item}
         onDetailPress={handleOpenDetail}
         priceInIdr={formatRupiah(priceInIdr)}
-        priceLoading={rateLoading}
+        priceLoading={rateLoading || modalInteracting}
       />
     );
   };
@@ -173,6 +252,7 @@ export default function DashboardScreen({ navigation }) {
       </TouchableOpacity>
     </View>
   );
+
   const calculateModalPrice = () => {
     if (!selectedCourse || !ethToIdrRate) return "Menghitung...";
     // PERBAIKAN: Sama seperti di renderItem, langsung gunakan nilai yang ada.
@@ -194,7 +274,7 @@ export default function DashboardScreen({ navigation }) {
         </View>
       ) : (
         <FlatList
-          data={courses.filter((c) => c.isActive)} // Hanya tampilkan kursus yang aktif
+          data={courses?.filter((c) => c.isActive) || []} // Fixed: Add null check and fallback to empty array
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
@@ -203,16 +283,24 @@ export default function DashboardScreen({ navigation }) {
           refreshing={coursesLoading}
         />
       )}
-
       <CourseDetailModal
         visible={modalVisible}
         course={selectedCourse}
-        onClose={() => setModalVisible(false)}
+        onClose={() => {
+          setModalVisible(false);
+          setModalInteracting(false); // Reset interaction state when modal closes
+          if (modalTimeoutRef.current) {
+            clearTimeout(modalTimeoutRef.current);
+            modalTimeoutRef.current = null;
+          }
+        }}
         onMintLicense={handleMintLicense}
         isMinting={mintLoading}
         priceInIdr={calculateModalPrice()}
         priceLoading={rateLoading}
-        hasLicense={hasLicense}
+        hasLicense={
+          selectedCourse ? licenseStatus[selectedCourse.id] || false : false
+        }
         licenseLoading={licenseLoading}
       />
     </SafeAreaView>
