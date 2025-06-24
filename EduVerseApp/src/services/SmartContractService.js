@@ -1,4 +1,4 @@
-// src/services/SmartContractService.js - Enhanced Smart Contract Integration
+// src/services/SmartContractService.js - Enhanced Smart Contract Integration for ethers v6
 import { ethers } from "ethers";
 import { BLOCKCHAIN_CONFIG } from "../constants/blockchain";
 
@@ -12,17 +12,19 @@ class SmartContractService {
   constructor() {
     this.provider = null;
     this.signer = null;
+    this.browserProvider = null;
     this.contracts = {};
     this.isInitialized = false;
   }
 
-  // Initialize the service with wallet provider
-  async initialize(walletProvider) {
+  // Initialize the service with providers (ethers v6)
+  async initialize(provider, browserProvider) {
     try {
-      this.provider = new ethers.providers.Web3Provider(walletProvider);
-      this.signer = this.provider.getSigner();
+      this.provider = provider;
+      this.browserProvider = browserProvider;
+      this.signer = await browserProvider.getSigner();
 
-      // Initialize contract instances
+      // Initialize contract instances with ethers v6 syntax
       this.contracts = {
         courseFactory: new ethers.Contract(
           BLOCKCHAIN_CONFIG.CONTRACTS.courseFactory,
@@ -70,8 +72,8 @@ class SmartContractService {
     try {
       const { title, description, thumbnailURI, pricePerMonth } = courseData;
 
-      // Convert price to wei if it's in ETH
-      const priceInWei = ethers.utils.parseEther(pricePerMonth.toString());
+      // Convert price to wei if it's in ETH (ethers v6)
+      const priceInWei = ethers.parseEther(pricePerMonth.toString());
 
       const tx = await this.contracts.courseFactory.createCourse(
         title,
@@ -82,17 +84,26 @@ class SmartContractService {
 
       const receipt = await tx.wait();
 
-      // Extract course ID from event
-      const courseCreatedEvent = receipt.events?.find(
-        (event) => event.event === "CourseCreated"
-      );
-
-      const courseId = courseCreatedEvent?.args?.CourseId;
+      // Extract course ID from event logs (ethers v6)
+      let courseId = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsedLog =
+            this.contracts.courseFactory.interface.parseLog(log);
+          if (parsedLog && parsedLog.name === "CourseCreated") {
+            courseId = parsedLog.args.CourseId.toString();
+            break;
+          }
+        } catch (e) {
+          // Skip logs that can't be parsed
+          continue;
+        }
+      }
 
       return {
         success: true,
-        courseId: courseId?.toString(),
-        transactionHash: receipt.transactionHash,
+        courseId: courseId,
+        transactionHash: receipt.hash,
       };
     } catch (error) {
       console.error("Error creating course:", error);
@@ -118,17 +129,26 @@ class SmartContractService {
 
       const receipt = await tx.wait();
 
-      // Extract section ID from event
-      const sectionAddedEvent = receipt.events?.find(
-        (event) => event.event === "SectionAdded"
-      );
-
-      const sectionId = sectionAddedEvent?.args?.sectionId;
+      // Extract section ID from event logs (ethers v6)
+      let sectionId = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsedLog =
+            this.contracts.courseFactory.interface.parseLog(log);
+          if (parsedLog && parsedLog.name === "SectionAdded") {
+            sectionId = parsedLog.args.sectionId.toString();
+            break;
+          }
+        } catch (e) {
+          // Skip logs that can't be parsed
+          continue;
+        }
+      }
 
       return {
         success: true,
-        sectionId: sectionId?.toString(),
-        transactionHash: receipt.transactionHash,
+        sectionId: sectionId,
+        transactionHash: receipt.hash,
       };
     } catch (error) {
       console.error("Error adding course section:", error);
@@ -146,20 +166,20 @@ class SmartContractService {
       const totalCourses = await this.contracts.courseFactory.getTotalCourses();
       const courses = [];
 
-      for (let i = 1; i <= totalCourses.toNumber(); i++) {
+      for (let i = 1; i <= Number(totalCourses); i++) {
         try {
           const course = await this.contracts.courseFactory.getCourse(i);
 
-          // Format course data
+          // Format course data (ethers v6)
           const formattedCourse = {
             id: course.id.toString(),
             title: course.title,
             description: course.description,
             thumbnailURI: course.thumbnailURI,
             creator: course.creator,
-            pricePerMonth: ethers.utils.formatEther(course.pricePerMonth),
+            pricePerMonth: ethers.formatEther(course.pricePerMonth),
             isActive: course.isActive,
-            createdAt: new Date(course.createdAt.toNumber() * 1000),
+            createdAt: new Date(Number(course.createdAt) * 1000),
           };
 
           courses.push(formattedCourse);
@@ -187,9 +207,9 @@ class SmartContractService {
         description: course.description,
         thumbnailURI: course.thumbnailURI,
         creator: course.creator,
-        pricePerMonth: ethers.utils.formatEther(course.pricePerMonth),
+        pricePerMonth: ethers.formatEther(course.pricePerMonth),
         isActive: course.isActive,
-        createdAt: new Date(course.createdAt.toNumber() * 1000),
+        createdAt: new Date(Number(course.createdAt) * 1000),
       };
     } catch (error) {
       console.error("Error fetching course:", error);
@@ -210,8 +230,8 @@ class SmartContractService {
         courseId: section.CourseId.toString(),
         title: section.title,
         contentURI: section.contentURI,
-        duration: section.duration.toNumber(),
-        orderId: section.orderId.toNumber(),
+        duration: Number(section.duration),
+        orderId: Number(section.orderId),
       }));
     } catch (error) {
       console.error("Error fetching course sections:", error);
@@ -257,8 +277,8 @@ class SmartContractService {
         throw new Error("Course not found");
       }
 
-      const priceInWei = ethers.utils.parseEther(course.pricePerMonth);
-      const totalPrice = priceInWei.mul(duration);
+      const priceInWei = ethers.parseEther(course.pricePerMonth);
+      const totalPrice = priceInWei * BigInt(duration);
 
       const tx = await this.contracts.courseLicense.mintLicense(
         courseId,
@@ -270,7 +290,7 @@ class SmartContractService {
 
       return {
         success: true,
-        transactionHash: receipt.transactionHash,
+        transactionHash: receipt.hash,
       };
     } catch (error) {
       console.error("Error minting license:", error);
@@ -285,29 +305,29 @@ class SmartContractService {
     this.ensureInitialized();
 
     try {
-      // This would depend on your CourseLicense contract implementation
-      // You might need to implement a function to get user's licenses
+      // Check if balanceOf and getLicense functions exist in ABI
+      if (
+        !this.contracts.courseLicense.interface.functions["balanceOf"] ||
+        !this.contracts.courseLicense.interface.functions["getLicense"]
+      ) {
+        throw new Error("Required functions not available in contract ABI");
+      }
+
       const balance = await this.contracts.courseLicense.balanceOf(userAddress);
       const licenses = [];
 
-      for (let i = 0; i < balance.toNumber(); i++) {
+      for (let i = 0; i < Number(balance); i++) {
         try {
-          const tokenId =
-            await this.contracts.courseLicense.tokenOfOwnerByIndex(
-              userAddress,
-              i
-            );
-          const license = await this.contracts.courseLicense.getLicense(
-            tokenId
-          );
+          const tokenId = await this.contracts.courseLicense.tokenOfOwnerByIndex(userAddress, i);
+          const license = await this.contracts.courseLicense.getLicense(tokenId);
 
           licenses.push({
             tokenId: tokenId.toString(),
             courseId: license.courseId.toString(),
             owner: license.owner,
-            duration: license.duration.toNumber(),
-            startTime: new Date(license.startTime.toNumber() * 1000),
-            endTime: new Date(license.endTime.toNumber() * 1000),
+            duration: Number(license.duration),
+            startTime: new Date(Number(license.startTime) * 1000),
+            endTime: new Date(Number(license.endTime) * 1000),
             isActive: license.isActive,
           });
         } catch (error) {
@@ -337,7 +357,7 @@ class SmartContractService {
 
       return {
         success: true,
-        transactionHash: receipt.transactionHash,
+        transactionHash: receipt.hash,
       };
     } catch (error) {
       console.error("Error updating progress:", error);
@@ -362,9 +382,9 @@ class SmartContractService {
         completedSections: progress.completedSections.map((id) =>
           id.toString()
         ),
-        totalSections: progress.totalSections.toNumber(),
-        progressPercentage: progress.progressPercentage.toNumber(),
-        lastUpdated: new Date(progress.lastUpdated.toNumber() * 1000),
+        totalSections: Number(progress.totalSections),
+        progressPercentage: Number(progress.progressPercentage),
+        lastUpdated: new Date(Number(progress.lastUpdated) * 1000),
       };
     } catch (error) {
       console.error("Error fetching user progress:", error);
@@ -386,7 +406,7 @@ class SmartContractService {
 
       return {
         success: true,
-        transactionHash: receipt.transactionHash,
+        transactionHash: receipt.hash,
       };
     } catch (error) {
       console.error("Error issuing certificate:", error);
@@ -411,7 +431,7 @@ class SmartContractService {
         courseId: cert.courseId.toString(),
         student: cert.student,
         issuer: cert.issuer,
-        issuedAt: new Date(cert.issuedAt.toNumber() * 1000),
+        issuedAt: new Date(Number(cert.issuedAt) * 1000),
         metadataURI: cert.metadataURI,
       }));
     } catch (error) {
@@ -426,7 +446,7 @@ class SmartContractService {
 
     try {
       const price = await this.contracts.courseFactory.getETHPrice();
-      return ethers.utils.formatUnits(price, 8); // Price feed usually has 8 decimals
+      return ethers.formatUnits(price, 8); // Price feed usually has 8 decimals
     } catch (error) {
       console.error("Error fetching ETH price:", error);
       return "0";
@@ -445,7 +465,7 @@ class SmartContractService {
     }
   }
 
-  // Event Listeners
+  // Event Listeners (ethers v6)
   subscribeToEvents(eventName, callback) {
     this.ensureInitialized();
 

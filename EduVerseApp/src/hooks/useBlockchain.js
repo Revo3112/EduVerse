@@ -3,37 +3,37 @@ import { usePublicClient, useWalletClient, useAccount } from "wagmi";
 import { ethers } from "ethers";
 import SmartContractService from "../services/SmartContractService";
 
-// Helper function to convert Viem client to ethers provider
+// Helper function to convert Viem client to ethers provider (ethers v6)
 function publicClientToProvider(publicClient) {
   const { chain, transport } = publicClient;
-  const network = {
-    chainId: chain.id,
-    name: chain.name,
-    ensAddress: chain.contracts?.ensRegistry?.address,
-  };
 
   if (transport.type === "fallback") {
-    return new ethers.providers.FallbackProvider(
-      transport.transports.map(
-        ({ value }) => new ethers.providers.JsonRpcProvider(value?.url, network)
-      )
+    // For fallback transport, use the first URL
+    const firstTransport = transport.transports[0];
+    return new ethers.JsonRpcProvider(
+      firstTransport.value?.url || firstTransport.value,
+      {
+        chainId: chain.id,
+        name: chain.name,
+      }
     );
   }
 
-  return new ethers.providers.JsonRpcProvider(transport.url, network);
-}
-
-// Helper function to convert Viem wallet client to ethers signer
-function walletClientToSigner(walletClient) {
-  const { account, chain, transport } = walletClient;
-  const network = {
+  return new ethers.JsonRpcProvider(transport.url, {
     chainId: chain.id,
     name: chain.name,
-    ensAddress: chain.contracts?.ensRegistry?.address,
-  };
+  });
+}
 
-  const provider = new ethers.providers.Web3Provider(transport, network);
-  return provider.getSigner(account.address);
+// Helper function to convert Viem wallet client to ethers signer (ethers v6)
+function walletClientToSigner(walletClient, publicClient) {
+  const provider = publicClientToProvider(publicClient);
+
+  // In ethers v6, we create a BrowserProvider for wallet interactions
+  return new ethers.BrowserProvider(walletClient.transport, {
+    chainId: walletClient.chain.id,
+    name: walletClient.chain.name,
+  });
 }
 
 // Hooks for managing smart contract service initialization
@@ -48,9 +48,14 @@ export const useSmartContract = () => {
     const initializeService = async () => {
       if (isConnected && publicClient && walletClient) {
         try {
-          // Convert Viem client to ethers provider
+          // Convert Viem client to ethers provider (v6)
           const provider = publicClientToProvider(publicClient);
-          await SmartContractService.initialize(provider);
+          const browserProvider = walletClientToSigner(
+            walletClient,
+            publicClient
+          );
+
+          await SmartContractService.initialize(provider, browserProvider);
           setIsInitialized(true);
           setError(null);
         } catch (err) {
