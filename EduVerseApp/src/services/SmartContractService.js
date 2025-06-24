@@ -305,33 +305,19 @@ class SmartContractService {
     this.ensureInitialized();
 
     try {
-      // Check if balanceOf and getLicense functions exist in ABI
-      if (
-        !this.contracts.courseLicense.interface.functions["balanceOf"] ||
-        !this.contracts.courseLicense.interface.functions["getLicense"]
-      ) {
-        throw new Error("Required functions not available in contract ABI");
-      }
-
-      const balance = await this.contracts.courseLicense.balanceOf(userAddress);
+      // Dapatkan semua courseId yang tersedia
+      const totalCourses = await this.contracts.courseFactory.getTotalCourses();
       const licenses = [];
 
-      for (let i = 0; i < Number(balance); i++) {
-        try {
-          const tokenId = await this.contracts.courseLicense.tokenOfOwnerByIndex(userAddress, i);
-          const license = await this.contracts.courseLicense.getLicense(tokenId);
-
+      for (let i = 1; i <= Number(totalCourses); i++) {
+        const balance = await this.contracts.courseLicense.balanceOf(userAddress, i);
+        if (balance > 0) {
+          // Perbaiki di sini: getLicense butuh 2 parameter
+          const license = await this.contracts.courseLicense.getLicense(userAddress, i);
           licenses.push({
-            tokenId: tokenId.toString(),
-            courseId: license.courseId.toString(),
-            owner: license.owner,
-            duration: Number(license.duration),
-            startTime: new Date(Number(license.startTime) * 1000),
-            endTime: new Date(Number(license.endTime) * 1000),
-            isActive: license.isActive,
+            courseId: i,
+            ...license,
           });
-        } catch (error) {
-          console.warn(`Failed to fetch license ${i}:`, error);
         }
       }
 
