@@ -1,19 +1,55 @@
 import { useState, useEffect, useCallback } from "react";
-import { useProvider, useAccount } from "wagmi";
+import { usePublicClient, useWalletClient, useAccount } from "wagmi";
+import { ethers } from "ethers";
 import SmartContractService from "../services/SmartContractService";
-import { err } from "react-native-svg";
 
-// Hooks for managing smart contract service initializartion
+// Helper function to convert Viem client to ethers provider
+function publicClientToProvider(publicClient) {
+  const { chain, transport } = publicClient;
+  const network = {
+    chainId: chain.id,
+    name: chain.name,
+    ensAddress: chain.contracts?.ensRegistry?.address,
+  };
+
+  if (transport.type === "fallback") {
+    return new ethers.providers.FallbackProvider(
+      transport.transports.map(
+        ({ value }) => new ethers.providers.JsonRpcProvider(value?.url, network)
+      )
+    );
+  }
+
+  return new ethers.providers.JsonRpcProvider(transport.url, network);
+}
+
+// Helper function to convert Viem wallet client to ethers signer
+function walletClientToSigner(walletClient) {
+  const { account, chain, transport } = walletClient;
+  const network = {
+    chainId: chain.id,
+    name: chain.name,
+    ensAddress: chain.contracts?.ensRegistry?.address,
+  };
+
+  const provider = new ethers.providers.Web3Provider(transport, network);
+  return provider.getSigner(account.address);
+}
+
+// Hooks for managing smart contract service initialization
 export const useSmartContract = () => {
-  isConnected = useAccount().isConnected;
-  const provider = useProvider();
+  const { isConnected } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const initializeService = async () => {
-      if (isConnected && provider) {
+      if (isConnected && publicClient && walletClient) {
         try {
+          // Convert Viem client to ethers provider
+          const provider = publicClientToProvider(publicClient);
           await SmartContractService.initialize(provider);
           setIsInitialized(true);
           setError(null);
@@ -27,7 +63,8 @@ export const useSmartContract = () => {
       }
     };
     initializeService();
-  }, [isConnected, provider]);
+  }, [isConnected, publicClient, walletClient]);
+
   return { isInitialized, error };
 };
 
@@ -107,6 +144,7 @@ export const useUserCourses = () => {
           );
         }
       }
+      setEnrolledCourses(coursesWithProgress);
     } catch (err) {
       console.error("Error fetching user courses:", err);
       setError(err.message);
