@@ -35,6 +35,28 @@ export const IPFSUploader = ({
 }) => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  // Fungsi untuk menentukan MIME type dari ekstensi file
+  const getMimeTypeFromExtension = (fileName) => {
+    if (!fileName) return null;
+
+    const extension = fileName.toLowerCase().split(".").pop();
+    const mimeTypes = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
+      pdf: "application/pdf",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      txt: "text/plain",
+      json: "application/json",
+    };
+
+    return mimeTypes[extension] || null;
+  };
+
   const handleFileSelection = async () => {
     if (disabled || uploading) return;
 
@@ -42,50 +64,85 @@ export const IPFSUploader = ({
       let file = null;
 
       if (accept === "images") {
-        // Request media library permissions
-        const { status } =
-          await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert(
-            "Permission Required",
-            "Please grant media library access to upload images."
-          );
-          return;
-        }
-
         // Use ImagePicker for images
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
-          aspect: [4, 3],
+          aspect: [16, 10],
           quality: 0.8,
         });
 
-        if (!result.canceled && result.assets && result.assets[0]) {
+        if (!result.canceled && result.assets[0]) {
           const asset = result.assets[0];
+
+          // PERBAIKAN: Deteksi MIME type yang lebih robust
+          let mimeType = asset.type;
+
+          // Jika asset.type tidak ada atau hanya "image", deteksi dari nama file
+          if (!mimeType || mimeType === "image") {
+            const fileName = asset.fileName || asset.uri.split("/").pop();
+            const extension = fileName.toLowerCase().split(".").pop();
+
+            switch (extension) {
+              case "png":
+                mimeType = "image/png";
+                break;
+              case "jpg":
+              case "jpeg":
+                mimeType = "image/jpeg";
+                break;
+              case "gif":
+                mimeType = "image/gif";
+                break;
+              case "webp":
+                mimeType = "image/webp";
+                break;
+              default:
+                mimeType = "image/jpeg"; // fallback
+            }
+          }
+
           file = {
             uri: asset.uri,
-            type: asset.type || "image/jpeg",
-            name: asset.fileName || "image.jpg",
-            size: asset.fileSize,
+            type: mimeType, // Pastikan MIME type yang benar
+            name:
+              asset.fileName || `image_${Date.now()}.${mimeType.split("/")[1]}`,
+            size: asset.fileSize || 0,
           };
+
+          console.log("Selected image file:", file); // Debug log
           uploadFile(file);
         }
       } else {
         // Use DocumentPicker for all files or documents
-        const result = await DocumentPicker.getDocumentAsync({
-          type: accept === "documents" ? "application/*" : "*/*",
+        const pickerOptions = {
+          type:
+            accept === "documents"
+              ? [
+                  "application/pdf",
+                  "application/msword",
+                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ]
+              : "*/*",
           copyToCacheDirectory: true,
-        });
+        };
 
-        if (!result.canceled && result.assets && result.assets[0]) {
+        const result = await DocumentPicker.getDocumentAsync(pickerOptions);
+
+        if (!result.canceled && result.assets[0]) {
           const asset = result.assets[0];
+
+          // Pastikan MIME type terdeteksi dengan benar
+          let mimeType = asset.mimeType || getMimeTypeFromExtension(asset.name);
+
           file = {
             uri: asset.uri,
-            type: asset.mimeType,
+            type: mimeType,
             name: asset.name,
-            size: asset.size,
+            size: asset.size || 0,
           };
+
+          console.log("Selected document file:", file); // Debug log
           uploadFile(file);
         }
       }
@@ -100,11 +157,72 @@ export const IPFSUploader = ({
 
   const uploadFile = async (file) => {
     try {
-      // Validate file
-      pinataService.validateFile(file, {
-        maxSize: maxSizeBytes,
-        allowedTypes: getAllowedTypes(accept),
-      });
+      console.log("Starting upload with file:", file);
+
+      // DEBUG: Tambahkan debug file structure
+      pinataService.debugFileStructure(file);
+
+      // Custom validation yang lebih toleran
+      if (!file) {
+        throw new Error("File tidak boleh kosong");
+      }
+
+      // Cek apakah file memiliki struktur yang valid
+      if (!file.uri && !file._data && !file.name) {
+        throw new Error("File tidak memiliki struktur yang valid");
+      }
+
+      const fileSize = file.size || file.fileSize || 0;
+      if (fileSize > maxSizeBytes) {
+        throw new Error(
+          `Ukuran file terlalu besar. Maksimal: ${pinataService.formatFileSize(
+            maxSizeBytes
+          )}`
+        );
+      }
+
+      // PERBAIKAN: Validasi tipe file yang lebih robust
+      const allowedTypes = getAllowedTypes(accept);
+      if (allowedTypes.length > 0) {
+        let fileType = file.type;
+
+        // Handle kasus dimana file.type = "image" (tidak spesifik)
+        if (fileType === "image") {
+          const fileName = file.name || "";
+          const extension = fileName.toLowerCase().split(".").pop();
+
+          // Map ekstensi ke MIME type yang benar
+          const extensionMimeMap = {
+            png: "image/png",
+            jpg: "image/jpeg",
+            jpeg: "image/jpeg",
+            gif: "image/gif",
+            webp: "image/webp",
+          };
+
+          fileType = extensionMimeMap[extension] || "image/jpeg";
+          file.type = fileType; // Update file object
+          console.log(`Corrected file type from "image" to "${fileType}"`);
+        }
+
+        if (fileType && !allowedTypes.includes(fileType)) {
+          // Coba deteksi ulang berdasarkan ekstensi file
+          const fileName = file.name || "";
+          const detectedType = pinataService.detectMimeType(fileName);
+
+          if (!detectedType || !allowedTypes.includes(detectedType)) {
+            throw new Error(
+              `Tipe file tidak diizinkan.\n` +
+                `File type: "${fileType}"\n` +
+                `Detected: "${detectedType}"\n` +
+                `Diizinkan: ${allowedTypes.join(", ")}`
+            );
+          }
+
+          // Update file type jika berhasil dideteksi
+          file.type = detectedType;
+        }
+      }
 
       setUploading(true);
       setProgress(0);
@@ -124,11 +242,15 @@ export const IPFSUploader = ({
         });
       }, 200);
 
-      // Convert file to File object for upload
-      const fileBlob = await fetch(file.uri).then((r) => r.blob());
-      const fileObject = new File([fileBlob], file.name, { type: file.type });
+      console.log("Final file object for upload:", {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        uri: file.uri,
+        hasData: !!file._data,
+      });
 
-      const result = await pinataService.uploadFile(fileObject, {
+      const result = await pinataService.uploadFile(file, {
         name: file.name,
         network,
         groupId,
@@ -136,6 +258,7 @@ export const IPFSUploader = ({
         metadata: {
           ...metadata,
           originalSize: file.size,
+          mimeType: file.type,
           uploadDate: new Date().toISOString(),
         },
       });
@@ -161,6 +284,7 @@ export const IPFSUploader = ({
     }
   };
 
+  // Helper function untuk mendapatkan allowed types
   const getAllowedTypes = (accept) => {
     switch (accept) {
       case "images":
@@ -170,7 +294,9 @@ export const IPFSUploader = ({
           "application/pdf",
           "application/msword",
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "text/plain",
         ];
+      case "all":
       default:
         return []; // Allow all types
     }

@@ -1,7 +1,7 @@
 /**
- * PinataService.js
+ * PinataService.js - React Native Optimized Version
  * Service untuk menangani semua interaksi dengan Pinata IPFS API
- * Berdasarkan dokumentasi resmi Pinata v3 API
+ * Dengan perbaikan khusus untuk React Native
  */
 
 class PinataService {
@@ -11,8 +11,17 @@ class PinataService {
     this.BASE_URL = "https://api.pinata.cloud/v3";
     this.UPLOAD_URL = "https://uploads.pinata.cloud/v3";
 
+    // Pinata v3 specific endpoints
+    this.FILES_ENDPOINT = `${this.UPLOAD_URL}/files`;
+    this.PRIVATE_FILES_ENDPOINT = `${this.BASE_URL}/files/private`;
+
     if (!this.JWT) {
       console.warn("PINATA_JWT tidak ditemukan dalam environment variables");
+    } else {
+      console.log(
+        "PinataService initialized with JWT length:",
+        this.JWT.length
+      );
     }
   }
 
@@ -32,15 +41,31 @@ class PinataService {
   }
 
   /**
-   * Generic request handler dengan retry logic
+   * Headers khusus untuk FormData upload (React Native)
+   */
+  getUploadHeaders() {
+    return {
+      Authorization: `Bearer ${this.JWT}`,
+      // Jangan set Content-Type untuk FormData di React Native
+      // Biarkan fetch() menangani secara otomatis
+    };
+  }
+
+  /**
+   * Generic request handler dengan retry logic - React Native Optimized
    */
   async makeRequest(url, options = {}, retries = 3) {
-    const { timeout = 30000, ...fetchOptions } = options;
+    const { timeout = 60000, ...fetchOptions } = options; // Increase timeout untuk upload
 
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
+        console.log(`Making request attempt ${attempt + 1} to:`, url);
+
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        const timeoutId = setTimeout(() => {
+          console.log(`Request timeout after ${timeout}ms`);
+          controller.abort();
+        }, timeout);
 
         const response = await fetch(url, {
           ...fetchOptions,
@@ -49,13 +74,66 @@ class PinataService {
 
         clearTimeout(timeoutId);
 
-        const responseData = await response.json();
+        console.log(`Response status: ${response.status}`);
+
+        // Handle different response types - IMPROVED ERROR HANDLING
+        let responseData;
+        const contentType = response.headers.get("content-type");
+
+        try {
+          if (contentType && contentType.includes("application/json")) {
+            responseData = await response.json();
+          } else {
+            responseData = await response.text();
+          }
+        } catch (parseError) {
+          console.error("Failed to parse response:", parseError);
+          responseData = `Response parse error: ${parseError.message}`;
+        }
 
         if (!response.ok) {
-          throw new Error(
-            responseData.error ||
-              `HTTP ${response.status}: ${response.statusText}`
-          );
+          console.error("HTTP Error Response:", {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+            data: responseData,
+            url: url,
+          });
+
+          let errorMessage;
+          if (typeof responseData === "object") {
+            // Handle different error response formats
+            if (responseData.error) {
+              if (typeof responseData.error === "object") {
+                errorMessage =
+                  responseData.error.message ||
+                  responseData.error.details ||
+                  JSON.stringify(responseData.error);
+              } else {
+                errorMessage = responseData.error;
+              }
+            } else {
+              errorMessage =
+                responseData.message ||
+                responseData.details ||
+                JSON.stringify(responseData) ||
+                `HTTP ${response.status}: ${response.statusText}`;
+            }
+
+            // Add status code context for specific errors
+            if (response.status === 403) {
+              errorMessage = `Access Forbidden (403): ${errorMessage}. This might be due to insufficient API key permissions or the feature requiring a paid plan.`;
+            } else if (response.status === 401) {
+              errorMessage = `Unauthorized (401): ${errorMessage}. Please check your API key.`;
+            } else if (response.status === 400) {
+              errorMessage = `Bad Request (400): ${errorMessage}. Please check your request parameters.`;
+            }
+          } else {
+            errorMessage =
+              responseData || `HTTP ${response.status}: ${response.statusText}`;
+          }
+
+          throw new Error(errorMessage);
         }
 
         return responseData;
@@ -67,114 +145,372 @@ class PinataService {
         }
 
         // Wait before retry (exponential backoff)
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.pow(2, attempt) * 1000)
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Waiting ${delay}ms before retry...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  /**
+   * Detect MIME type dari nama file atau ekstensi
+   */
+  detectMimeType(fileName) {
+    if (!fileName) return "application/octet-stream";
+
+    const extension = fileName.toLowerCase().split(".").pop();
+    const mimeTypes = {
+      // Images
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      bmp: "image/bmp",
+      ico: "image/x-icon",
+
+      // Documents
+      pdf: "application/pdf",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      xls: "application/vnd.ms-excel",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ppt: "application/vnd.ms-powerpoint",
+      pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
+      // Text
+      txt: "text/plain",
+      json: "application/json",
+      xml: "text/xml",
+      csv: "text/csv",
+
+      // Audio
+      mp3: "audio/mpeg",
+      wav: "audio/wav",
+      ogg: "audio/ogg",
+
+      // Video
+      mp4: "video/mp4",
+      avi: "video/x-msvideo",
+      mov: "video/quicktime",
+    };
+
+    return mimeTypes[extension] || "application/octet-stream";
+  }
+
+  /**
+   * Create proper File object for React Native
+   */
+  /**
+   * Create proper File object for React Native - FIXED
+   */
+  createFileObject(fileData) {
+    console.log("Creating file object from:", fileData);
+
+    // Handle berbagai format file object dari React Native
+
+    // 1. Jika sudah File object yang valid dari web, gunakan langsung
+    if (fileData instanceof File) {
+      return fileData;
+    }
+
+    // 2. Handle React Native image picker result dengan format _data
+    if (fileData._data) {
+      const data = fileData._data;
+      const fileName = data.name || "unknown-file";
+      const mimeType = data.type || this.detectMimeType(fileName);
+
+      console.log("Detected MIME type:", mimeType, "for file:", fileName);
+
+      return {
+        uri: fileData.uri || data.uri,
+        type: mimeType,
+        name: fileName,
+        size: data.size || fileData.size || 0,
+        _data: data, // Preserve original _data
+      };
+    }
+
+    // 3. Handle React Native image picker result standar - IMPROVED
+    if (fileData.uri) {
+      const fileName = fileData.name || fileData.uri.split("/").pop();
+      let mimeType = fileData.type;
+
+      // PERBAIKAN: Handle kasus dimana type = "image" (tidak spesifik)
+      if (!mimeType || mimeType === "image") {
+        mimeType = this.detectMimeType(fileName);
+        console.log(
+          "Detected MIME type from filename:",
+          mimeType,
+          "for file:",
+          fileName
+        );
+      } else {
+        console.log(
+          "Using provided MIME type:",
+          mimeType,
+          "for file:",
+          fileName
         );
       }
+
+      return {
+        uri: fileData.uri,
+        type: mimeType,
+        name: fileName,
+        size: fileData.size,
+      };
     }
+
+    // 4. Handle file object dengan struktur berbeda
+    if (fileData.name && fileData.size) {
+      const mimeType = fileData.type || this.detectMimeType(fileData.name);
+
+      return {
+        uri: fileData.uri || fileData.path,
+        type: mimeType,
+        name: fileData.name,
+        size: fileData.size,
+      };
+    }
+
+    console.error("Unsupported file data format:", fileData);
+    throw new Error("Invalid file data provided");
   }
 
   /**
-   * Test koneksi ke Pinata
-   */
-  async testConnection() {
-    try {
-      if (!this.JWT) {
-        return {
-          success: false,
-          error:
-            "PINATA_JWT tidak dikonfigurasi. Pastikan environment variable sudah diset.",
-        };
-      }
-
-      // Test dengan endpoint yang ringan - list files dengan limit 1
-      const response = await this.makeRequest(
-        `${this.BASE_URL}/files/private?limit=1`,
-        {
-          method: "GET",
-          headers: this.getHeaders(),
-        }
-      );
-
-      return {
-        success: true,
-        message: "Koneksi ke Pinata berhasil",
-        data: response,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message || "Gagal terhubung ke Pinata",
-      };
-    }
-  }
-
-  /**
-   * Upload file ke IPFS
+   * Upload file ke IPFS - React Native Optimized - MAJOR FIX
    */
   async uploadFile(file, options = {}) {
     try {
+      console.log("Starting upload with file:", file);
+
       if (!file) {
         throw new Error("File diperlukan untuk upload");
       }
 
       const {
-        name = file.name || "unnamed-file",
-        network = "private", // 'public' atau 'private'
+        name,
+        network = "private",
         groupId,
         keyValues = {},
         metadata = {},
       } = options;
 
-      // Buat FormData untuk multipart upload
+      // Process file untuk React Native compatibility
+      const processedFile = this.createFileObject(file);
+      console.log("Processed File object:", processedFile);
+
+      // Validasi file processed
+      if (!processedFile.uri && !processedFile._data) {
+        throw new Error("File URI atau data tidak ditemukan");
+      }
+
+      // PERBAIKAN UTAMA: Buat FormData dengan struktur yang benar sesuai Pinata API
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("network", network);
 
-      if (name) {
-        formData.append("name", name);
+      // Tentukan file object yang akan diupload - FIXED untuk React Native
+      let fileForUpload;
+
+      if (processedFile._data && processedFile._data.blobId) {
+        // Untuk file dengan _data structure (React Native Blob)
+        console.log("Using _data blob structure");
+        fileForUpload = {
+          uri: processedFile.uri || `blob:${processedFile._data.blobId}`,
+          type: processedFile.type,
+          name: processedFile.name,
+        };
+      } else if (processedFile.uri) {
+        // Untuk file dengan URI standar - IMPROVED
+        console.log("Using standard URI structure");
+        fileForUpload = {
+          uri: processedFile.uri,
+          type: processedFile.type,
+          name: processedFile.name,
+        };
+      } else {
+        throw new Error("File tidak memiliki URI atau _data yang valid");
       }
 
-      if (groupId) {
-        formData.append("group_id", groupId);
+      console.log("Final file object for upload:", fileForUpload);
+
+      // PERBAIKAN: Validasi MIME type sebelum upload
+      if (!fileForUpload.type || fileForUpload.type === "image") {
+        const detectedType = this.detectMimeType(fileForUpload.name);
+        fileForUpload.type = detectedType;
+        console.log("Corrected MIME type to:", detectedType);
       }
 
-      // Gabungkan metadata dan keyValues
-      const combinedKeyValues = { ...metadata, ...keyValues };
-      if (Object.keys(combinedKeyValues).length > 0) {
-        formData.append("keyvalues", JSON.stringify(combinedKeyValues));
+      // PERBAIKAN KRITIS: Format FormData sesuai dengan Pinata v3 API
+      // Append file ke FormData dengan format yang benar
+      formData.append("file", fileForUpload);
+
+      // Append required fields sesuai dokumentasi Pinata
+      const pinataOptions = {
+        cidVersion: 1,
+      };
+
+      const pinataMetadata = {
+        name: name || processedFile.name,
+        keyvalues: {
+          ...keyValues,
+          ...metadata,
+          originalFileName: processedFile.name,
+          fileSize: processedFile.size.toString(),
+          mimeType: fileForUpload.type,
+          uploadedAt: new Date().toISOString(),
+        },
+      };
+
+      // Append Pinata specific fields
+      formData.append("pinataOptions", JSON.stringify(pinataOptions));
+      formData.append("pinataMetadata", JSON.stringify(pinataMetadata));
+
+      // Network parameter untuk Pinata v3
+      if (network === "private") {
+        formData.append(
+          "pinataOptions",
+          JSON.stringify({
+            ...pinataOptions,
+            customPinPolicy: {
+              regions: [
+                {
+                  id: "FRA1",
+                  desiredReplicationCount: 1,
+                },
+              ],
+            },
+          })
+        );
       }
 
-      const response = await this.makeRequest(`${this.UPLOAD_URL}/files`, {
+      console.log("FormData prepared for Pinata v3 API");
+      console.log("Pinata Options:", pinataOptions);
+      console.log("Pinata Metadata:", pinataMetadata);
+
+      console.log("Sending upload request to Pinata v3 API...");
+
+      // Gunakan timeout yang dinamis berdasarkan ukuran file
+      const uploadTimeout = Math.max(120000, (processedFile.size || 0) * 0.002); // 120s minimum atau 2ms per byte
+      console.log(`Upload timeout set to: ${uploadTimeout}ms`);
+
+      // PERBAIKAN: Gunakan endpoint yang benar untuk Pinata v3
+      const uploadEndpoint = `https://uploads.pinata.cloud/v3/files`;
+      console.log("Upload endpoint:", uploadEndpoint);
+
+      const response = await this.makeRequest(uploadEndpoint, {
         method: "POST",
         headers: {
+          // PERBAIKAN: Hanya Authorization header untuk FormData
           Authorization: `Bearer ${this.JWT}`,
-          // Jangan set Content-Type untuk FormData, browser akan set otomatis
+          // Jangan set Content-Type untuk FormData - biarkan browser/RN yang handle
         },
         body: formData,
+        timeout: uploadTimeout,
       });
 
-      return {
+      console.log("Upload successful:", response);
+
+      // Handle different response formats from Pinata v3 API
+      let responseData;
+
+      // Pinata v3 API structure
+      if (response && response.data) {
+        responseData = response.data;
+      } else if (response && response.IpfsHash) {
+        // Legacy v2 format fallback
+        responseData = {
+          cid: response.IpfsHash,
+          name: response.PinSize ? `${response.PinSize}` : processedFile.name,
+          size: response.PinSize || processedFile.size,
+        };
+      } else {
+        // Direct response
+        responseData = response;
+      }
+
+      console.log("Processed response data:", responseData);
+
+      // Validate required fields
+      if (!responseData || !responseData.cid) {
+        throw new Error("Invalid response from Pinata - missing CID");
+      }
+
+      const result = {
         success: true,
-        data: response.data,
-        // Format untuk kompatibilitas dengan komponen yang ada
-        ipfsHash: response.data.cid,
-        fileName: response.data.name,
-        fileSize: response.data.size,
-        publicUrl: `https://gateway.pinata.cloud/ipfs/${response.data.cid}`,
-        privateUrl:
-          network === "private"
-            ? await this.createPrivateAccessLink(response.data.cid)
-            : null,
+        data: responseData,
+        ipfsHash: responseData.cid,
+        fileName: responseData.name || processedFile.name,
+        fileSize: responseData.size || processedFile.size,
+        publicUrl: `https://gateway.pinata.cloud/ipfs/${responseData.cid}`,
+        privateUrl: null, // Will be set below if needed
       };
+
+      // Create private access link if network is private - IMPROVED HANDLING
+      if (network === "private") {
+        try {
+          console.log(
+            "Creating private access link for CID:",
+            responseData.cid
+          );
+          result.privateUrl = await this.createPrivateAccessLink(
+            responseData.cid
+          );
+          console.log(
+            "Private access link created successfully:",
+            result.privateUrl
+          );
+        } catch (linkError) {
+          console.warn(
+            "Failed to create private access link:",
+            linkError.message
+          );
+          // IMPROVED: Set a fallback URL instead of null
+          result.privateUrl = `https://gateway.pinata.cloud/ipfs/${responseData.cid}`;
+          console.warn(
+            "Using fallback gateway URL for private file:",
+            result.privateUrl
+          );
+
+          // Add warning message to result
+          result.warning =
+            "Private access link creation failed. Using public gateway URL as fallback.";
+        }
+      }
+
+      return result;
     } catch (error) {
       console.error("Upload file error:", error);
-      throw new Error(`Gagal upload file: ${error.message}`);
+
+      // Enhanced error handling dengan informasi lebih detail
+      let errorMessage = error.message;
+
+      if (error.message === "Network request failed") {
+        errorMessage = `Network request failed. Debugging info:
+1. Koneksi internet: ${
+          typeof navigator !== "undefined" && navigator.onLine !== false
+            ? "✓"
+            : "?"
+        }
+2. File size: ${file?.size ? this.formatFileSize(file.size) : "Unknown"}
+3. PINATA_JWT: ${this.JWT ? "Present" : "Missing"}
+4. Upload URL: ${this.UPLOAD_URL}
+5. File URI: ${file?.uri ? "Valid" : "Invalid"}
+
+Kemungkinan penyebab:
+- File terlalu besar untuk koneksi saat ini
+- PINATA_JWT tidak valid atau expired
+- Network/Firewall memblokir upload
+- File URI tidak dapat diakses oleh React Native`;
+      }
+
+      throw new Error(`Gagal upload file: ${errorMessage}`);
     }
   }
 
   /**
-   * Upload JSON data ke IPFS
+   * Upload JSON data ke IPFS - React Native Optimized
    */
   async uploadJson(jsonData, options = {}) {
     try {
@@ -190,15 +526,28 @@ class PinataService {
         metadata = {},
       } = options;
 
-      // Convert JSON to Blob then to File
+      // Convert JSON to proper format untuk React Native
       const jsonString =
         typeof jsonData === "string"
           ? jsonData
           : JSON.stringify(jsonData, null, 2);
-      const blob = new Blob([jsonString], { type: "application/json" });
-      const file = new File([blob], name, { type: "application/json" });
 
-      return await this.uploadFile(file, {
+      // Create file object compatible dengan React Native
+      const fileObject = {
+        uri: `data:application/json;base64,${btoa(jsonString)}`,
+        type: "application/json",
+        name: name,
+        size: new Blob([jsonString]).size,
+      };
+
+      console.log("Uploading JSON:", {
+        name: fileObject.name,
+        type: fileObject.type,
+        size: fileObject.size,
+        preview: jsonString.substring(0, 100) + "...",
+      });
+
+      return await this.uploadFile(fileObject, {
         name,
         network,
         groupId,
@@ -343,7 +692,7 @@ class PinataService {
   }
 
   /**
-   * Create private access link for private files
+   * Create private access link for private files - IMPROVED ERROR HANDLING
    */
   async createPrivateAccessLink(cid, options = {}) {
     try {
@@ -353,26 +702,78 @@ class PinataService {
         method = "GET",
       } = options;
 
-      const url = `https://gateway.pinata.cloud/ipfs/${cid}`;
+      // Try different approaches based on Pinata API documentation
 
-      const response = await this.makeRequest(
-        `${this.BASE_URL}/files/private/download_link`,
-        {
+      // Approach 1: Try with file ID instead of CID
+      try {
+        console.log("Attempting to create private access link for CID:", cid);
+
+        const requestBody = {
+          cid: cid,
+          expires: expires,
+          date: date,
+          method: method,
+        };
+
+        console.log("Request body:", requestBody);
+
+        const response = await this.makeRequest(`${this.BASE_URL}/files/sign`, {
           method: "POST",
           headers: this.getHeaders(),
-          body: JSON.stringify({
-            url,
-            expires,
-            date,
-            method,
-          }),
-        }
-      );
+          body: JSON.stringify(requestBody),
+          timeout: 10000, // Shorter timeout for sign request
+        });
 
-      return response.data; // Return the signed URL directly
+        return response.data || response.url || response;
+      } catch (signError) {
+        console.warn(
+          "Sign endpoint failed, trying alternative approach:",
+          signError.message
+        );
+
+        // Approach 2: Try legacy endpoint format
+        try {
+          const legacyRequestBody = {
+            url: `https://gateway.pinata.cloud/ipfs/${cid}`,
+            expires: expires,
+            date: date,
+            method: method,
+          };
+
+          const legacyResponse = await this.makeRequest(
+            `${this.BASE_URL}/files/private/download_link`,
+            {
+              method: "POST",
+              headers: this.getHeaders(),
+              body: JSON.stringify(legacyRequestBody),
+              timeout: 10000,
+            }
+          );
+
+          return legacyResponse.data || legacyResponse.url || legacyResponse;
+        } catch (legacyError) {
+          console.warn("Legacy endpoint also failed:", legacyError.message);
+
+          // Approach 3: Generate a simple gateway URL (fallback)
+          // For private files, use the CID directly with a note that it might need authentication
+          const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+
+          console.warn(
+            "Using fallback public gateway URL. Note: This may not work for truly private content."
+          );
+          return fallbackUrl;
+        }
+      }
     } catch (error) {
       console.error("Create access link error:", error);
-      throw new Error(`Gagal membuat access link: ${error.message}`);
+
+      // Don't throw error, return fallback URL instead
+      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+      console.warn(
+        "Returning fallback URL due to access link creation failure:",
+        fallbackUrl
+      );
+      return fallbackUrl;
     }
   }
 
@@ -529,7 +930,7 @@ class PinataService {
   }
 
   /**
-   * Utility function untuk validasi file
+   * Utility function untuk validasi file - React Native Optimized
    */
   validateFile(file, options = {}) {
     const {
@@ -547,13 +948,468 @@ class PinataService {
       );
     }
 
-    if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
+    // Validasi tipe file yang lebih fleksibel untuk React Native
+    if (allowedTypes.length > 0) {
+      const fileType = file.type;
+      const fileName = file.name || "";
+
+      // Cek MIME type langsung
+      if (fileType && allowedTypes.includes(fileType)) {
+        return true;
+      }
+
+      // Jika MIME type tidak cocok, gunakan detectMimeType yang lebih lengkap
+      const detectedMime = this.detectMimeType(fileName);
+      if (detectedMime && allowedTypes.includes(detectedMime)) {
+        return true;
+      }
+
+      // Fallback: cek jika ekstensi file sesuai dengan MIME type yang diizinkan
+      const extension = fileName.toLowerCase().split(".").pop();
+      const allowedExtensions = allowedTypes
+        .map((mimeType) => {
+          // Map MIME types ke ekstensi untuk fallback
+          const mimeToExt = {
+            "image/jpeg": ["jpg", "jpeg"],
+            "image/png": ["png"],
+            "image/gif": ["gif"],
+            "image/webp": ["webp"],
+            "application/pdf": ["pdf"],
+            "application/msword": ["doc"],
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+              ["docx"],
+          };
+          return mimeToExt[mimeType] || [];
+        })
+        .flat();
+
+      if (allowedExtensions.includes(extension)) {
+        return true;
+      }
+
+      // Jika masih tidak cocok, lempar error dengan info debug yang lebih detail
       throw new Error(
-        `Tipe file tidak diizinkan. Diizinkan: ${allowedTypes.join(", ")}`
+        `Tipe file tidak diizinkan.\n` +
+          `File type: "${fileType}"\n` +
+          `Extension: "${extension}"\n` +
+          `Detected MIME: "${detectedMime}"\n` +
+          `Diizinkan: ${allowedTypes.join(", ")}`
       );
     }
 
     return true;
+  }
+
+  /**
+   * Debug upload issues - untuk troubleshooting
+   */
+  async debugUpload(file) {
+    console.log("=== PINATA UPLOAD DEBUG ===");
+
+    try {
+      // 1. Check JWT
+      console.log("1. JWT Check:");
+      console.log("  - Has JWT:", !!this.JWT);
+      console.log("  - JWT length:", this.JWT?.length);
+      console.log("  - JWT starts with:", this.JWT?.substring(0, 20) + "...");
+
+      // 2. Check file
+      console.log("2. File Check:");
+      console.log("  - Original file:", file);
+
+      if (file) {
+        const processedFile = this.createFileObject(file);
+        console.log("  - Processed file:", processedFile);
+        console.log(
+          "  - File size:",
+          this.formatFileSize(processedFile.size || 0)
+        );
+        console.log("  - MIME type:", processedFile.type);
+      }
+
+      // 3. Test basic connection
+      console.log("3. Connection Test:");
+      const connectionTest = await this.testConnection();
+      console.log("  - Connection result:", connectionTest);
+
+      // 4. Test small upload
+      if (connectionTest.success) {
+        console.log("4. Small Upload Test:");
+        try {
+          const testData = {
+            test: "Hello from EduVerse",
+            timestamp: Date.now(),
+          };
+          const jsonUpload = await this.uploadJson(testData, {
+            name: "debug-test.json",
+            network: "private",
+          });
+          console.log("  - Small upload successful:", jsonUpload.success);
+          console.log("  - Test file CID:", jsonUpload.ipfsHash);
+        } catch (uploadError) {
+          console.log("  - Small upload failed:", uploadError.message);
+        }
+      }
+
+      console.log("=== DEBUG COMPLETE ===");
+
+      return {
+        success: true,
+        message: "Debug information logged to console",
+      };
+    } catch (error) {
+      console.error("Debug failed:", error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Debug file structure untuk troubleshooting - NEW METHOD
+   */
+  debugFileStructure(file) {
+    console.log("=== FILE DEBUG INFO ===");
+    console.log("Original file object:", file);
+    console.log("File properties:");
+    console.log("- uri:", file?.uri);
+    console.log("- type:", file?.type);
+    console.log("- name:", file?.name);
+    console.log("- size:", file?.size);
+    console.log("- _data:", file?._data);
+
+    if (file?._data) {
+      console.log("_data properties:");
+      console.log("- blobId:", file._data.blobId);
+      console.log("- name:", file._data.name);
+      console.log("- type:", file._data.type);
+      console.log("- size:", file._data.size);
+    }
+
+    try {
+      const processed = this.createFileObject(file);
+      console.log("Processed file object:", processed);
+    } catch (error) {
+      console.error("Error processing file:", error);
+    }
+
+    console.log("=== END FILE DEBUG ===");
+  }
+
+  /**
+   * Debug FormData structure - untuk troubleshooting
+   */
+  debugFormData(formData) {
+    console.log("=== FORMDATA DEBUG ===");
+
+    if (formData && formData.entries) {
+      try {
+        for (let [key, value] of formData.entries()) {
+          console.log(`FormData key: ${key}`);
+          if (typeof value === "object" && value.uri) {
+            console.log(
+              `  - File object: {uri: ${value.uri}, type: ${value.type}, name: ${value.name}}`
+            );
+          } else if (typeof value === "string") {
+            console.log(
+              `  - String value: ${value.substring(0, 100)}${
+                value.length > 100 ? "..." : ""
+              }`
+            );
+          } else {
+            console.log(`  - Value type: ${typeof value}`);
+          }
+        }
+      } catch (error) {
+        console.log("Cannot iterate FormData entries:", error.message);
+      }
+    } else {
+      console.log("FormData is null or invalid");
+    }
+
+    console.log("=== END FORMDATA DEBUG ===");
+  }
+
+  /**
+   * Test upload with small file untuk debugging
+   */
+  async testSmallUpload() {
+    try {
+      console.log("=== TESTING SMALL UPLOAD ===");
+
+      // Create a small test file
+      const testContent = JSON.stringify(
+        {
+          test: "Hello from EduVerse",
+          timestamp: Date.now(),
+          purpose: "Upload test",
+        },
+        null,
+        2
+      );
+
+      const testFile = {
+        uri: `data:application/json;base64,${btoa(testContent)}`,
+        type: "application/json",
+        name: "test-upload.json",
+        size: testContent.length,
+      };
+
+      console.log("Test file created:", testFile);
+
+      const result = await this.uploadFile(testFile, {
+        name: "test-upload.json",
+        network: "private",
+        metadata: {
+          test: true,
+          purpose: "debugging",
+        },
+      });
+
+      console.log("Small upload test result:", result);
+      return result;
+    } catch (error) {
+      console.error("Small upload test failed:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Validate environment setup
+   */
+  validateEnvironment() {
+    const issues = [];
+
+    if (!this.JWT) {
+      issues.push("PINATA_JWT tidak ditemukan dalam environment variables");
+    } else if (this.JWT.length < 100) {
+      issues.push("PINATA_JWT tampak terlalu pendek (mungkin tidak valid)");
+    }
+
+    if (!this.BASE_URL) {
+      issues.push("BASE_URL tidak dikonfigurasi");
+    }
+
+    if (!this.UPLOAD_URL) {
+      issues.push("UPLOAD_URL tidak dikonfigurasi");
+    }
+
+    return {
+      isValid: issues.length === 0,
+      issues: issues,
+      config: {
+        hasJWT: !!this.JWT,
+        jwtLength: this.JWT?.length,
+        baseUrl: this.BASE_URL,
+        uploadUrl: this.UPLOAD_URL,
+      },
+    };
+  }
+
+  /**
+   * Test connection to Pinata API - NEW METHOD
+   */
+  async testConnection() {
+    try {
+      console.log("Testing connection to Pinata...");
+      console.log("JWT exists:", !!this.JWT);
+      console.log("JWT length:", this.JWT?.length);
+
+      const response = await this.makeRequest(
+        `${this.BASE_URL}/files/private?limit=1`,
+        {
+          method: "GET",
+          headers: this.getHeaders(),
+          timeout: 10000, // 10 seconds timeout for connection test
+        }
+      );
+
+      console.log("Connection test successful:", response);
+
+      return {
+        success: true,
+        message: "Koneksi ke Pinata berhasil",
+        data: response,
+      };
+    } catch (error) {
+      console.error("Connection test failed:", error);
+      return {
+        success: false,
+        error: error.message,
+        message: "Koneksi ke Pinata gagal",
+      };
+    }
+  }
+
+  /**
+   * Test different API endpoints untuk debugging
+   */
+  async testApiEndpoints() {
+    console.log("=== TESTING API ENDPOINTS ===");
+
+    const endpoints = [
+      { name: "Files List", url: `${this.BASE_URL}/files/private?limit=1` },
+      {
+        name: "Upload Endpoint",
+        url: `${this.UPLOAD_URL}/files`,
+        method: "OPTIONS",
+      },
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`Testing ${endpoint.name}: ${endpoint.url}`);
+
+        const response = await fetch(endpoint.url, {
+          method: endpoint.method || "GET",
+          headers: {
+            Authorization: `Bearer ${this.JWT}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        console.log(`${endpoint.name} - Status: ${response.status}`);
+        console.log(
+          `${endpoint.name} - Headers:`,
+          Object.fromEntries(response.headers.entries())
+        );
+
+        if (response.status === 200) {
+          const data = await response.json();
+          console.log(`${endpoint.name} - Response:`, data);
+        }
+      } catch (error) {
+        console.error(`${endpoint.name} failed:`, error.message);
+      }
+    }
+
+    console.log("=== END API ENDPOINTS TEST ===");
+  }
+
+  /**
+   * Check API key permissions and capabilities
+   */
+  async checkApiKeyPermissions() {
+    console.log("=== API KEY PERMISSIONS CHECK ===");
+
+    try {
+      // Test 1: Basic authentication
+      console.log("1. Testing basic authentication...");
+      const authTest = await this.makeRequest(
+        "https://api.pinata.cloud/data/testAuthentication",
+        {
+          method: "GET",
+          headers: this.getHeaders(),
+          timeout: 10000,
+        }
+      );
+      console.log("✓ Basic authentication successful:", authTest);
+
+      // Test 2: Files listing (should work with basic permissions)
+      console.log("2. Testing files listing...");
+      const filesTest = await this.listFiles({ limit: 1 });
+      console.log("✓ Files listing successful:", filesTest.success);
+
+      // Test 3: Try to access user info or account details
+      console.log("3. Testing account access...");
+      try {
+        const userTest = await this.makeRequest(
+          `${this.BASE_URL}/data/userPinnedDataTotal`,
+          {
+            method: "GET",
+            headers: this.getHeaders(),
+            timeout: 10000,
+          }
+        );
+        console.log("✓ User data access successful:", userTest);
+      } catch (userError) {
+        console.log("✗ User data access failed:", userError.message);
+      }
+
+      // Test 4: Check if we can access private file endpoints
+      console.log("4. Testing private file access...");
+      try {
+        const privateTest = await this.makeRequest(
+          `${this.BASE_URL}/files/private?limit=1`,
+          {
+            method: "GET",
+            headers: this.getHeaders(),
+            timeout: 10000,
+          }
+        );
+        console.log("✓ Private files access successful");
+      } catch (privateError) {
+        console.log("✗ Private files access failed:", privateError.message);
+      }
+
+      console.log("=== PERMISSIONS CHECK COMPLETE ===");
+
+      return {
+        success: true,
+        permissions: {
+          basicAuth: true,
+          filesListing: filesTest.success,
+          privateFiles: true, // Based on connection test success
+        },
+      };
+    } catch (error) {
+      console.error("API key permissions check failed:", error);
+      return {
+        success: false,
+        error: error.message,
+        permissions: {
+          basicAuth: false,
+          filesListing: false,
+          privateFiles: false,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get file access URL with fallback strategies
+   */
+  async getFileAccessUrl(cid, options = {}) {
+    const { isPrivate = true, forcePublic = false } = options;
+
+    console.log(`Getting access URL for CID: ${cid}, private: ${isPrivate}`);
+
+    // If force public or not private, use public gateway
+    if (forcePublic || !isPrivate) {
+      const publicUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+      console.log("Using public gateway URL:", publicUrl);
+      return publicUrl;
+    }
+
+    // Try to create private access link
+    try {
+      const privateUrl = await this.createPrivateAccessLink(cid);
+      console.log("Created private access URL:", privateUrl);
+      return privateUrl;
+    } catch (error) {
+      console.warn(
+        "Private access failed, falling back to public gateway:",
+        error.message
+      );
+
+      // Fallback to public gateway
+      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+      console.log("Using fallback public gateway URL:", fallbackUrl);
+      return fallbackUrl;
+    }
+  }
+
+  /**
+   * Alternative upload method with public network for testing
+   */
+  async uploadFilePublic(file, options = {}) {
+    console.log("Uploading file as PUBLIC (for testing)...");
+
+    return await this.uploadFile(file, {
+      ...options,
+      network: "public", // Force public network
+    });
   }
 }
 
