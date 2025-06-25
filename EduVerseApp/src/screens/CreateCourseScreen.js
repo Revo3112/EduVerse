@@ -21,6 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { pinataService } from "../services/PinataService";
 import { useBlockchain } from "../hooks/useBlockchain";
+import AddSectionModal from "../components/AddSectionModal";
 
 export default function CreateCourseScreen({ navigation }) {
   const { address, isConnected } = useAccount();
@@ -40,11 +41,6 @@ export default function CreateCourseScreen({ navigation }) {
 
   const [sections, setSections] = useState([]);
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
-  const [newSection, setNewSection] = useState({
-    title: "",
-    videoFile: null, // Store selected video file for later upload (dummy for now)
-    duration: "", // Duration in minutes (will be converted to seconds for smart contract)
-  });
 
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
@@ -114,137 +110,43 @@ export default function CreateCourseScreen({ navigation }) {
     }
   };
 
-  // Function to handle video file selection for sections (dummy for now)
-  const handleVideoSelect = useCallback(async () => {
-    try {
-      Alert.alert(
-        "Video Upload",
-        "Video upload will be integrated with Livepeer in the next update. For now, you can create sections without video.",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              // Dummy video file for now
-              setNewSection((prev) => ({
-                ...prev,
-                videoFile: {
-                  name: "dummy_video.mp4",
-                  type: "video/mp4",
-                  uri: "dummy://placeholder",
-                },
-              }));
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      console.error("Error selecting video:", error);
-    }
-  }, []);
-
-  // Professional debounced input handler
-  const [inputDebounceTimer, setInputDebounceTimer] = useState(null);
-
-  const handleSectionInputChange = useCallback(
-    (field, value) => {
-      // Clear previous timer
-      if (inputDebounceTimer) {
-        clearTimeout(inputDebounceTimer);
+  // Function to handle adding a new section from the modal
+  const handleAddSection = useCallback(
+    (sectionData) => {
+      // Check for maximum sections limit
+      if (sections.length >= 50) {
+        Alert.alert("Error", "Maximum 50 sections allowed per course");
+        return;
       }
 
-      // Set new timer for debounced update
-      const timer = setTimeout(() => {
-        setNewSection((prevSection) => {
-          if (prevSection[field] === value) {
-            return prevSection; // Return same reference to prevent re-render
-          }
-          return {
-            ...prevSection,
-            [field]: value,
-          };
-        });
-      }, 50); // Very short debounce to smooth out rapid typing
-
-      setInputDebounceTimer(timer);
-
-      // Immediate update for UI responsiveness
-      setNewSection((prevSection) => ({
-        ...prevSection,
-        [field]: value,
-      }));
-    },
-    [inputDebounceTimer]
-  ); // Empty dependency array since we don't use any external variables
-
-  const addSection = useCallback(() => {
-    // Validation with early returns
-    const trimmedTitle = newSection.title.trim();
-    const trimmedDuration = newSection.duration.trim();
-
-    if (!trimmedTitle) {
-      Alert.alert("Error", "Please enter section title");
-      return;
-    }
-    if (trimmedTitle.length < 3) {
-      Alert.alert("Error", "Section title must be at least 3 characters long");
-      return;
-    }
-    if (trimmedTitle.length > 100) {
-      Alert.alert("Error", "Section title cannot exceed 100 characters");
-      return;
-    }
-    if (!trimmedDuration) {
-      Alert.alert("Error", "Please enter section duration");
-      return;
-    }
-
-    const durationValue = parseInt(trimmedDuration);
-    if (isNaN(durationValue) || durationValue <= 0) {
-      Alert.alert("Error", "Please enter a valid duration greater than 0");
-      return;
-    }
-    if (durationValue > 600) {
-      Alert.alert(
-        "Error",
-        "Section duration cannot exceed 600 minutes (10 hours)"
+      // Check for duplicate section titles
+      const duplicateTitle = sections.find(
+        (section) =>
+          section.title.toLowerCase().trim() === sectionData.title.toLowerCase()
       );
-      return;
-    }
+      if (duplicateTitle) {
+        Alert.alert("Error", "A section with this title already exists");
+        return;
+      }
 
-    // Check for maximum sections limit
-    if (sections.length >= 50) {
-      Alert.alert("Error", "Maximum 50 sections allowed per course");
-      return;
-    }
+      // Create new section object
+      const newSectionObj = {
+        id: Date.now() + Math.random(), // More unique ID to prevent collisions
+        title: sectionData.title,
+        videoFile: null, // Will be populated with actual video file in future updates
+        contentURI: sectionData.contentURI, // Placeholder for now
+        duration: sectionData.duration, // Duration in minutes
+        orderId: sections.length,
+        createdAt: new Date().toISOString(),
+      };
 
-    // Check for duplicate section titles
-    const duplicateTitle = sections.find(
-      (section) =>
-        section.title.toLowerCase().trim() === trimmedTitle.toLowerCase()
-    );
-    if (duplicateTitle) {
-      Alert.alert("Error", "A section with this title already exists");
-      return;
-    }
+      // Add section to list
+      setSections((prevSections) => [...prevSections, newSectionObj]);
 
-    // Create new section object
-    const newSectionObj = {
-      id: Date.now() + Math.random(), // More unique ID to prevent collisions
-      title: trimmedTitle,
-      videoFile: newSection.videoFile, // Store video file for later upload
-      contentURI: "", // Will be populated after video upload (dummy for now)
-      duration: durationValue,
-      orderId: sections.length,
-      createdAt: new Date().toISOString(),
-    };
-
-    // Batch updates to prevent race conditions
-    setSections((prevSections) => [...prevSections, newSectionObj]);
-    setNewSection({ title: "", videoFile: null, duration: "" });
-
-    // Close modal immediately without setTimeout to prevent issues
-    setShowAddSectionModal(false);
-  }, [newSection.title, newSection.duration, newSection.videoFile, sections]);
+      console.log("Section added successfully:", newSectionObj);
+    },
+    [sections]
+  );
 
   const removeSection = useCallback((sectionId) => {
     Alert.alert(
@@ -811,140 +713,6 @@ export default function CreateCourseScreen({ navigation }) {
     </View>
   ));
 
-  // Memoized AddSectionModal with stable props
-  const AddSectionModal = useMemo(() => {
-    return React.memo(() => (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showAddSectionModal}
-        onRequestClose={() => setShowAddSectionModal(false)}
-        statusBarTranslucent={false}
-        hardwareAccelerated={true}
-        presentationStyle="overFullScreen"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Course Section</Text>
-              <TouchableOpacity
-                onPress={() => setShowAddSectionModal(false)}
-                style={styles.closeButton}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              style={styles.modalBody}
-              keyboardShouldPersistTaps="always"
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled={true}
-              bounces={false}
-              overScrollMode="never"
-              keyboardDismissMode="none"
-            >
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Section Title *</Text>
-                <TextInput
-                  style={[styles.input, styles.modalInput]}
-                  placeholder="Enter section title"
-                  value={newSection.title}
-                  onChangeText={(text) =>
-                    handleSectionInputChange("title", text)
-                  }
-                  placeholderTextColor="#999"
-                  autoCorrect={false}
-                  autoCapitalize="words"
-                  blurOnSubmit={false}
-                  returnKeyType="next"
-                  maxLength={100}
-                  selectTextOnFocus={false}
-                  underlineColorAndroid="transparent"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Video Content</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.videoUploadArea,
-                    newSection.videoFile && styles.videoSelected,
-                  ]}
-                  onPress={handleVideoSelect}
-                  activeOpacity={0.7}
-                  disabled={false}
-                >
-                  {newSection.videoFile ? (
-                    <View style={styles.videoPreview}>
-                      <Ionicons name="videocam" size={32} color="#9747FF" />
-                      <Text style={styles.videoSelectedText}>
-                        {newSection.videoFile.name}
-                      </Text>
-                      <Text style={styles.videoChangeText}>Tap to change</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.videoPlaceholder}>
-                      <Ionicons
-                        name="videocam-outline"
-                        size={32}
-                        color="#9e9e9e"
-                      />
-                      <Text style={styles.videoPlaceholderText}>
-                        Add video content
-                      </Text>
-                      <Text style={styles.videoRequirements}>
-                        Video upload via Livepeer coming soon
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Duration (minutes) *</Text>
-                <TextInput
-                  style={[styles.input, styles.modalInput]}
-                  placeholder="e.g., 30"
-                  value={newSection.duration}
-                  onChangeText={(text) =>
-                    handleSectionInputChange("duration", text)
-                  }
-                  keyboardType="numeric"
-                  placeholderTextColor="#999"
-                  autoCorrect={false}
-                  blurOnSubmit={false}
-                  returnKeyType="done"
-                  maxLength={3}
-                  selectTextOnFocus={false}
-                  underlineColorAndroid="transparent"
-                />
-              </View>
-
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={addSection}
-                activeOpacity={0.8}
-                hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-              >
-                <Ionicons name="add" size={20} color="white" />
-                <Text style={styles.addButtonText}>Add Section</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    ));
-  }, [
-    showAddSectionModal,
-    newSection,
-    handleSectionInputChange,
-    addSection,
-    handleVideoSelect,
-  ]);
-
   // Effect untuk fetch maximum price dari smart contract
   useEffect(() => {
     const fetchMaxPrice = async () => {
@@ -1302,8 +1070,13 @@ export default function CreateCourseScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* Render Modal with Stable Component */}
-      <AddSectionModal />
+      {/* Modern Add Section Modal */}
+      <AddSectionModal
+        visible={showAddSectionModal}
+        onClose={() => setShowAddSectionModal(false)}
+        onSave={handleAddSection}
+        isEditing={false}
+      />
     </SafeAreaView>
   );
 }
@@ -1397,14 +1170,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e0e0e0",
     color: "#333",
-  },
-  modalInput: {
-    backgroundColor: "#fafafa",
-    borderColor: "#d0d0d0",
-    borderWidth: 1.5,
-    fontSize: 16,
-    color: "#333",
-    fontWeight: "400",
   },
   inputError: {
     borderColor: "#ff4444",
@@ -1639,55 +1404,6 @@ const styles = StyleSheet.create({
     color: "#9e9e9e",
     textAlign: "center",
   },
-  // Video upload styles
-  videoUploadArea: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderStyle: "dashed",
-    minHeight: 100,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  videoSelected: {
-    borderColor: "#9747FF",
-    borderStyle: "solid",
-    backgroundColor: "#f3f0ff",
-  },
-  videoPreview: {
-    alignItems: "center",
-    padding: 16,
-  },
-  videoSelectedText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    marginTop: 8,
-    textAlign: "center",
-  },
-  videoChangeText: {
-    fontSize: 12,
-    color: "#9747FF",
-    marginTop: 4,
-  },
-  videoPlaceholder: {
-    alignItems: "center",
-    padding: 16,
-  },
-  videoPlaceholderText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#666",
-    marginTop: 8,
-  },
-  videoRequirements: {
-    fontSize: 12,
-    color: "#9e9e9e",
-    marginTop: 4,
-    textAlign: "center",
-  },
   // Section content styles
   sectionContentPlaceholder: {
     fontSize: 12,
@@ -1728,75 +1444,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#ef6c00",
     lineHeight: 20,
-  },
-  // Modal styles - Professional frontend approach for stability
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "white",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: "90%",
-    minHeight: "65%",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    backgroundColor: "white",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    zIndex: 10,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#333",
-    letterSpacing: 0.5,
-  },
-  closeButton: {
-    padding: 10,
-    borderRadius: 25,
-    backgroundColor: "#f8f8f8",
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-  },
-  modalBody: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 40,
-    flex: 1,
-    backgroundColor: "white",
-  },
-  addButton: {
-    backgroundColor: "#9747FF",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  addButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
   },
   helpText: {
     fontSize: 12,
