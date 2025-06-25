@@ -15,6 +15,10 @@ class PinataService {
     this.FILES_ENDPOINT = `${this.UPLOAD_URL}/files`;
     this.PRIVATE_FILES_ENDPOINT = `${this.BASE_URL}/files/private`;
 
+    // Initialize free plan detection flag
+    this._freePlanDetected = false;
+    this._planDetectionInProgress = false;
+
     if (!this.JWT) {
       console.warn("PINATA_JWT tidak ditemukan dalam environment variables");
     } else {
@@ -22,6 +26,53 @@ class PinataService {
         "PinataService initialized with JWT length:",
         this.JWT.length
       );
+
+      // Auto-detect plan type on initialization to avoid 403 errors later
+      this._initializePlanDetection();
+    }
+  }
+
+  /**
+   * Initialize plan detection to avoid 403 errors during uploads
+   */
+  async _initializePlanDetection() {
+    if (this._planDetectionInProgress || this._freePlanDetected) {
+      return;
+    }
+
+    this._planDetectionInProgress = true;
+
+    try {
+      // Silent test to detect plan type without showing errors
+      await this.makeRequest(
+        `${this.BASE_URL}/files/sign`,
+        {
+          method: "POST",
+          headers: this.getHeaders(),
+          body: JSON.stringify({
+            cid: "test-plan-detection",
+            expires: 3600,
+            date: Math.floor(Date.now() / 1000),
+            method: "GET",
+          }),
+          timeout: 5000,
+        },
+        1 // Single attempt
+      );
+
+      console.log("Plan detection: Private access links available (paid plan)");
+    } catch (error) {
+      if (
+        error.message.includes("403") ||
+        error.message.includes("Forbidden")
+      ) {
+        this._freePlanDetected = true;
+        console.log(
+          "Plan detection: Free plan detected - private access links not available"
+        );
+      }
+    } finally {
+      this._planDetectionInProgress = false;
     }
   }
 
@@ -59,11 +110,21 @@ class PinataService {
 
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
-        console.log(`Making request attempt ${attempt + 1} to:`, url);
+        // Only log request details if it's not a silent plan detection call
+        const isSilentPlanDetection =
+          url.includes("/files/sign") &&
+          (fetchOptions.body?.includes("test-plan-detection") ||
+            fetchOptions.body?.includes("test-permissions-check"));
+
+        if (!isSilentPlanDetection) {
+          console.log(`Making request attempt ${attempt + 1} to:`, url);
+        }
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
-          console.log(`Request timeout after ${timeout}ms`);
+          if (!isSilentPlanDetection) {
+            console.log(`Request timeout after ${timeout}ms`);
+          }
           controller.abort();
         }, timeout);
 
@@ -74,7 +135,9 @@ class PinataService {
 
         clearTimeout(timeoutId);
 
-        console.log(`Response status: ${response.status}`);
+        if (!isSilentPlanDetection) {
+          console.log(`Response status: ${response.status}`);
+        }
 
         // Handle different response types - IMPROVED ERROR HANDLING
         let responseData;
@@ -92,13 +155,16 @@ class PinataService {
         }
 
         if (!response.ok) {
-          console.error("HTTP Error Response:", {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries()),
-            data: responseData,
-            url: url,
-          });
+          // Don't log 403 errors for silent plan detection calls
+          if (!isSilentPlanDetection || response.status !== 403) {
+            console.error("HTTP Error Response:", {
+              status: response.status,
+              statusText: response.statusText,
+              headers: Object.fromEntries(response.headers.entries()),
+              data: responseData,
+              url: url,
+            });
+          }
 
           let errorMessage;
           if (typeof responseData === "object") {
@@ -138,7 +204,17 @@ class PinataService {
 
         return responseData;
       } catch (error) {
-        console.error(`Request attempt ${attempt + 1} failed:`, error.message);
+        const isSilentPlanDetection =
+          url.includes("/files/sign") &&
+          (fetchOptions.body?.includes("test-plan-detection") ||
+            fetchOptions.body?.includes("test-permissions-check"));
+
+        if (!isSilentPlanDetection || !error.message.includes("403")) {
+          console.error(
+            `Request attempt ${attempt + 1} failed:`,
+            error.message
+          );
+        }
 
         if (attempt === retries - 1) {
           throw error;
@@ -146,7 +222,9 @@ class PinataService {
 
         // Wait before retry (exponential backoff)
         const delay = Math.pow(2, attempt) * 1000;
-        console.log(`Waiting ${delay}ms before retry...`);
+        if (!isSilentPlanDetection) {
+          console.log(`Waiting ${delay}ms before retry...`);
+        }
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -470,6 +548,12 @@ class PinataService {
             "Creating private access link for CID:",
             responseData.cid
           );
+
+          // Wait for plan detection if still in progress
+          while (this._planDetectionInProgress) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
           result.privateUrl = await this.createPrivateAccessLink(
             responseData.cid
           );
@@ -711,9 +795,16 @@ Kemungkinan penyebab:
    * Create private access link for private files - FREE PLAN OPTIMIZED
    */
   async createPrivateAccessLink(cid, options = {}) {
+    // Wait for plan detection to complete if still in progress
+    while (this._planDetectionInProgress) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     // Check if we've already detected that this is a free plan
     if (this._freePlanDetected) {
-      console.log("Free plan detected, using public gateway URL directly");
+      console.log(
+        "Free plan detected, using public gateway URL directly (no API call needed)"
+      );
       return `https://gateway.pinata.cloud/ipfs/${cid}`;
     }
 
@@ -745,6 +836,7 @@ Kemungkinan penyebab:
         1
       ); // Only 1 attempt, no retries
 
+      console.log("Private access link created successfully");
       return response.data || response.url || response;
     } catch (error) {
       // Check if this is a 403 Forbidden error (free plan limitation)
@@ -752,7 +844,9 @@ Kemungkinan penyebab:
         error.message.includes("403") ||
         error.message.includes("Forbidden")
       ) {
-        console.log("Free plan detected: Private access links not available");
+        console.log(
+          "Free plan detected during request: Private access links not available"
+        );
 
         // Set flag to avoid future attempts
         this._freePlanDetected = true;
@@ -1407,18 +1501,43 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Check API key permissions and capabilities
+   * Check API key permissions and capabilities - IMPROVED
    */
   async checkApiKeyPermissions() {
     console.log("Checking API key permissions...");
 
+    // Wait for plan detection to complete if still in progress
+    while (this._planDetectionInProgress) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    // If we already detected the plan type, return the cached result
+    if (this._freePlanDetected !== null) {
+      const planType = this._freePlanDetected ? "free" : "paid";
+      console.log(`API key permissions: ${planType} plan (cached result)`);
+
+      return {
+        valid: true,
+        planType: planType,
+        features: {
+          upload: true,
+          privateFiles: !this._freePlanDetected,
+          privateAccess: !this._freePlanDetected,
+        },
+      };
+    }
+
+    // If not detected yet, perform the check
     try {
       // Test basic API access
-      const authTest = await this.makeRequest(`${this.BASE_URL}/files`, {
-        method: "GET",
-        headers: this.getHeaders(),
-        timeout: 5000,
-      });
+      const authTest = await this.makeRequest(
+        `${this.BASE_URL}/files/private?limit=1`,
+        {
+          method: "GET",
+          headers: this.getHeaders(),
+          timeout: 5000,
+        }
+      );
 
       console.log("API key is valid - basic access confirmed");
 
@@ -1430,7 +1549,7 @@ Kemungkinan penyebab:
             method: "POST",
             headers: this.getHeaders(),
             body: JSON.stringify({
-              cid: "test",
+              cid: "test-permissions-check",
               expires: 3600,
               date: Math.floor(Date.now() / 1000),
               method: "GET",
@@ -1441,6 +1560,8 @@ Kemungkinan penyebab:
         );
 
         console.log("API key has private access capabilities (paid plan)");
+        this._freePlanDetected = false;
+
         return {
           valid: true,
           planType: "paid",
@@ -1496,6 +1617,22 @@ Kemungkinan penyebab:
         },
       };
     }
+  }
+
+  /**
+   * Get current plan detection status
+   */
+  getPlanStatus() {
+    return {
+      freePlanDetected: this._freePlanDetected,
+      detectionInProgress: this._planDetectionInProgress,
+      planType:
+        this._freePlanDetected === null
+          ? "unknown"
+          : this._freePlanDetected
+          ? "free"
+          : "paid",
+    };
   }
 
   /**
