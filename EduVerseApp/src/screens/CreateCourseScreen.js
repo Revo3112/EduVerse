@@ -1,3 +1,32 @@
+/*
+ * IMPORTANT: Data Flow and Unit Consistency Documentation
+ *
+ * This file handles course creation with proper unit conversions to match the Solidity smart contract:
+ *
+ * === SMART CONTRACT COMPATIBILITY ===
+ * - REMOVED: category, difficulty (not supported by smart contract)
+ * - REQUIRED: title, description, thumbnailURI, pricePerMonth
+ * - SECTIONS: title, contentURI, duration (in seconds)
+ *
+ * === PRICE HANDLING ===
+ * 1. User Input: ETH amount as string (e.g., "0.001")
+ * 2. Validation: Compare against max price in ETH (converted from wei)
+ * 3. Smart Contract: Send ETH string → SmartContractService converts to wei → Blockchain
+ *
+ * Flow: User ETH → String → parseEther() → Wei (BigNumber) → Smart Contract
+ *
+ * === SECTION DURATION HANDLING ===
+ * 1. User Input: Duration in minutes (e.g., 30)
+ * 2. Smart Contract: Send seconds → duration * 60 → Blockchain
+ *
+ * Flow: User Minutes → Multiply by 60 → Seconds → Smart Contract
+ *
+ * === SMART CONTRACT REQUIREMENTS ===
+ * - createCourse(title, description, thumbnailURI, pricePerMonth_in_wei)
+ * - addCourseSection(courseId, title, contentURI, duration_in_seconds)
+ * - getMaxPriceInETH() returns wei amount (not ETH)
+ */
+
 // src/screens/CreateCourseScreen.js - Improved Create Course with IPFS and Smart Contract Integration
 import React, { useState, useEffect } from "react";
 import {
@@ -30,10 +59,7 @@ export default function CreateCourseScreen({ navigation }) {
   const [courseData, setCourseData] = useState({
     title: "",
     description: "",
-    category: "",
     price: "",
-    duration: "",
-    difficulty: "Beginner",
     isPaid: false,
     thumbnailURI: "",
     thumbnailCID: "", // Store IPFS CID separately
@@ -46,7 +72,7 @@ export default function CreateCourseScreen({ navigation }) {
   const [newSection, setNewSection] = useState({
     title: "",
     videoFile: null, // Store selected video file for later upload (dummy for now)
-    duration: "",
+    duration: "", // Duration in minutes (will be converted to seconds for smart contract)
   });
 
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
@@ -381,19 +407,26 @@ export default function CreateCourseScreen({ navigation }) {
               if (courseData.isPaid) {
                 const priceValue = parseFloat(courseData.price);
                 try {
-                  // IMPORTANT: getMaxPriceInETH() already returns a formatted ETH string, not BigNumber/wei
-                  // The SmartContractService.getMaxPriceInETH() method calls ethers.formatEther() internally
-                  const maxPriceInEthString =
-                    await smartContractService.getMaxPriceInETH();
-                  const maxPriceInEth = parseFloat(maxPriceInEthString);
+                  // Get max price in wei from smart contract (getMaxPriceInETH returns wei despite the name)
+                  const maxPriceInWei =
+                    await smartContractService.getMaxPriceInWei();
+                  const maxPriceInEth = parseFloat(
+                    ethers.formatEther(maxPriceInWei)
+                  );
 
                   if (priceValue > maxPriceInEth) {
                     throw new Error(
                       `Price ${priceValue} ETH exceeds current maximum allowed: ${maxPriceInEth.toFixed(
                         6
-                      )} ETH`
+                      )} ETH (equivalent to $2 USD)`
                     );
                   }
+
+                  console.log(
+                    `Price validation passed: ${priceValue} ETH <= ${maxPriceInEth.toFixed(
+                      6
+                    )} ETH`
+                  );
                 } catch (priceCheckError) {
                   console.error("Error checking price limit:", priceCheckError);
                   throw new Error(
@@ -410,14 +443,23 @@ export default function CreateCourseScreen({ navigation }) {
                 title: courseData.title.trim(),
                 description: courseData.description.trim(),
                 thumbnailURI: thumbnailURI,
-                // IMPORTANT: Convert price to string for ethers.parseEther() in SmartContractService
-                // The smart contract expects pricePerMonth in wei, and SmartContractService converts it properly
+                // PRICE FLOW: User enters ETH → Convert to string → SmartContractService converts to wei → Smart contract
+                // The smart contract expects pricePerMonth in wei (uint256)
+                // SmartContractService.createCourse() calls ethers.parseEther() to convert ETH string to wei
                 pricePerMonth: courseData.isPaid
-                  ? courseData.price.toString() // Convert to string for ethers.parseEther()
-                  : "0",
+                  ? courseData.price.toString() // ETH as string (e.g. "0.001")
+                  : "0", // Free course
               };
 
-              console.log("Course creation parameters:", createCourseParams);
+              console.log("Course creation parameters:", {
+                ...createCourseParams,
+                priceInETH: createCourseParams.pricePerMonth,
+                priceInWei: courseData.isPaid
+                  ? ethers
+                      .parseEther(createCourseParams.pricePerMonth)
+                      .toString()
+                  : "0",
+              });
 
               const createCourseResult =
                 await smartContractService.createCourse(createCourseParams);
@@ -461,8 +503,16 @@ export default function CreateCourseScreen({ navigation }) {
                   const sectionParams = {
                     title: section.title.trim(),
                     contentURI: contentURI,
-                    duration: section.duration * 60, // Convert minutes to seconds for smart contract
+                    // DURATION CONVERSION: User enters minutes → Convert to seconds for smart contract
+                    // Smart contract expects duration in seconds (uint256)
+                    duration: section.duration * 60, // Convert minutes to seconds
                   };
+
+                  console.log(`Section ${i + 1} parameters:`, {
+                    ...sectionParams,
+                    durationInMinutes: section.duration,
+                    durationInSeconds: sectionParams.duration,
+                  });
 
                   const sectionResult =
                     await smartContractService.addCourseSection(
@@ -568,10 +618,7 @@ export default function CreateCourseScreen({ navigation }) {
               setCourseData({
                 title: "",
                 description: "",
-                category: "",
                 price: "",
-                duration: "",
-                difficulty: "Beginner",
                 isPaid: false,
                 thumbnailURI: "",
                 thumbnailCID: "",
@@ -724,29 +771,7 @@ export default function CreateCourseScreen({ navigation }) {
     }
   };
 
-  const DifficultySelector = () => (
-    <View style={styles.difficultyContainer}>
-      {["Beginner", "Intermediate", "Advanced"].map((level) => (
-        <TouchableOpacity
-          key={level}
-          style={[
-            styles.difficultyButton,
-            courseData.difficulty === level && styles.selectedDifficulty,
-          ]}
-          onPress={() => handleInputChange("difficulty", level)}
-        >
-          <Text
-            style={[
-              styles.difficultyText,
-              courseData.difficulty === level && styles.selectedDifficultyText,
-            ]}
-          >
-            {level}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+  const DifficultySelector = () => null; // Removed since smart contract doesn't support difficulty
 
   const SectionItem = ({ section, onRemove }) => (
     <View style={styles.sectionItem}>
@@ -868,14 +893,19 @@ export default function CreateCourseScreen({ navigation }) {
     const fetchMaxPrice = async () => {
       if (smartContractService && isInitialized) {
         try {
-          // IMPORTANT: getMaxPriceInETH() already returns a formatted ETH string, not BigNumber/wei
-          // The SmartContractService.getMaxPriceInETH() method calls ethers.formatEther() internally
-          const maxPriceInEthString =
-            await smartContractService.getMaxPriceInETH();
-          if (maxPriceInEthString) {
-            const maxPriceInEth = parseFloat(maxPriceInEthString);
+          // Get max price in wei from smart contract (getMaxPriceInETH actually returns wei)
+          const maxPriceInWei = await smartContractService.getMaxPriceInWei();
+          if (maxPriceInWei) {
+            const maxPriceInEth = parseFloat(ethers.formatEther(maxPriceInWei));
             setCurrentMaxPrice(maxPriceInEth);
-            console.log("Maximum price allowed:", maxPriceInEth, "ETH");
+            console.log(
+              "Maximum price allowed:",
+              maxPriceInEth,
+              "ETH",
+              "(",
+              ethers.formatUnits(maxPriceInWei, "wei"),
+              "wei )"
+            );
           }
         } catch (error) {
           console.error("Error fetching max price:", error);
@@ -899,7 +929,7 @@ export default function CreateCourseScreen({ navigation }) {
         setPriceValidationError(
           `Price cannot exceed ${currentMaxPrice.toFixed(
             6
-          )} ETH ($2 USD equivalent)`
+          )} ETH (equivalent to $2 USD)`
         );
       } else {
         setPriceValidationError("");
@@ -976,16 +1006,6 @@ export default function CreateCourseScreen({ navigation }) {
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Category</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., Web Development, Design, etc."
-                value={courseData.category}
-                onChangeText={(text) => handleInputChange("category", text)}
-                placeholderTextColor="#999"
-              />
-            </View>
-            <View style={styles.inputGroup}>
               <Text style={styles.label}>Thumbnail Image *</Text>
               <TouchableOpacity
                 style={[
@@ -1032,21 +1052,6 @@ export default function CreateCourseScreen({ navigation }) {
                 Select a high-quality image that represents your course. It will
                 be uploaded to IPFS when you create the course.
               </Text>
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Difficulty Level</Text>
-              <DifficultySelector />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Duration (in hours)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., 10"
-                value={courseData.duration}
-                onChangeText={(text) => handleInputChange("duration", text)}
-                keyboardType="numeric"
-                placeholderTextColor="#999"
-              />
             </View>
           </View>
 
@@ -1205,7 +1210,8 @@ export default function CreateCourseScreen({ navigation }) {
               Your course will be deployed as a smart contract on Manta Pacific
               Testnet. The thumbnail image will be uploaded to IPFS and
               referenced in the smart contract. This action requires transaction
-              fees.
+              fees. Note: Category and difficulty fields have been removed to
+              match smart contract requirements.
             </Text>
           </View>
 
@@ -1223,7 +1229,8 @@ export default function CreateCourseScreen({ navigation }) {
                 : "2 USD equivalent"}
               {"\n"}• You need ETH for transaction fees{"\n"}• Video upload via
               Livepeer will be available in next update{"\n"}• Unique section
-              titles within course required
+              titles within course required{"\n"}• Section durations are stored
+              in seconds on blockchain
             </Text>
           </View>
         </View>
@@ -1341,33 +1348,6 @@ const styles = StyleSheet.create({
   textArea: {
     height: 100,
     paddingTop: 12,
-  },
-  difficultyContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  difficultyButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    backgroundColor: "white",
-    marginHorizontal: 4,
-    alignItems: "center",
-  },
-  selectedDifficulty: {
-    backgroundColor: "#9747FF",
-    borderColor: "#9747FF",
-  },
-  difficultyText: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "500",
-  },
-  selectedDifficultyText: {
-    color: "white",
   },
   switchGroup: {
     flexDirection: "row",

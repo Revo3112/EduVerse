@@ -635,6 +635,20 @@ class SmartContractService {
     }
   }
 
+  // Get maximum price in wei (as returned by smart contract)
+  async getMaxPriceInWei() {
+    this.ensureInitialized();
+    try {
+      const maxPriceInWei =
+        await this.contracts.courseFactory.getMaxPriceInETH();
+      return maxPriceInWei; // Returns BigNumber in wei
+    } catch (error) {
+      console.error("Error fetching max price in wei:", error);
+      return ethers.parseEther("0");
+    }
+  }
+
+  // Get maximum price formatted as ETH string (for UI display)
   async getMaxPriceInETH() {
     this.ensureInitialized();
     try {
