@@ -521,3 +521,14 @@ export const useHasActiveLicense = (courseId) => {
     refetch: checkLicense,
   };
 };
+
+// Main useBlockchain hook yang menggabungkan semua fungsionalitas
+export const useBlockchain = () => {
+  const smartContractData = useSmartContract();
+
+  return {
+    smartContractService: smartContractData.smartContractService,
+    isInitialized: smartContractData.isInitialized,
+    error: smartContractData.error,
+  };
+};
