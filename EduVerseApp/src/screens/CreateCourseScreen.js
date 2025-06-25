@@ -1,34 +1,5 @@
-/*
- * IMPORTANT: Data Flow and Unit Consistency Documentation
- *
- * This file handles course creation with proper unit conversions to match the Solidity smart contract:
- *
- * === SMART CONTRACT COMPATIBILITY ===
- * - REMOVED: category, difficulty (not supported by smart contract)
- * - REQUIRED: title, description, thumbnailURI, pricePerMonth
- * - SECTIONS: title, contentURI, duration (in seconds)
- *
- * === PRICE HANDLING ===
- * 1. User Input: ETH amount as string (e.g., "0.001")
- * 2. Validation: Compare against max price in ETH (converted from wei)
- * 3. Smart Contract: Send ETH string → SmartContractService converts to wei → Blockchain
- *
- * Flow: User ETH → String → parseEther() → Wei (BigNumber) → Smart Contract
- *
- * === SECTION DURATION HANDLING ===
- * 1. User Input: Duration in minutes (e.g., 30)
- * 2. Smart Contract: Send seconds → duration * 60 → Blockchain
- *
- * Flow: User Minutes → Multiply by 60 → Seconds → Smart Contract
- *
- * === SMART CONTRACT REQUIREMENTS ===
- * - createCourse(title, description, thumbnailURI, pricePerMonth_in_wei)
- * - addCourseSection(courseId, title, contentURI, duration_in_seconds)
- * - getMaxPriceInETH() returns wei amount (not ETH)
- */
-
 // src/screens/CreateCourseScreen.js - Improved Create Course with IPFS and Smart Contract Integration
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -144,36 +115,47 @@ export default function CreateCourseScreen({ navigation }) {
   };
 
   // Function to handle video file selection for sections (dummy for now)
-  const handleVideoSelect = async () => {
+  const handleVideoSelect = useCallback(async () => {
     try {
       Alert.alert(
         "Video Upload",
         "Video upload will be integrated with Livepeer in the next update. For now, you can create sections without video.",
-        [{ text: "OK" }]
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Dummy video file for now
+              setNewSection((prev) => ({
+                ...prev,
+                videoFile: {
+                  name: "dummy_video.mp4",
+                  type: "video/mp4",
+                  uri: "dummy://placeholder",
+                },
+              }));
+            },
+          },
+        ]
       );
-
-      // Dummy video file for now
-      setNewSection((prev) => ({
-        ...prev,
-        videoFile: {
-          name: "dummy_video.mp4",
-          type: "video/mp4",
-          uri: "dummy://placeholder",
-        },
-      }));
     } catch (error) {
       console.error("Error selecting video:", error);
     }
-  };
+  }, []);
 
-  const handleSectionInputChange = (field, value) => {
-    setNewSection((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
+  const handleSectionInputChange = useCallback((field, value) => {
+    setNewSection((prevSection) => {
+      // Prevent unnecessary updates if value hasn't changed
+      if (prevSection[field] === value) {
+        return prevSection;
+      }
+      return {
+        ...prevSection,
+        [field]: value,
+      };
+    });
+  }, []);
 
-  const addSection = () => {
+  const addSection = useCallback(() => {
     if (!newSection.title.trim()) {
       Alert.alert("Error", "Please enter section title");
       return;
@@ -231,12 +213,13 @@ export default function CreateCourseScreen({ navigation }) {
       createdAt: new Date().toISOString(),
     };
 
-    setSections([...sections, section]);
+    // Update sections and reset form in batch
+    setSections((prevSections) => [...prevSections, section]);
     setNewSection({ title: "", videoFile: null, duration: "" });
     setShowAddSectionModal(false);
-  };
+  }, [newSection, sections]);
 
-  const removeSection = (sectionId) => {
+  const removeSection = useCallback((sectionId) => {
     Alert.alert(
       "Remove Section",
       "Are you sure you want to remove this section?",
@@ -246,12 +229,14 @@ export default function CreateCourseScreen({ navigation }) {
           text: "Remove",
           style: "destructive",
           onPress: () => {
-            setSections(sections.filter((s) => s.id !== sectionId));
+            setSections((prevSections) =>
+              prevSections.filter((s) => s.id !== sectionId)
+            );
           },
         },
       ]
     );
-  };
+  }, []);
 
   const handleCreateCourse = async () => {
     // Enhanced validation dengan race condition prevention
@@ -773,7 +758,7 @@ export default function CreateCourseScreen({ navigation }) {
 
   const DifficultySelector = () => null; // Removed since smart contract doesn't support difficulty
 
-  const SectionItem = ({ section, onRemove }) => (
+  const SectionItem = React.memo(({ section, onRemove }) => (
     <View style={styles.sectionItem}>
       <View style={styles.sectionInfo}>
         <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -792,18 +777,21 @@ export default function CreateCourseScreen({ navigation }) {
       <TouchableOpacity
         style={styles.removeButton}
         onPress={() => onRemove(section.id)}
+        activeOpacity={0.7}
       >
         <Ionicons name="trash-outline" size={20} color="#ff4444" />
       </TouchableOpacity>
     </View>
-  );
+  ));
 
-  const AddSectionModal = () => (
+  const AddSectionModal = React.memo(() => (
     <Modal
       animationType="slide"
       transparent={true}
       visible={showAddSectionModal}
       onRequestClose={() => setShowAddSectionModal(false)}
+      statusBarTranslucent={false}
+      hardwareAccelerated={true}
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
@@ -812,12 +800,18 @@ export default function CreateCourseScreen({ navigation }) {
             <TouchableOpacity
               onPress={() => setShowAddSectionModal(false)}
               style={styles.closeButton}
+              activeOpacity={0.7}
             >
               <Ionicons name="close" size={24} color="#666" />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalBody}>
+          <ScrollView
+            style={styles.modalBody}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
+          >
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Section Title *</Text>
               <TextInput
@@ -826,6 +820,11 @@ export default function CreateCourseScreen({ navigation }) {
                 value={newSection.title}
                 onChangeText={(text) => handleSectionInputChange("title", text)}
                 placeholderTextColor="#999"
+                autoCorrect={false}
+                autoCapitalize="words"
+                blurOnSubmit={false}
+                returnKeyType="next"
+                maxLength={100}
               />
             </View>
 
@@ -837,6 +836,7 @@ export default function CreateCourseScreen({ navigation }) {
                   newSection.videoFile && styles.videoSelected,
                 ]}
                 onPress={handleVideoSelect}
+                activeOpacity={0.7}
               >
                 {newSection.videoFile ? (
                   <View style={styles.videoPreview}>
@@ -875,10 +875,18 @@ export default function CreateCourseScreen({ navigation }) {
                 }
                 keyboardType="numeric"
                 placeholderTextColor="#999"
+                autoCorrect={false}
+                blurOnSubmit={false}
+                returnKeyType="done"
+                maxLength={3}
               />
             </View>
 
-            <TouchableOpacity style={styles.addButton} onPress={addSection}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={addSection}
+              activeOpacity={0.8}
+            >
               <Ionicons name="add" size={20} color="white" />
               <Text style={styles.addButtonText}>Add Section</Text>
             </TouchableOpacity>
@@ -886,7 +894,7 @@ export default function CreateCourseScreen({ navigation }) {
         </View>
       </View>
     </Modal>
-  );
+  ));
 
   // Effect untuk fetch maximum price dari smart contract
   useEffect(() => {
@@ -1654,7 +1662,7 @@ const styles = StyleSheet.create({
     color: "#ef6c00",
     lineHeight: 20,
   },
-  // Modal styles
+  // Modal styles - Updated for better stability
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -1664,15 +1672,20 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "80%",
+    maxHeight: "85%",
+    minHeight: "60%",
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 20,
+    paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
+    backgroundColor: "white",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   modalTitle: {
     fontSize: 18,
@@ -1680,10 +1693,15 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   closeButton: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#f5f5f5",
   },
   modalBody: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    paddingBottom: 30,
+    flex: 1,
   },
   addButton: {
     backgroundColor: "#9747FF",
