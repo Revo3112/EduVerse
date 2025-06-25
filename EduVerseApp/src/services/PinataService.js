@@ -412,12 +412,20 @@ class PinataService {
 
       console.log("Upload successful:", response);
 
-      // Handle different response formats from Pinata v3 API
+      // Handle different response formats from Pinata v3 API - IMPROVED DUPLICATE HANDLING
       let responseData;
+      let isDuplicate = false;
+
+      // Check for duplicate file response
+      if (response && (response.is_duplicate || response.isDuplicate)) {
+        isDuplicate = true;
+        console.log("Duplicate file detected - file already exists on IPFS");
+      }
 
       // Pinata v3 API structure
       if (response && response.data) {
         responseData = response.data;
+        isDuplicate = isDuplicate || response.data.is_duplicate;
       } else if (response && response.IpfsHash) {
         // Legacy v2 format fallback
         responseData = {
@@ -428,9 +436,13 @@ class PinataService {
       } else {
         // Direct response
         responseData = response;
+        isDuplicate = isDuplicate || response.is_duplicate;
       }
 
       console.log("Processed response data:", responseData);
+      if (isDuplicate) {
+        console.log("File was a duplicate - this is normal and not an error");
+      }
 
       // Validate required fields
       if (!responseData || !responseData.cid) {
@@ -439,12 +451,16 @@ class PinataService {
 
       const result = {
         success: true,
+        isDuplicate: isDuplicate,
         data: responseData,
         ipfsHash: responseData.cid,
         fileName: responseData.name || processedFile.name,
         fileSize: responseData.size || processedFile.size,
         publicUrl: `https://gateway.pinata.cloud/ipfs/${responseData.cid}`,
         privateUrl: null, // Will be set below if needed
+        message: isDuplicate
+          ? "File uploaded successfully (duplicate detected - file already exists)"
+          : "File uploaded successfully",
       };
 
       // Create private access link if network is private - IMPROVED HANDLING
@@ -692,9 +708,15 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Create private access link for private files - IMPROVED ERROR HANDLING
+   * Create private access link for private files - FREE PLAN OPTIMIZED
    */
   async createPrivateAccessLink(cid, options = {}) {
+    // Check if we've already detected that this is a free plan
+    if (this._freePlanDetected) {
+      console.log("Free plan detected, using public gateway URL directly");
+      return `https://gateway.pinata.cloud/ipfs/${cid}`;
+    }
+
     try {
       const {
         expires = 3600, // 1 hour default
@@ -702,77 +724,49 @@ Kemungkinan penyebab:
         method = "GET",
       } = options;
 
-      // Try different approaches based on Pinata API documentation
+      console.log("Attempting to create private access link for CID:", cid);
 
-      // Approach 1: Try with file ID instead of CID
-      try {
-        console.log("Attempting to create private access link for CID:", cid);
+      const requestBody = {
+        cid: cid,
+        expires: expires,
+        date: date,
+        method: method,
+      };
 
-        const requestBody = {
-          cid: cid,
-          expires: expires,
-          date: date,
-          method: method,
-        };
-
-        console.log("Request body:", requestBody);
-
-        const response = await this.makeRequest(`${this.BASE_URL}/files/sign`, {
+      // Single attempt without retries for 403 errors
+      const response = await this.makeRequest(
+        `${this.BASE_URL}/files/sign`,
+        {
           method: "POST",
           headers: this.getHeaders(),
           body: JSON.stringify(requestBody),
-          timeout: 10000, // Shorter timeout for sign request
-        });
+          timeout: 10000,
+        },
+        1
+      ); // Only 1 attempt, no retries
 
-        return response.data || response.url || response;
-      } catch (signError) {
-        console.warn(
-          "Sign endpoint failed, trying alternative approach:",
-          signError.message
-        );
-
-        // Approach 2: Try legacy endpoint format
-        try {
-          const legacyRequestBody = {
-            url: `https://gateway.pinata.cloud/ipfs/${cid}`,
-            expires: expires,
-            date: date,
-            method: method,
-          };
-
-          const legacyResponse = await this.makeRequest(
-            `${this.BASE_URL}/files/private/download_link`,
-            {
-              method: "POST",
-              headers: this.getHeaders(),
-              body: JSON.stringify(legacyRequestBody),
-              timeout: 10000,
-            }
-          );
-
-          return legacyResponse.data || legacyResponse.url || legacyResponse;
-        } catch (legacyError) {
-          console.warn("Legacy endpoint also failed:", legacyError.message);
-
-          // Approach 3: Generate a simple gateway URL (fallback)
-          // For private files, use the CID directly with a note that it might need authentication
-          const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-
-          console.warn(
-            "Using fallback public gateway URL. Note: This may not work for truly private content."
-          );
-          return fallbackUrl;
-        }
-      }
+      return response.data || response.url || response;
     } catch (error) {
-      console.error("Create access link error:", error);
+      // Check if this is a 403 Forbidden error (free plan limitation)
+      if (
+        error.message.includes("403") ||
+        error.message.includes("Forbidden")
+      ) {
+        console.log("Free plan detected: Private access links not available");
 
-      // Don't throw error, return fallback URL instead
+        // Set flag to avoid future attempts
+        this._freePlanDetected = true;
+
+        // Return public gateway URL immediately
+        const publicUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+        console.log("Using public gateway URL for free plan:", publicUrl);
+        return publicUrl;
+      }
+
+      // For other errors, also return public URL but log the error
+      console.warn("Private access link creation failed:", error.message);
       const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-      console.warn(
-        "Returning fallback URL due to access link creation failure:",
-        fallbackUrl
-      );
+      console.log("Using fallback public gateway URL:", fallbackUrl);
       return fallbackUrl;
     }
   }
@@ -1410,6 +1404,159 @@ Kemungkinan penyebab:
       ...options,
       network: "public", // Force public network
     });
+  }
+
+  /**
+   * Check API key permissions and capabilities
+   */
+  async checkApiKeyPermissions() {
+    console.log("Checking API key permissions...");
+
+    try {
+      // Test basic API access
+      const authTest = await this.makeRequest(`${this.BASE_URL}/files`, {
+        method: "GET",
+        headers: this.getHeaders(),
+        timeout: 5000,
+      });
+
+      console.log("API key is valid - basic access confirmed");
+
+      // Try to test sign endpoint to detect free plan
+      try {
+        await this.makeRequest(
+          `${this.BASE_URL}/files/sign`,
+          {
+            method: "POST",
+            headers: this.getHeaders(),
+            body: JSON.stringify({
+              cid: "test",
+              expires: 3600,
+              date: Math.floor(Date.now() / 1000),
+              method: "GET",
+            }),
+            timeout: 5000,
+          },
+          1
+        );
+
+        console.log("API key has private access capabilities (paid plan)");
+        return {
+          valid: true,
+          planType: "paid",
+          features: {
+            upload: true,
+            privateFiles: true,
+            privateAccess: true,
+          },
+        };
+      } catch (signError) {
+        if (
+          signError.message.includes("403") ||
+          signError.message.includes("Forbidden")
+        ) {
+          console.log("API key has basic capabilities only (free plan)");
+          this._freePlanDetected = true;
+
+          return {
+            valid: true,
+            planType: "free",
+            features: {
+              upload: true,
+              privateFiles: false,
+              privateAccess: false,
+            },
+          };
+        } else {
+          console.warn(
+            "Unexpected error testing sign endpoint:",
+            signError.message
+          );
+          return {
+            valid: true,
+            planType: "unknown",
+            features: {
+              upload: true,
+              privateFiles: false,
+              privateAccess: false,
+            },
+          };
+        }
+      }
+    } catch (error) {
+      console.error("API key validation failed:", error.message);
+      return {
+        valid: false,
+        planType: "invalid",
+        error: error.message,
+        features: {
+          upload: false,
+          privateFiles: false,
+          privateAccess: false,
+        },
+      };
+    }
+  }
+
+  /**
+   * Format file size for display
+   */
+  formatFileSize(bytes) {
+    if (!bytes || bytes === 0) return "0 B";
+
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  }
+
+  /**
+   * Test upload with a small file (for debugging)
+   */
+  async testUpload() {
+    console.log("Testing upload with small test file...");
+
+    try {
+      // Create a small test file
+      const testData = JSON.stringify(
+        {
+          test: true,
+          timestamp: new Date().toISOString(),
+          message: "This is a test upload from EduVerse app",
+        },
+        null,
+        2
+      );
+
+      const testFile = {
+        uri: `data:application/json;base64,${btoa(testData)}`,
+        type: "application/json",
+        name: `test-upload-${Date.now()}.json`,
+        size: new Blob([testData]).size,
+      };
+
+      console.log("Test file created:", {
+        name: testFile.name,
+        size: this.formatFileSize(testFile.size),
+        type: testFile.type,
+      });
+
+      // Try public upload first
+      const publicResult = await this.uploadFilePublic(testFile, {
+        name: testFile.name,
+        metadata: {
+          purpose: "API test",
+          app: "EduVerse",
+        },
+      });
+
+      console.log("Public upload test successful:", publicResult);
+      return publicResult;
+    } catch (error) {
+      console.error("Test upload failed:", error.message);
+      throw error;
+    }
   }
 }
 

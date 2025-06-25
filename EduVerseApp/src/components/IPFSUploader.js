@@ -254,26 +254,72 @@ export const IPFSUploader = ({
         name: file.name,
         network,
         groupId,
-        keyValues,
+        keyValues: {
+          ...keyValues,
+          fileName: file.name,
+          fileType: file.type,
+          uploadedAt: new Date().toISOString(),
+          source: "EduVerse Mobile App",
+        },
         metadata: {
           ...metadata,
           originalSize: file.size,
           mimeType: file.type,
           uploadDate: new Date().toISOString(),
+          platform: "React Native",
         },
       });
 
       clearInterval(progressInterval);
       setProgress(100);
 
+      console.log("Upload result:", {
+        success: result.success,
+        isDuplicate: result.isDuplicate,
+        cid: result.ipfsHash,
+        message: result.message,
+      });
+
       if (onUploadComplete) {
-        onUploadComplete(result);
+        onUploadComplete({
+          ...result,
+          file: {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+          },
+        });
       }
 
-      Alert.alert("Success", "File berhasil diupload ke IPFS!");
+      // Show success message with duplicate info if applicable
+      const successMessage = result.isDuplicate
+        ? `File berhasil diupload!\n\n⚠️ Catatan: File ini sudah ada di IPFS (duplicate terdeteksi). Menggunakan versi yang sudah ada.`
+        : "File berhasil diupload ke IPFS!";
+
+      Alert.alert("Success", successMessage);
     } catch (error) {
       console.error("Upload error:", error);
-      Alert.alert("Error", error.message || "Gagal upload file");
+
+      // Enhanced error messaging
+      let userMessage = "Gagal upload file";
+
+      if (error.message.includes("Network request failed")) {
+        userMessage =
+          "Koneksi jaringan bermasalah. Periksa internet Anda dan coba lagi.";
+      } else if (
+        error.message.includes("JWT") ||
+        error.message.includes("401")
+      ) {
+        userMessage = "Masalah autentikasi. Silakan hubungi support.";
+      } else if (error.message.includes("terlalu besar")) {
+        userMessage = error.message; // Use the formatted message from our service
+      } else if (error.message.includes("timeout")) {
+        userMessage = "Upload timeout. Coba lagi dengan file yang lebih kecil.";
+      } else {
+        userMessage = error.message || "Terjadi kesalahan saat upload";
+      }
+
+      Alert.alert("Error", userMessage);
 
       if (onUploadError) {
         onUploadError(error);
