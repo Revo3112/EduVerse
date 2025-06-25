@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,13 +8,19 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  Modal,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Video, ResizeMode } from "expo-av";
+import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../constants/Colors";
 import { IPFSUploader, useIPFSJsonUpload } from "../components/IPFSUploader";
 import VideoUploader from "../components/VideoUploader";
 import { pinataService } from "../services/PinataService";
 import { videoService } from "../services/VideoService";
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 /**
  * Demo screen showing Pinata IPFS integration
@@ -30,6 +36,13 @@ export default function IPFSTestScreen({ navigation }) {
     '{"example": "data", "timestamp": "' + new Date().toISOString() + '"}'
   );
   const { uploadJson, uploading: jsonUploading } = useIPFSJsonUpload();
+
+  // Video player states
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
+  const [videoStatus, setVideoStatus] = useState({});
+  const [isVideoLoading, setIsVideoLoading] = useState(false);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     testPinataConnection();
@@ -163,20 +176,84 @@ export default function IPFSTestScreen({ navigation }) {
     Alert.alert("Upload Error", error.message);
   };
 
-  // Test video playback
-  const testVideoPlayback = (url) => {
-    console.log("Testing video playback:", url);
-    Alert.alert(
-      "Video Playback Test",
-      `URL: ${url}\n\nURL akan dibuka di browser untuk testing.`,
-      [
-        { text: "Cancel" },
-        {
-          text: "Open URL",
-          onPress: () => console.log("Opening video URL:", url),
-        },
-      ]
-    );
+  // Test video playback dengan in-app player
+  const testVideoPlayback = (url, fileName = "Unknown Video") => {
+    console.log("Opening video player for:", url);
+    setSelectedVideo({
+      url: url,
+      fileName: fileName,
+    });
+    setShowVideoPlayer(true);
+    setIsVideoLoading(true);
+  };
+
+  // Handle video player events
+  const handleVideoStatusUpdate = (status) => {
+    setVideoStatus(status);
+
+    if (status.isLoaded && isVideoLoading) {
+      setIsVideoLoading(false);
+      console.log("Video loaded successfully:", {
+        duration: status.durationMillis
+          ? `${Math.floor(status.durationMillis / 1000)}s`
+          : "Unknown",
+        isBuffering: status.isBuffering,
+        shouldPlay: status.shouldPlay,
+        uri: selectedVideo?.url,
+      });
+    }
+
+    if (status.error) {
+      console.error("Video playback error:", status.error);
+      setIsVideoLoading(false);
+      Alert.alert(
+        "Playback Error",
+        "Failed to play video. The file might be corrupted or the format is not supported.",
+        [
+          { text: "Close", onPress: closeVideoPlayer },
+          { text: "Retry", onPress: () => setIsVideoLoading(true) },
+        ]
+      );
+    }
+  };
+
+  // Play/Pause video
+  const togglePlayPause = async () => {
+    if (videoRef.current && videoStatus.isLoaded) {
+      try {
+        if (videoStatus.shouldPlay) {
+          await videoRef.current.pauseAsync();
+        } else {
+          await videoRef.current.playAsync();
+        }
+      } catch (error) {
+        console.error("Error toggling play/pause:", error);
+      }
+    }
+  };
+
+  // Close video player
+  const closeVideoPlayer = async () => {
+    if (videoRef.current) {
+      try {
+        await videoRef.current.pauseAsync();
+      } catch (error) {
+        console.log("Error pausing video:", error);
+      }
+    }
+    setShowVideoPlayer(false);
+    setSelectedVideo(null);
+    setVideoStatus({});
+    setIsVideoLoading(false);
+  };
+
+  // Format duration helper
+  const formatDuration = (milliseconds) => {
+    if (!milliseconds) return "Unknown";
+    const seconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
   // Test video service capabilities
@@ -463,15 +540,149 @@ export default function IPFSTestScreen({ navigation }) {
                 </View>
                 <TouchableOpacity
                   style={styles.playButton}
-                  onPress={() => testVideoPlayback(video.publicUrl)}
+                  onPress={() =>
+                    testVideoPlayback(video.publicUrl, video.fileName)
+                  }
                 >
-                  <Text style={styles.playButtonText}>▶️ Test Play</Text>
+                  <Text style={styles.playButtonText}>🎬 Play Video</Text>
                 </TouchableOpacity>
               </View>
             ))}
           </View>
         )}
       </ScrollView>
+
+      {/* Video Player Modal */}
+      <Modal
+        visible={showVideoPlayer}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={closeVideoPlayer}
+      >
+        <SafeAreaView style={styles.videoPlayerContainer}>
+          {/* Video Player Header */}
+          <View style={styles.videoPlayerHeader}>
+            <TouchableOpacity
+              style={styles.closeVideoButton}
+              onPress={closeVideoPlayer}
+            >
+              <Ionicons name="close" size={28} color={Colors.white} />
+            </TouchableOpacity>
+            <Text style={styles.videoPlayerTitle} numberOfLines={1}>
+              {selectedVideo?.fileName || "Video Player"}
+            </Text>
+            <View style={styles.videoPlayerHeaderSpacer} />
+          </View>
+
+          {/* Video Player Content */}
+          <View style={styles.videoPlayerContent}>
+            {selectedVideo && (
+              <>
+                {/* Loading indicator */}
+                {isVideoLoading && (
+                  <View style={styles.videoLoadingContainer}>
+                    <ActivityIndicator size="large" color={Colors.primary} />
+                    <Text style={styles.videoLoadingText}>
+                      Loading video...
+                    </Text>
+                  </View>
+                )}
+
+                {/* Video Component */}
+                <Video
+                  ref={videoRef}
+                  style={styles.videoPlayer}
+                  source={{ uri: selectedVideo.url }}
+                  useNativeControls={true}
+                  resizeMode={ResizeMode.CONTAIN}
+                  shouldPlay={false}
+                  isLooping={false}
+                  onPlaybackStatusUpdate={handleVideoStatusUpdate}
+                  onError={(error) => {
+                    console.error("Video error:", error);
+                    Alert.alert("Error", "Failed to load video");
+                  }}
+                />
+
+                {/* Simple Controls */}
+                {videoStatus.isLoaded && (
+                  <View style={styles.videoControls}>
+                    <TouchableOpacity
+                      style={styles.controlButton}
+                      onPress={togglePlayPause}
+                    >
+                      <Ionicons
+                        name={videoStatus.shouldPlay ? "pause" : "play"}
+                        size={24}
+                        color={Colors.white}
+                      />
+                      <Text style={styles.controlButtonText}>
+                        {videoStatus.shouldPlay ? "Pause" : "Play"}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {videoStatus.isBuffering && (
+                      <View style={styles.bufferingIndicator}>
+                        <ActivityIndicator size="small" color={Colors.white} />
+                        <Text style={styles.bufferingText}>Buffering...</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Video Info */}
+                <View style={styles.videoInfo}>
+                  <Text style={styles.videoInfoTitle}>Video Information</Text>
+
+                  <View style={styles.videoInfoRow}>
+                    <Text style={styles.videoInfoLabel}>File Name:</Text>
+                    <Text style={styles.videoInfoValue} numberOfLines={1}>
+                      {selectedVideo.fileName}
+                    </Text>
+                  </View>
+
+                  <View style={styles.videoInfoRow}>
+                    <Text style={styles.videoInfoLabel}>Source:</Text>
+                    <Text style={styles.videoInfoValue} numberOfLines={1}>
+                      IPFS Gateway
+                    </Text>
+                  </View>
+
+                  {videoStatus.durationMillis && (
+                    <View style={styles.videoInfoRow}>
+                      <Text style={styles.videoInfoLabel}>Duration:</Text>
+                      <Text style={styles.videoInfoValue}>
+                        {formatDuration(videoStatus.durationMillis)}
+                      </Text>
+                    </View>
+                  )}
+
+                  {videoStatus.isLoaded && (
+                    <View style={styles.videoInfoRow}>
+                      <Text style={styles.videoInfoLabel}>Status:</Text>
+                      <Text
+                        style={[
+                          styles.videoInfoValue,
+                          { color: Colors.success },
+                        ]}
+                      >
+                        ✅ Ready to play
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={styles.videoInfoRow}>
+                    <Text style={styles.videoInfoLabel}>URL:</Text>
+                    <Text style={styles.videoInfoUrl} numberOfLines={2}>
+                      {selectedVideo.url}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -716,11 +927,141 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  // Video Player Modal Styles
+  videoPlayerContainer: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  videoPlayerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  closeVideoButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  videoPlayerTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: Colors.white,
+    marginHorizontal: 16,
+    textAlign: "center",
+  },
+  videoPlayerHeaderSpacer: {
+    width: 44, // Same width as close button
+  },
+  videoPlayerContent: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  videoLoadingContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    zIndex: 10,
+  },
+  videoLoadingText: {
+    color: Colors.white,
+    fontSize: 16,
+    marginTop: 12,
+  },
+  videoPlayer: {
+    width: "100%",
+    aspectRatio: 16 / 9, // Maintain 16:9 aspect ratio
+    backgroundColor: "#000000",
+    alignSelf: "center",
+  },
+  videoControls: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+  },
+  controlButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 8,
+    marginHorizontal: 8,
+  },
+  controlButtonText: {
+    color: Colors.white,
+    fontSize: 14,
+    marginLeft: 8,
+    fontWeight: "500",
+  },
+  bufferingIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 16,
+  },
+  bufferingText: {
+    color: Colors.white,
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  videoInfo: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+  },
+  videoInfoTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: Colors.white,
+    marginBottom: 16,
+  },
+  videoInfoRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+    alignItems: "flex-start",
+  },
+  videoInfoLabel: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.7)",
+    width: 80,
+    fontWeight: "500",
+  },
+  videoInfoValue: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  videoInfoUrl: {
+    flex: 1,
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.6)",
+    fontFamily: "monospace",
+  },
 });
+
+// Add some colors if not present
+const ensureColors = () => {
+  if (!Colors.white) Colors.white = "#FFFFFF";
+  if (!Colors.success) Colors.success = "#4CAF50";
+};
+
+// Call ensureColors immediately
+ensureColors();
 
 // Add some colors to the Colors constant if not present
 const defaultColors = {
   success: "#4CAF50",
   error: "#F44336",
   black: "#000000",
+  white: "#FFFFFF",
 };
