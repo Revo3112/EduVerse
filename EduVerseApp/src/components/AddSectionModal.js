@@ -1,4 +1,3 @@
-// src/components/AddSectionModal.js - Modern Bottom Sheet Modal for Adding Course Sections
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -14,6 +13,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../constants/Colors";
@@ -31,6 +31,10 @@ const AddSectionModal = ({
   const slideValue = useRef(new Animated.Value(screenHeight)).current;
   const opacityValue = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
+
+  // Modal height states - Start with higher default
+  const [modalHeight, setModalHeight] = useState(screenHeight * 0.85); // Start at 85% height
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   // Form state - isolated from parent to prevent interference
   const [formData, setFormData] = useState({
@@ -62,6 +66,8 @@ const AddSectionModal = ({
         setVideoFile(null);
       }
       setErrors({});
+      setModalHeight(screenHeight * 0.85); // Reset to 85% height
+      setIsFullScreen(false);
       showModal();
     } else {
       hideModal();
@@ -113,6 +119,30 @@ const AddSectionModal = ({
       setErrors({});
       setVideoFile(null);
     });
+  };
+
+  const expandToFullScreen = () => {
+    setIsFullScreen(true);
+    setModalHeight(screenHeight - 30); // Almost full screen
+
+    Animated.spring(slideValue, {
+      toValue: -30, // Move up slightly
+      useNativeDriver: true,
+      tension: 100,
+      friction: 8,
+    }).start();
+  };
+
+  const collapseToNormal = () => {
+    setIsFullScreen(false);
+    setModalHeight(screenHeight * 0.85);
+
+    Animated.spring(slideValue, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 8,
+    }).start();
   };
 
   const validateForm = () => {
@@ -167,9 +197,9 @@ const AddSectionModal = ({
 
     const sectionData = {
       title: formData.title.trim(),
-      contentURI: formData.contentURI.trim() || "placeholder://video-content", // Smart contract requires contentURI
-      duration: Math.round(parseFloat(formData.duration) * 60), // Convert minutes to seconds for smart contract
-      videoFile: videoFile, // For future file upload handling
+      contentURI: formData.contentURI.trim() || "placeholder://video-content",
+      duration: Math.round(parseFloat(formData.duration) * 60),
+      videoFile: videoFile,
     };
 
     onSave(sectionData);
@@ -177,7 +207,9 @@ const AddSectionModal = ({
   };
 
   const handleBackdropPress = () => {
-    onClose();
+    if (!isFullScreen) {
+      onClose();
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -195,7 +227,7 @@ const AddSectionModal = ({
     }
   };
 
-  // Handle video file selection (placeholder for now)
+  // Handle video file selection
   const handleVideoSelect = () => {
     Alert.alert("Video Upload", "Choose how you want to add video content:", [
       {
@@ -205,7 +237,6 @@ const AddSectionModal = ({
       {
         text: "IPFS/Livepeer URI",
         onPress: () => {
-          // Focus on content URI input
           Alert.alert(
             "Info",
             "Please enter the IPFS or Livepeer URI in the Content URI field below."
@@ -222,7 +253,6 @@ const AddSectionModal = ({
               {
                 text: "OK",
                 onPress: () => {
-                  // Set placeholder video file for UI
                   setVideoFile({
                     name: "video_placeholder.mp4",
                     type: "video/mp4",
@@ -271,6 +301,7 @@ const AddSectionModal = ({
           style={[
             styles.modalContainer,
             {
+              height: modalHeight,
               transform: [{ translateY: slideValue }],
               opacity: opacityValue,
             },
@@ -284,22 +315,50 @@ const AddSectionModal = ({
                 <Text style={styles.headerTitle}>
                   {isEditing ? "Edit Section" : "Add New Section"}
                 </Text>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={onClose}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="close"
-                    size={24}
-                    color={Colors.textSecondary}
-                  />
-                </TouchableOpacity>
+                <View style={styles.headerButtons}>
+                  {/* Expand/Collapse Button */}
+                  <TouchableOpacity
+                    style={styles.expandButton}
+                    onPress={
+                      isFullScreen ? collapseToNormal : expandToFullScreen
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={isFullScreen ? "contract" : "expand"}
+                      size={20}
+                      color={Colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+
+                  {/* Close Button */}
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={onClose}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="close"
+                      size={24}
+                      color={Colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
+
+              {/* Gesture Hint */}
+              <Text style={styles.gestureHint}>
+                Tap expand button to full screen • Tap close to exit
+              </Text>
             </View>
 
-            {/* Form Content */}
-            <View style={styles.formContainer}>
+            {/* Scrollable Form Content */}
+            <ScrollView
+              style={styles.scrollContainer}
+              contentContainerStyle={styles.formContainer}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
               {/* Section Title Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>
@@ -386,6 +445,8 @@ const AddSectionModal = ({
                   autoCorrect={false}
                   autoCapitalize="none"
                   keyboardType="url"
+                  multiline={true}
+                  numberOfLines={2}
                 />
                 {errors.contentURI && (
                   <Text style={styles.errorText}>{errors.contentURI}</Text>
@@ -433,9 +494,12 @@ const AddSectionModal = ({
                   (auto-converted)
                 </Text>
               </View>
-            </View>
 
-            {/* Action Buttons */}
+              {/* Extra spacing for better scrolling */}
+              <View style={{ height: 20 }} />
+            </ScrollView>
+
+            {/* Fixed Action Buttons */}
             <View style={styles.actionButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -476,8 +540,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.black,
   },
   modalContainer: {
-    maxHeight: screenHeight * 0.8,
-    minHeight: screenHeight * 0.4,
+    // Height is now dynamic based on state
   },
   modalContent: {
     backgroundColor: Colors.surface,
@@ -496,7 +559,7 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: 8,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
@@ -506,27 +569,50 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.lightGray,
     borderRadius: 2,
     alignSelf: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   headerContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 8,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "600",
     color: Colors.text,
+    flex: 1,
+  },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  expandButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: Colors.background,
   },
   closeButton: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: Colors.background,
+  },
+  gestureHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+  scrollContainer: {
+    flex: 1,
   },
   formContainer: {
-    flex: 1,
     padding: 20,
+    paddingTop: 10,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   label: {
     fontSize: 16,
@@ -542,10 +628,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: 8,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
     color: Colors.text,
     backgroundColor: Colors.surface,
+    minHeight: 50,
   },
   inputError: {
     borderColor: Colors.error,
@@ -553,20 +640,21 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
     color: Colors.error,
-    marginTop: 4,
+    marginTop: 6,
   },
   helperText: {
     fontSize: 12,
     color: Colors.textMuted,
-    marginTop: 4,
+    marginTop: 6,
+    lineHeight: 16,
   },
   infoBox: {
     flexDirection: "row",
     alignItems: "flex-start",
     backgroundColor: Colors.background,
-    padding: 12,
+    padding: 16,
     borderRadius: 8,
-    marginTop: 10,
+    marginTop: 8,
   },
   infoText: {
     fontSize: 14,
@@ -583,10 +671,10 @@ const styles = StyleSheet.create({
   videoUploadArea: {
     backgroundColor: Colors.background,
     borderRadius: 8,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: Colors.border,
     borderStyle: "dashed",
-    minHeight: 100,
+    minHeight: 120,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
@@ -598,7 +686,7 @@ const styles = StyleSheet.create({
   },
   videoPreview: {
     alignItems: "center",
-    padding: 16,
+    padding: 20,
     position: "relative",
     width: "100%",
   },
@@ -622,7 +710,7 @@ const styles = StyleSheet.create({
   },
   videoPlaceholder: {
     alignItems: "center",
-    padding: 16,
+    padding: 20,
   },
   videoPlaceholderText: {
     fontSize: 14,
@@ -643,10 +731,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     gap: 12,
+    backgroundColor: Colors.surface,
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -659,7 +748,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderRadius: 8,
     backgroundColor: Colors.primary,
     alignItems: "center",
