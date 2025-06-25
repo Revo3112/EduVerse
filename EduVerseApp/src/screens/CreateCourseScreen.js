@@ -261,8 +261,8 @@ export default function CreateCourseScreen({ navigation }) {
         Alert.alert("Error", `Section ${i + 1} must have a valid duration`);
         return;
       }
-      if (section.duration > 600) {
-        // 10 hours max per section
+      if (section.duration > 36000) {
+        // 600 minutes * 60 = 36000 seconds max per section
         Alert.alert(
           "Error",
           `Section ${i + 1} duration cannot exceed 600 minutes (10 hours)`

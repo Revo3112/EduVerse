@@ -54,7 +54,10 @@ const AddSectionModal = ({
         setFormData({
           title: initialData.title || "",
           contentURI: initialData.contentURI || "",
-          duration: initialData.duration?.toString() || "",
+          // Convert duration from seconds back to minutes for display when editing
+          duration: initialData.duration
+            ? Math.round(initialData.duration / 60).toString()
+            : "",
         });
         setVideoFile(initialData.videoFile || null);
       } else {
