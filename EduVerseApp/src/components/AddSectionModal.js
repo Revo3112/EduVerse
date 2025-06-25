@@ -35,10 +35,12 @@ const AddSectionModal = ({
   // Form state - isolated from parent to prevent interference
   const [formData, setFormData] = useState({
     title: "",
-    duration: "", // Duration in minutes
+    contentURI: "", // IPFS/Livepeer URI for video content
+    duration: "", // Duration in minutes (will be converted to seconds)
   });
 
   const [errors, setErrors] = useState({});
+  const [videoFile, setVideoFile] = useState(null);
 
   // Initialize form data when modal opens
   useEffect(() => {
@@ -47,13 +49,17 @@ const AddSectionModal = ({
       if (isEditing && initialData) {
         setFormData({
           title: initialData.title || "",
+          contentURI: initialData.contentURI || "",
           duration: initialData.duration?.toString() || "",
         });
+        setVideoFile(initialData.videoFile || null);
       } else {
         setFormData({
           title: "",
+          contentURI: "",
           duration: "",
         });
+        setVideoFile(null);
       }
       setErrors({});
       showModal();
@@ -103,14 +109,16 @@ const AddSectionModal = ({
       }),
     ]).start(() => {
       // Clean up after animation
-      setFormData({ title: "", duration: "" });
+      setFormData({ title: "", contentURI: "", duration: "" });
       setErrors({});
+      setVideoFile(null);
     });
   };
 
   const validateForm = () => {
     const newErrors = {};
 
+    // Validate title
     if (!formData.title.trim()) {
       newErrors.title = "Section title is required";
     } else if (formData.title.trim().length < 3) {
@@ -119,6 +127,7 @@ const AddSectionModal = ({
       newErrors.title = "Title must be less than 100 characters";
     }
 
+    // Validate duration
     if (!formData.duration.trim()) {
       newErrors.duration = "Duration is required";
     } else {
@@ -130,8 +139,25 @@ const AddSectionModal = ({
       }
     }
 
+    // Validate content URI (optional for now, but provide guidance)
+    if (formData.contentURI.trim() && !isValidURI(formData.contentURI.trim())) {
+      newErrors.contentURI = "Please enter a valid IPFS or Livepeer URI";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  // Helper function to validate URI format
+  const isValidURI = (uri) => {
+    const ipfsPattern = /^ipfs:\/\/[a-zA-Z0-9]+/;
+    const livepeerPattern = /^https:\/\/.*livepeer.*/;
+    const httpPattern = /^https?:\/\/.+/;
+    return (
+      ipfsPattern.test(uri) ||
+      livepeerPattern.test(uri) ||
+      httpPattern.test(uri)
+    );
   };
 
   const handleSave = () => {
@@ -141,8 +167,9 @@ const AddSectionModal = ({
 
     const sectionData = {
       title: formData.title.trim(),
-      duration: parseFloat(formData.duration), // Duration in minutes
-      contentURI: "dummy://placeholder", // Placeholder for now
+      contentURI: formData.contentURI.trim() || "placeholder://video-content", // Smart contract requires contentURI
+      duration: Math.round(parseFloat(formData.duration) * 60), // Convert minutes to seconds for smart contract
+      videoFile: videoFile, // For future file upload handling
     };
 
     onSave(sectionData);
@@ -166,6 +193,53 @@ const AddSectionModal = ({
         [field]: null,
       }));
     }
+  };
+
+  // Handle video file selection (placeholder for now)
+  const handleVideoSelect = () => {
+    Alert.alert("Video Upload", "Choose how you want to add video content:", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "IPFS/Livepeer URI",
+        onPress: () => {
+          // Focus on content URI input
+          Alert.alert(
+            "Info",
+            "Please enter the IPFS or Livepeer URI in the Content URI field below."
+          );
+        },
+      },
+      {
+        text: "Upload File (Coming Soon)",
+        onPress: () => {
+          Alert.alert(
+            "Coming Soon",
+            "Direct video upload will be available in the next update. For now, please upload your video to IPFS or Livepeer and enter the URI.",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  // Set placeholder video file for UI
+                  setVideoFile({
+                    name: "video_placeholder.mp4",
+                    type: "video/mp4",
+                    uri: "placeholder://video",
+                  });
+                },
+              },
+            ]
+          );
+        },
+      },
+    ]);
+  };
+
+  const removeVideoFile = () => {
+    setVideoFile(null);
+    setFormData((prev) => ({ ...prev, contentURI: "" }));
   };
 
   return (
@@ -246,6 +320,81 @@ const AddSectionModal = ({
                 )}
               </View>
 
+              {/* Video Content Section */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Video Content</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.videoUploadArea,
+                    videoFile && styles.videoSelected,
+                  ]}
+                  onPress={handleVideoSelect}
+                  activeOpacity={0.7}
+                >
+                  {videoFile ? (
+                    <View style={styles.videoPreview}>
+                      <Ionicons
+                        name="videocam"
+                        size={32}
+                        color={Colors.primary}
+                      />
+                      <Text style={styles.videoSelectedText}>
+                        {videoFile.name}
+                      </Text>
+                      <Text style={styles.videoChangeText}>Tap to change</Text>
+                      <TouchableOpacity
+                        style={styles.removeVideoButton}
+                        onPress={removeVideoFile}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name="close-circle"
+                          size={20}
+                          color={Colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.videoPlaceholder}>
+                      <Ionicons
+                        name="videocam-outline"
+                        size={32}
+                        color={Colors.textMuted}
+                      />
+                      <Text style={styles.videoPlaceholderText}>
+                        Add Video Content
+                      </Text>
+                      <Text style={styles.videoRequirements}>
+                        Upload file or add IPFS/Livepeer URI
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Content URI Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Content URI</Text>
+                <TextInput
+                  style={[styles.input, errors.contentURI && styles.inputError]}
+                  value={formData.contentURI}
+                  onChangeText={(value) =>
+                    handleInputChange("contentURI", value)
+                  }
+                  placeholder="ipfs://... or https://livepeer..."
+                  placeholderTextColor={Colors.textMuted}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                />
+                {errors.contentURI && (
+                  <Text style={styles.errorText}>{errors.contentURI}</Text>
+                )}
+                <Text style={styles.helperText}>
+                  Enter IPFS hash (ipfs://...) or Livepeer playback URL
+                </Text>
+              </View>
+
               {/* Duration Input */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>
@@ -268,7 +417,7 @@ const AddSectionModal = ({
                 </Text>
               </View>
 
-              {/* Video Placeholder Info */}
+              {/* Info Box */}
               <View style={styles.infoBox}>
                 <Ionicons
                   name="information-circle"
@@ -276,9 +425,12 @@ const AddSectionModal = ({
                   color={Colors.info}
                 />
                 <Text style={styles.infoText}>
-                  Video content will be integrated with Livepeer in future
-                  updates. For now, you can create sections with title and
-                  duration.
+                  <Text style={styles.infoTextBold}>
+                    Smart Contract Requirements:
+                  </Text>
+                  {"\n"}• Title: Section name{"\n"}• Content URI: IPFS/Livepeer
+                  link for video{"\n"}• Duration: Video length in seconds
+                  (auto-converted)
                 </Text>
               </View>
             </View>
@@ -422,6 +574,67 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
     lineHeight: 20,
+  },
+  infoTextBold: {
+    fontWeight: "600",
+    color: Colors.text,
+  },
+  // Video upload styles
+  videoUploadArea: {
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderStyle: "dashed",
+    minHeight: 100,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  videoSelected: {
+    borderColor: Colors.primary,
+    borderStyle: "solid",
+    backgroundColor: Colors.surface,
+  },
+  videoPreview: {
+    alignItems: "center",
+    padding: 16,
+    position: "relative",
+    width: "100%",
+  },
+  videoSelectedText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: Colors.text,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  videoChangeText: {
+    fontSize: 12,
+    color: Colors.primary,
+    marginTop: 4,
+  },
+  removeVideoButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    padding: 4,
+  },
+  videoPlaceholder: {
+    alignItems: "center",
+    padding: 16,
+  },
+  videoPlaceholderText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: Colors.textSecondary,
+    marginTop: 8,
+  },
+  videoRequirements: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 4,
+    textAlign: "center",
   },
   actionButtons: {
     flexDirection: "row",

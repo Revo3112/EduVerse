@@ -129,13 +129,13 @@ export default function CreateCourseScreen({ navigation }) {
         return;
       }
 
-      // Create new section object
+      // Create new section object that matches smart contract requirements
       const newSectionObj = {
         id: Date.now() + Math.random(), // More unique ID to prevent collisions
-        title: sectionData.title,
-        videoFile: null, // Will be populated with actual video file in future updates
-        contentURI: sectionData.contentURI, // Placeholder for now
-        duration: sectionData.duration, // Duration in minutes
+        title: sectionData.title, // Section title
+        contentURI: sectionData.contentURI, // IPFS/Livepeer URI for video content
+        duration: sectionData.duration, // Duration in SECONDS (already converted from minutes)
+        videoFile: sectionData.videoFile, // Store video file reference for future upload
         orderId: sections.length,
         createdAt: new Date().toISOString(),
       };
@@ -143,7 +143,12 @@ export default function CreateCourseScreen({ navigation }) {
       // Add section to list
       setSections((prevSections) => [...prevSections, newSectionObj]);
 
-      console.log("Section added successfully:", newSectionObj);
+      console.log("Section added successfully:", {
+        title: newSectionObj.title,
+        contentURI: newSectionObj.contentURI,
+        durationSeconds: newSectionObj.duration,
+        orderId: newSectionObj.orderId,
+      });
     },
     [sections]
   );
@@ -409,23 +414,21 @@ export default function CreateCourseScreen({ navigation }) {
                 );
 
                 try {
-                  // For now, use dummy content URI since video upload is not yet implemented
-                  const contentURI = section.videoFile
-                    ? "dummy://livepeer-placeholder"
-                    : "";
+                  // Use section's contentURI or placeholder
+                  const contentURI =
+                    section.contentURI || "placeholder://video-content";
 
                   const sectionParams = {
                     title: section.title.trim(),
                     contentURI: contentURI,
-                    // DURATION CONVERSION: User enters minutes → Convert to seconds for smart contract
+                    // DURATION: Already converted to seconds in AddSectionModal
                     // Smart contract expects duration in seconds (uint256)
-                    duration: section.duration * 60, // Convert minutes to seconds
+                    duration: section.duration, // Already in seconds from modal
                   };
 
                   console.log(`Section ${i + 1} parameters:`, {
                     ...sectionParams,
-                    durationInMinutes: section.duration,
-                    durationInSeconds: sectionParams.duration,
+                    note: "Duration already converted to seconds in modal",
                   });
 
                   const sectionResult =
@@ -691,15 +694,23 @@ export default function CreateCourseScreen({ navigation }) {
     <View style={styles.sectionItem}>
       <View style={styles.sectionInfo}>
         <Text style={styles.sectionTitle}>{section.title}</Text>
-        <Text style={styles.sectionDuration}>{section.duration} minutes</Text>
-        {section.videoFile && (
-          <Text style={styles.sectionContent} numberOfLines={1}>
-            🎥 {section.videoFile.name}
-          </Text>
-        )}
-        {!section.videoFile && (
+        <Text style={styles.sectionDuration}>
+          {Math.round(section.duration / 60)} minutes ({section.duration}{" "}
+          seconds)
+        </Text>
+        {section.contentURI &&
+          section.contentURI !== "placeholder://video-content" && (
+            <Text style={styles.sectionContent} numberOfLines={1}>
+              🔗{" "}
+              {section.contentURI.startsWith("ipfs://")
+                ? "IPFS Content"
+                : "Video Content"}
+            </Text>
+          )}
+        {(!section.contentURI ||
+          section.contentURI === "placeholder://video-content") && (
           <Text style={styles.sectionContentPlaceholder}>
-            📹 Video will be integrated with Livepeer
+            📹 Content URI: {section.contentURI || "Not set"}
           </Text>
         )}
       </View>
