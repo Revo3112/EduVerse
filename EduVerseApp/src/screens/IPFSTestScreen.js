@@ -12,16 +12,20 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "../constants/Colors";
 import { IPFSUploader, useIPFSJsonUpload } from "../components/IPFSUploader";
+import VideoUploader from "../components/VideoUploader";
 import { pinataService } from "../services/PinataService";
+import { videoService } from "../services/VideoService";
 
 /**
  * Demo screen showing Pinata IPFS integration
- * This can be used for testing or as a reference for implementation
+ * Enhanced with video upload testing capabilities
  */
 export default function IPFSTestScreen({ navigation }) {
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [testingConnection, setTestingConnection] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [uploadedVideos, setUploadedVideos] = useState([]);
+  const [usageInfo, setUsageInfo] = useState(null);
   const [jsonData, setJsonData] = useState(
     '{"example": "data", "timestamp": "' + new Date().toISOString() + '"}'
   );
@@ -29,7 +33,18 @@ export default function IPFSTestScreen({ navigation }) {
 
   useEffect(() => {
     testPinataConnection();
+    loadUsageInfo();
   }, []);
+
+  const loadUsageInfo = async () => {
+    try {
+      const usage = await videoService.getCurrentUsage();
+      setUsageInfo(usage);
+    } catch (error) {
+      console.warn("Could not load usage info:", error.message);
+    }
+  };
+
   const testPinataConnection = async () => {
     setTestingConnection(true);
     console.log("Starting Pinata connection test...");
@@ -113,6 +128,81 @@ export default function IPFSTestScreen({ navigation }) {
       }
     } catch (error) {
       Alert.alert("Error", error.message || "Failed to list files");
+    }
+  };
+
+  // Handle video upload completion
+  const handleVideoUploadComplete = (result) => {
+    console.log("Video upload completed:", result);
+    setUploadedVideos((prev) => [...prev, result]);
+    loadUsageInfo(); // Refresh usage info
+
+    Alert.alert(
+      "Video Upload Success! 🎉",
+      `CID: ${result.ipfsHash.substring(0, 20)}...\n` +
+        `Size: ${result.videoInfo.formattedSize}\n` +
+        `URL: ${result.publicUrl}`,
+      [
+        { text: "OK" },
+        {
+          text: "Test Playback",
+          onPress: () => testVideoPlayback(result.publicUrl),
+        },
+      ]
+    );
+  };
+
+  // Handle video upload start
+  const handleVideoUploadStart = (file) => {
+    console.log("Video upload started:", file.name);
+  };
+
+  // Handle video upload error
+  const handleVideoUploadError = (error) => {
+    console.error("Video upload error:", error);
+    Alert.alert("Upload Error", error.message);
+  };
+
+  // Test video playback
+  const testVideoPlayback = (url) => {
+    console.log("Testing video playback:", url);
+    Alert.alert(
+      "Video Playback Test",
+      `URL: ${url}\n\nURL akan dibuka di browser untuk testing.`,
+      [
+        { text: "Cancel" },
+        {
+          text: "Open URL",
+          onPress: () => console.log("Opening video URL:", url),
+        },
+      ]
+    );
+  };
+
+  // Test video service capabilities
+  const testVideoService = async () => {
+    try {
+      Alert.alert("Testing Video Service...", "Checking capabilities...");
+
+      const usage = await videoService.getCurrentUsage();
+      const tips = videoService.getOptimizationTips();
+      const report = await videoService.generateUsageReport();
+
+      console.log("Video Service Test Results:");
+      console.log("Usage:", usage);
+      console.log("Optimization Tips:", tips);
+      console.log("Report:", report);
+
+      Alert.alert(
+        "Video Service Test Results",
+        `✅ Service initialized\n` +
+          `📊 Storage: ${usage.storage.usedFormatted}/${usage.storage.limitFormatted}\n` +
+          `📁 Files: ${usage.files.used}/${usage.files.limit}\n` +
+          `🎬 Videos: ${usage.videos.count} (${usage.videos.storageFormatted})\n\n` +
+          `Check console for detailed results.`
+      );
+    } catch (error) {
+      Alert.alert("Video Service Test Failed", error.message);
     }
   };
 
@@ -251,6 +341,77 @@ export default function IPFSTestScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
+        {/* Usage Information */}
+        {usageInfo && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>📊 Free Plan Usage</Text>
+            <View style={styles.usageGrid}>
+              <View style={styles.usageItem}>
+                <Text style={styles.usageLabel}>Storage</Text>
+                <Text style={styles.usageValue}>
+                  {usageInfo.storage.usedFormatted} /{" "}
+                  {usageInfo.storage.limitFormatted}
+                </Text>
+                <Text style={styles.usagePercent}>
+                  {usageInfo.storage.usedPercent.toFixed(1)}%
+                </Text>
+              </View>
+              <View style={styles.usageItem}>
+                <Text style={styles.usageLabel}>Files</Text>
+                <Text style={styles.usageValue}>
+                  {usageInfo.files.used} / {usageInfo.files.limit}
+                </Text>
+                <Text style={styles.usagePercent}>
+                  {usageInfo.files.usedPercent.toFixed(1)}%
+                </Text>
+              </View>
+              <View style={styles.usageItem}>
+                <Text style={styles.usageLabel}>Videos</Text>
+                <Text style={styles.usageValue}>
+                  {usageInfo.videos.count} files
+                </Text>
+                <Text style={styles.usagePercent}>
+                  {usageInfo.videos.storageFormatted}
+                </Text>
+              </View>
+            </View>
+            {usageInfo.warnings.length > 0 && (
+              <View style={styles.warningsContainer}>
+                <Text style={styles.warningsTitle}>⚠️ Warnings:</Text>
+                {usageInfo.warnings.map((warning, index) => (
+                  <Text key={index} style={styles.warningText}>
+                    • {warning}
+                  </Text>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Video Upload Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🎬 Video Upload Testing</Text>
+          <Text style={styles.sectionDescription}>
+            Test video upload functionality with free tier optimization
+          </Text>
+
+          <VideoUploader
+            onUploadComplete={handleVideoUploadComplete}
+            onUploadStart={handleVideoUploadStart}
+            onUploadError={handleVideoUploadError}
+            courseId="test-course"
+            sectionId="test-section"
+            showUsageInfo={false} // We show it separately above
+          />
+
+          <TouchableOpacity
+            style={styles.testButton}
+            onPress={testVideoService}
+          >
+            <Text style={styles.testButtonText}>🧪 Test Video Service</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Uploaded Files */}
         {uploadedFiles.length > 0 && (
           <View style={styles.section}>
@@ -279,6 +440,34 @@ export default function IPFSTestScreen({ navigation }) {
                 </View>
                 <Text style={styles.openIcon}>🔗</Text>
               </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Uploaded Videos List */}
+        {uploadedVideos.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              📹 Uploaded Videos ({uploadedVideos.length})
+            </Text>
+            {uploadedVideos.map((video, index) => (
+              <View key={index} style={styles.fileItem}>
+                <View style={styles.fileInfo}>
+                  <Text style={styles.fileName}>{video.fileName}</Text>
+                  <Text style={styles.fileDetails}>
+                    {video.videoInfo.formattedSize} • {video.videoInfo.mimeType}
+                  </Text>
+                  <Text style={styles.fileCid}>
+                    CID: {video.ipfsHash.substring(0, 30)}...
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.playButton}
+                  onPress={() => testVideoPlayback(video.publicUrl)}
+                >
+                  <Text style={styles.playButtonText}>▶️ Test Play</Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
@@ -447,6 +636,85 @@ const styles = StyleSheet.create({
   openIcon: {
     fontSize: 20,
     marginLeft: 10,
+  },
+  // Video-specific styles
+  usageGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  usageItem: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 4,
+    alignItems: "center",
+  },
+  usageLabel: {
+    fontSize: 12,
+    color: Colors.text,
+    opacity: 0.7,
+    marginBottom: 4,
+  },
+  usageValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  usagePercent: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  warningsContainer: {
+    backgroundColor: "#FFF3CD",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FFEAA7",
+    marginTop: 8,
+  },
+  warningsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#856404",
+    marginBottom: 4,
+  },
+  warningText: {
+    fontSize: 12,
+    color: "#856404",
+    lineHeight: 16,
+  },
+  testButton: {
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  testButtonText: {
+    color: Colors.primary,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  playButton: {
+    backgroundColor: Colors.success,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  playButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
   },
 });
 

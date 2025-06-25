@@ -268,10 +268,23 @@ class PinataService {
       wav: "audio/wav",
       ogg: "audio/ogg",
 
-      // Video
+      // Video - Enhanced for 2025 compatibility
       mp4: "video/mp4",
       avi: "video/x-msvideo",
       mov: "video/quicktime",
+      webm: "video/webm",
+      mkv: "video/x-matroska",
+      flv: "video/x-flv",
+      wmv: "video/x-ms-wmv",
+      "3gp": "video/3gpp",
+      m4v: "video/x-m4v",
+      ogv: "video/ogg",
+      // Additional video formats supported by Pinata
+      f4v: "video/x-f4v",
+      asf: "video/x-ms-asf",
+      rm: "video/vnd.rn-realvideo",
+      rmvb: "video/vnd.rn-realvideo",
+      vob: "video/x-ms-vob",
     };
 
     return mimeTypes[extension] || "application/octet-stream";

@@ -26,6 +26,25 @@ export const Colors = {
 
   // Border
   border: "#e0e0e0",
+
+  // Light theme - for compatibility with existing components
+  light: {
+    background: "#f8f9fa",
+    surface: "#ffffff",
+    text: "#333333",
+    textSecondary: "#666666",
+    textMuted: "#999999",
+    tint: "#007AFF",
+    tabIconDefault: "#ccc",
+    tabIconSelected: "#007AFF",
+    border: "#e0e0e0",
+    primary: "#007AFF",
+    secondary: "#5856D6",
+    success: "#28a745",
+    warning: "#ff9500",
+    error: "#FF3B30",
+    info: "#17a2b8",
+  },
 };
 
 // Theme variants for future use
