@@ -220,6 +220,30 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   };
 
+  // Convert IPFS URI to HTTP URL for playback
+  const convertIPFSURI = (uri) => {
+    if (!uri) return uri;
+
+    // If it's already an HTTP URL, return as is
+    if (uri.startsWith("http://") || uri.startsWith("https://")) {
+      return uri;
+    }
+
+    // Convert IPFS URI to gateway URL
+    if (uri.startsWith("ipfs://")) {
+      const ipfsHash = uri.replace("ipfs://", "");
+      // Use Pinata gateway for better performance and reliability
+      return `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+    }
+
+    // If it starts with just the hash, assume it's IPFS
+    if (uri.match(/^[a-zA-Z0-9]{46,}/)) {
+      return `https://gateway.pinata.cloud/ipfs/${uri}`;
+    }
+
+    return uri;
+  };
+
   const isVideoContent = (uri) => {
     const videoExtensions = [".mp4", ".mov", ".avi", ".mkv", ".webm"];
     return videoExtensions.some((ext) => uri.toLowerCase().includes(ext));
@@ -240,6 +264,7 @@ export default function SectionDetailScreen({ route, navigation }) {
     if (!section?.contentURI) return null;
 
     const { contentURI } = section;
+    const playableURI = convertIPFSURI(contentURI);
 
     if (isVideoContent(contentURI)) {
       return (
@@ -247,12 +272,25 @@ export default function SectionDetailScreen({ route, navigation }) {
           <Video
             ref={videoRef}
             style={styles.video}
-            source={{ uri: contentURI }}
+            source={{ uri: playableURI }}
             useNativeControls
             resizeMode="contain"
             shouldPlay={false}
             onPlaybackStatusUpdate={setVideoStatus}
+            onError={(error) => {
+              console.error("Video playback error:", error);
+              Alert.alert(
+                "Playback Error",
+                "Unable to play this video. The file might be corrupted or the format is not supported."
+              );
+            }}
           />
+          {contentURI.startsWith("ipfs://") && (
+            <View style={styles.ipfsIndicator}>
+              <Ionicons name="globe-outline" size={12} color="#666" />
+              <Text style={styles.ipfsText}>Playing from IPFS</Text>
+            </View>
+          )}
         </View>
       );
     } else if (isAudioContent(contentURI)) {
@@ -560,5 +598,21 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  ipfsIndicator: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  ipfsText: {
+    color: "#fff",
+    fontSize: 10,
+    marginLeft: 4,
   },
 });

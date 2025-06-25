@@ -70,10 +70,11 @@ class VideoService {
   }
 
   /**
-   * Validate video file for upload
+   * Validate video file for upload - ENHANCED FOR MIME TYPE DETECTION
    */
   validateVideo(videoFile) {
     console.log("Validating video file:", videoFile?.name);
+    console.log("Original file data:", videoFile);
 
     if (!videoFile) {
       return {
@@ -92,15 +93,31 @@ class VideoService {
       };
     }
 
-    // Check file type
-    const mimeType = videoFile.type || this.detectMimeType(videoFile.name);
+    // ENHANCED: Detect MIME type with fallback for generic "video" type
+    let mimeType = videoFile.type;
+    const fileName = videoFile.name;
+
+    // Handle generic "video" type or missing type
+    if (!mimeType || mimeType === "video" || !mimeType.startsWith("video/")) {
+      mimeType = this.detectMimeTypeFromFileName(fileName);
+      console.log(
+        `Corrected MIME type from "${videoFile.type}" to "${mimeType}" for file: ${fileName}`
+      );
+    }
+
+    console.log(`Final MIME type for validation: ${mimeType}`);
+
+    // Check if MIME type is supported
     if (!this.VIDEO_SETTINGS.supportedFormats.includes(mimeType)) {
+      console.log("Supported formats:", this.VIDEO_SETTINGS.supportedFormats);
       return {
         isValid: false,
         error: `Format video tidak didukung: ${mimeType}. Gunakan: ${this.VIDEO_SETTINGS.supportedFormats
           .map((f) => f.split("/")[1].toUpperCase())
           .join(", ")}`,
         code: "UNSUPPORTED_FORMAT",
+        detectedMimeType: mimeType,
+        originalType: videoFile.type,
         supportedFormats: this.VIDEO_SETTINGS.supportedFormats,
       };
     }
@@ -257,17 +274,34 @@ class VideoService {
     try {
       console.log("=== VIDEO UPLOAD START ===");
       console.log(
-        "File:",
+        "Original File:",
         videoFile?.name,
+        "Type:",
+        videoFile?.type,
         "Size:",
         this.formatFileSize(videoFile?.size || 0)
       );
 
-      // Validate video first
+      // Validate video first (this will also correct the MIME type)
       const validation = this.validateVideo(videoFile);
       if (!validation.isValid) {
+        console.error("Video validation failed:", validation);
         throw new Error(validation.error);
       }
+
+      console.log("Video validation passed:", {
+        detectedMimeType: validation.mimeType,
+        originalType: videoFile.type,
+        fileSize: validation.formattedSize,
+      });
+
+      // Create a corrected file object with proper MIME type
+      const correctedVideoFile = {
+        ...videoFile,
+        type: validation.mimeType, // Use the validated/corrected MIME type
+      };
+
+      console.log("Corrected video file object:", correctedVideoFile);
 
       // Check upload capacity
       const capacityCheck = await this.canUploadVideo(videoFile.size);
@@ -314,8 +348,8 @@ class VideoService {
 
       console.log("Starting video upload with metadata:", videoMetadata);
 
-      // Upload using enhanced PinataService
-      const result = await this.pinataService.uploadFile(videoFile, {
+      // Upload using enhanced PinataService with corrected MIME type
+      const result = await this.pinataService.uploadFile(correctedVideoFile, {
         name: name || videoFile.name,
         network: network,
         metadata: videoMetadata,
@@ -621,26 +655,41 @@ class VideoService {
   }
 
   /**
-   * Utility: Detect MIME type from filename
+   * Detect MIME type from filename - Enhanced for video files
    */
-  detectMimeType(fileName) {
+  detectMimeTypeFromFileName(fileName) {
     if (!fileName) return "application/octet-stream";
 
     const extension = fileName.toLowerCase().split(".").pop();
     const videoMimeTypes = {
+      // Primary video formats (most common)
       mp4: "video/mp4",
-      avi: "video/x-msvideo",
-      mov: "video/quicktime",
       webm: "video/webm",
+      mov: "video/quicktime",
+      avi: "video/x-msvideo",
       mkv: "video/x-matroska",
+
+      // Additional video formats
       flv: "video/x-flv",
       wmv: "video/x-ms-wmv",
       "3gp": "video/3gpp",
       m4v: "video/x-m4v",
       ogv: "video/ogg",
+      f4v: "video/x-f4v",
+      asf: "video/x-ms-asf",
+      rm: "video/vnd.rn-realvideo",
+      rmvb: "video/vnd.rn-realvideo",
+      vob: "video/x-ms-vob",
     };
 
-    return videoMimeTypes[extension] || "application/octet-stream";
+    const detectedType = videoMimeTypes[extension];
+    console.log(
+      `MIME detection: ${fileName} (${extension}) -> ${
+        detectedType || "not found"
+      }`
+    );
+
+    return detectedType || "application/octet-stream";
   }
 
   /**

@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../constants/Colors";
+import { VideoUploader } from "./VideoUploader";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -45,6 +46,9 @@ const AddSectionModal = ({
 
   const [errors, setErrors] = useState({});
   const [videoFile, setVideoFile] = useState(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadedVideoData, setUploadedVideoData] = useState(null);
 
   // Initialize form data when modal opens
   useEffect(() => {
@@ -60,6 +64,7 @@ const AddSectionModal = ({
             : "",
         });
         setVideoFile(initialData.videoFile || null);
+        setUploadedVideoData(initialData.uploadedVideoData || null);
       } else {
         setFormData({
           title: "",
@@ -67,6 +72,7 @@ const AddSectionModal = ({
           duration: "",
         });
         setVideoFile(null);
+        setUploadedVideoData(null);
       }
       setErrors({});
       setModalHeight(screenHeight * 0.85); // Reset to 85% height
@@ -121,6 +127,7 @@ const AddSectionModal = ({
       setFormData({ title: "", contentURI: "", duration: "" });
       setErrors({});
       setVideoFile(null);
+      setUploadedVideoData(null);
     });
   };
 
@@ -200,9 +207,14 @@ const AddSectionModal = ({
 
     const sectionData = {
       title: formData.title.trim(),
-      contentURI: formData.contentURI.trim() || "placeholder://video-content",
+      contentURI:
+        formData.contentURI.trim() ||
+        (uploadedVideoData
+          ? `ipfs://${uploadedVideoData.ipfsHash}`
+          : "placeholder://video-content"),
       duration: Math.round(parseFloat(formData.duration) * 60),
       videoFile: videoFile,
+      uploadedVideoData: uploadedVideoData, // Include upload metadata
     };
 
     onSave(sectionData);
@@ -230,48 +242,54 @@ const AddSectionModal = ({
     }
   };
 
-  // Handle video file selection
-  const handleVideoSelect = () => {
-    Alert.alert("Video Upload", "Choose how you want to add video content:", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "IPFS/Livepeer URI",
-        onPress: () => {
-          Alert.alert(
-            "Info",
-            "Please enter the IPFS or Livepeer URI in the Content URI field below."
-          );
-        },
-      },
-      {
-        text: "Upload File (Coming Soon)",
-        onPress: () => {
-          Alert.alert(
-            "Coming Soon",
-            "Direct video upload will be available in the next update. For now, please upload your video to IPFS or Livepeer and enter the URI.",
-            [
-              {
-                text: "OK",
-                onPress: () => {
-                  setVideoFile({
-                    name: "video_placeholder.mp4",
-                    type: "video/mp4",
-                    uri: "placeholder://video",
-                  });
-                },
-              },
-            ]
-          );
-        },
-      },
-    ]);
+  // Handle video upload completion
+  const handleVideoUploadComplete = (uploadResult) => {
+    console.log("Video upload completed:", uploadResult);
+    setUploadedVideoData(uploadResult);
+    setVideoFile({
+      name: uploadResult.fileName || "uploaded_video.mp4",
+      type: uploadResult.mimeType || "video/mp4",
+      uri: uploadResult.ipfsUrl,
+      ipfsHash: uploadResult.ipfsHash,
+      size: uploadResult.fileSize,
+    });
+
+    // Auto-fill the content URI with IPFS URI
+    setFormData((prev) => ({
+      ...prev,
+      contentURI: `ipfs://${uploadResult.ipfsHash}`,
+    }));
+
+    setUploadingVideo(false);
+    setUploadProgress(0);
+  };
+
+  // Handle video upload start
+  const handleVideoUploadStart = () => {
+    console.log("Video upload started");
+    setUploadingVideo(true);
+    setUploadProgress(0);
+  };
+
+  // Handle video upload error
+  const handleVideoUploadError = (error) => {
+    console.error("Video upload error:", error);
+    setUploadingVideo(false);
+    setUploadProgress(0);
+    Alert.alert(
+      "Upload Error",
+      `Failed to upload video: ${error.message || "Unknown error"}`
+    );
+  };
+
+  // Handle video upload progress
+  const handleVideoUploadProgress = (progress) => {
+    setUploadProgress(progress);
   };
 
   const removeVideoFile = () => {
     setVideoFile(null);
+    setUploadedVideoData(null);
     setFormData((prev) => ({ ...prev, contentURI: "" }));
   };
 
@@ -385,25 +403,47 @@ const AddSectionModal = ({
               {/* Video Content Section */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Video Content</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.videoUploadArea,
-                    videoFile && styles.videoSelected,
-                  ]}
-                  onPress={handleVideoSelect}
-                  activeOpacity={0.7}
-                >
-                  {videoFile ? (
+
+                {/* Video Upload Component */}
+                <VideoUploader
+                  onUploadComplete={handleVideoUploadComplete}
+                  onUploadStart={handleVideoUploadStart}
+                  onUploadError={handleVideoUploadError}
+                  onUploadProgress={handleVideoUploadProgress}
+                  disabled={uploadingVideo}
+                  showUsageInfo={true}
+                  style={styles.videoUploader}
+                />
+
+                {/* Upload Progress */}
+                {uploadingVideo && (
+                  <View style={styles.uploadProgressContainer}>
+                    <Text style={styles.uploadProgressText}>
+                      Uploading video... {Math.round(uploadProgress)}%
+                    </Text>
+                    <View style={styles.progressBar}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          { width: `${uploadProgress}%` },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {/* Uploaded Video Info */}
+                {videoFile && !uploadingVideo && (
+                  <View style={styles.videoInfo}>
                     <View style={styles.videoPreview}>
                       <Ionicons
                         name="videocam"
-                        size={32}
+                        size={24}
                         color={Colors.primary}
                       />
                       <Text style={styles.videoSelectedText}>
                         {videoFile.name}
                       </Text>
-                      <Text style={styles.videoChangeText}>Tap to change</Text>
                       <TouchableOpacity
                         style={styles.removeVideoButton}
                         onPress={removeVideoFile}
@@ -416,22 +456,13 @@ const AddSectionModal = ({
                         />
                       </TouchableOpacity>
                     </View>
-                  ) : (
-                    <View style={styles.videoPlaceholder}>
-                      <Ionicons
-                        name="videocam-outline"
-                        size={32}
-                        color={Colors.textMuted}
-                      />
-                      <Text style={styles.videoPlaceholderText}>
-                        Add Video Content
+                    {uploadedVideoData && (
+                      <Text style={styles.ipfsInfoText}>
+                        IPFS: {uploadedVideoData.ipfsHash}
                       </Text>
-                      <Text style={styles.videoRequirements}>
-                        Upload file or add IPFS/Livepeer URI
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                    )}
+                  </View>
+                )}
               </View>
 
               {/* Content URI Input */}
@@ -726,6 +757,48 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 4,
     textAlign: "center",
+  },
+  videoUploader: {
+    marginBottom: 8,
+  },
+  uploadProgressContainer: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  uploadProgressText: {
+    fontSize: 14,
+    color: Colors.text,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: Colors.border,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: Colors.primary,
+    borderRadius: 3,
+  },
+  videoInfo: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  ipfsInfoText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 8,
+    fontFamily: "monospace",
   },
   actionButtons: {
     flexDirection: "row",

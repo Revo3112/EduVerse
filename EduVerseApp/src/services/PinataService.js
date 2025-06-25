@@ -294,7 +294,7 @@ class PinataService {
    * Create proper File object for React Native
    */
   /**
-   * Create proper File object for React Native - FIXED
+   * Create proper File object for React Native - ENHANCED FOR VIDEO SUPPORT
    */
   createFileObject(fileData) {
     console.log("Creating file object from:", fileData);
@@ -323,16 +323,17 @@ class PinataService {
       };
     }
 
-    // 3. Handle React Native image picker result standar - IMPROVED
+    // 3. Handle React Native image picker result standar - ENHANCED FOR VIDEO
     if (fileData.uri) {
       const fileName = fileData.name || fileData.uri.split("/").pop();
       let mimeType = fileData.type;
 
-      // PERBAIKAN: Handle kasus dimana type = "image" (tidak spesifik)
-      if (!mimeType || mimeType === "image") {
-        mimeType = this.detectMimeType(fileName);
+      // PERBAIKAN UTAMA: Handle kasus dimana type = "video", "image", dll (tidak spesifik)
+      if (!mimeType || mimeType === "image" || mimeType === "video") {
+        const detectedType = this.detectMimeType(fileName);
+        mimeType = detectedType;
         console.log(
-          "Detected MIME type from filename:",
+          `Corrected generic type "${fileData.type}" to specific MIME type:`,
           mimeType,
           "for file:",
           fileName
@@ -344,6 +345,15 @@ class PinataService {
           "for file:",
           fileName
         );
+      }
+
+      // TAMBAHAN: Validasi khusus untuk video files
+      if (
+        fileName.toLowerCase().includes(".mp4") &&
+        (mimeType === "video" || !mimeType.startsWith("video/"))
+      ) {
+        mimeType = "video/mp4";
+        console.log("Force-corrected MP4 file to video/mp4 MIME type");
       }
 
       return {
