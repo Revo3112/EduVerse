@@ -15,10 +15,33 @@ class PinataService {
     this.FILES_ENDPOINT = `${this.UPLOAD_URL}/files`;
     this.PRIVATE_FILES_ENDPOINT = `${this.BASE_URL}/files/private`;
 
-    // Gateway configuration - auto-detect dedicated gateway for faster video streaming
+    // Gateway configuration - use dedicated gateway from environment if available
     this.PUBLIC_GATEWAY = "https://gateway.pinata.cloud/ipfs";
-    this.DEDICATED_GATEWAY = null; // Will be auto-detected
-    this._gatewayDetected = false;
+
+    // Read dedicated gateway and key from environment variables
+    this.PINATA_GATEWAY =
+      process.env.PINATA_GATEWAY || process.env.REACT_NATIVE_PINATA_GATEWAY;
+    this.GATEWAY_KEY =
+      process.env.GATEWAY_KEY || process.env.REACT_NATIVE_GATEWAY_KEY;
+
+    // Set dedicated gateway if provided in environment
+    if (this.PINATA_GATEWAY) {
+      this.DEDICATED_GATEWAY = this.PINATA_GATEWAY.includes("https://")
+        ? this.PINATA_GATEWAY
+        : `https://${this.PINATA_GATEWAY}`;
+      this._gatewayDetected = true;
+      console.log(
+        "✅ Using dedicated gateway from environment:",
+        this.DEDICATED_GATEWAY
+      );
+
+      if (this.GATEWAY_KEY) {
+        console.log("✅ Gateway key found for authenticated access");
+      }
+    } else {
+      this.DEDICATED_GATEWAY = null;
+      this._gatewayDetected = false;
+    }
 
     // Initialize free plan detection flag
     this._freePlanDetected = false;
@@ -95,48 +118,69 @@ class PinataService {
     try {
       console.log("🔍 Detecting dedicated gateway...");
 
-      // First, try to manually set known dedicated gateway (copper-far-firefly-220.mypinata.cloud)
-      // This is much faster than API detection
-      this.DEDICATED_GATEWAY = "copper-far-firefly-220.mypinata.cloud/ipfs";
-      console.log("✅ Using known dedicated gateway:", this.DEDICATED_GATEWAY);
-      this._gatewayDetected = true;
-      return;
+      // Try to create a signed URL first to detect if we have dedicated gateway access
+      try {
+        const testResponse = await this.makeRequest(
+          `${this.BASE_URL}/files/sign`,
+          {
+            method: "POST",
+            headers: this.getHeaders(),
+            body: JSON.stringify({
+              cid: "QmTest", // Test CID
+              expires: 30,
+              date: Math.floor(Date.now() / 1000),
+              method: "GET",
+            }),
+            timeout: 5000,
+          },
+          1
+        );
 
-      // Original API detection code as backup (commented out for speed)
-      /*
-      const response = await this.makeRequest(
-        `${this.BASE_URL}/files/sign`,
-        {
-          method: "POST",
-          headers: this.getHeaders(),
-          body: JSON.stringify({
-            cid: "QmTest", // Test CID
-            expires: 30,
-            date: Math.floor(Date.now() / 1000),
-            method: "GET",
-          }),
-          timeout: 5000,
-        },
-        1
-      );
-
-      if (response && typeof response === "string" && response.includes(".mypinata.cloud")) {
-        // Extract dedicated gateway from response URL
-        const urlMatch = response.match(/https:\/\/([^.]+\.mypinata\.cloud)/);
-        if (urlMatch) {
-          this.DEDICATED_GATEWAY = `${urlMatch[1]}/ipfs`;
-          console.log("✅ Dedicated gateway detected:", this.DEDICATED_GATEWAY);
-          this._gatewayDetected = true;
-          return;
+        if (
+          testResponse &&
+          typeof testResponse === "string" &&
+          testResponse.includes(".mypinata.cloud")
+        ) {
+          // Extract dedicated gateway from response URL
+          const urlMatch = testResponse.match(
+            /https:\/\/([^.]+\.mypinata\.cloud)/
+          );
+          if (urlMatch) {
+            this.DEDICATED_GATEWAY = `${urlMatch[1]}/ipfs`;
+            console.log(
+              "✅ Dedicated gateway detected from API:",
+              this.DEDICATED_GATEWAY
+            );
+            this._gatewayDetected = true;
+            return;
+          }
+        }
+      } catch (error) {
+        if (
+          error.message.includes("403") ||
+          error.message.includes("Forbidden")
+        ) {
+          console.log("ℹ️ Free plan detected - no dedicated gateway access");
+          this._freePlanDetected = true;
+        } else {
+          console.log("ℹ️ Gateway detection failed:", error.message);
         }
       }
-      */
+
+      // Try to extract dedicated gateway from existing files
+      await this._extractDedicatedGatewayFromFiles();
+
+      // If still no dedicated gateway detected, we'll use public gateway
+      if (!this.DEDICATED_GATEWAY) {
+        console.log(
+          "ℹ️ No dedicated gateway detected, will use public gateway"
+        );
+        this._gatewayDetected = true; // Mark as detected to avoid repeated attempts
+      }
     } catch (error) {
       console.log("ℹ️ Dedicated gateway detection failed:", error.message);
+      this._gatewayDetected = true; // Mark as detected to avoid repeated attempts
     }
-
-    // Try to extract dedicated gateway from existing files
-    await this._extractDedicatedGatewayFromFiles();
   }
 
   /**
@@ -941,7 +985,7 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Create private access link for private files - FREE PLAN OPTIMIZED
+   * Create signed URL for dedicated gateway access using /files/sign endpoint
    */
   async createPrivateAccessLink(cid, options = {}) {
     // Wait for plan detection to complete if still in progress
@@ -959,17 +1003,16 @@ Kemungkinan penyebab:
 
     try {
       const {
-        expires = 3600, // 1 hour default
-        date = Math.floor(Date.now() / 1000),
+        expires = 3600, // 1 hour default (in seconds from now)
         method = "GET",
       } = options;
 
-      console.log("Attempting to create private access link for CID:", cid);
+      console.log("🔐 Creating signed URL for CID:", cid);
 
+      // Use correct endpoint and payload format based on Pinata API docs
       const requestBody = {
         cid: cid,
-        expires: expires,
-        date: date,
+        expires: expires, // expires in seconds from now
         method: method,
       };
 
@@ -980,23 +1023,32 @@ Kemungkinan penyebab:
           method: "POST",
           headers: this.getHeaders(),
           body: JSON.stringify(requestBody),
-          timeout: 10000,
+          timeout: 15000,
         },
         1
       ); // Only 1 attempt, no retries
 
-      console.log("Private access link created successfully:", response);
+      console.log("✅ Signed URL created successfully");
 
-      // Return the dedicated gateway URL if available
-      return response.data || response.url || response;
+      // The response should contain a signed URL in the format:
+      // https://dedicated-gateway.mypinata.cloud/files/[cid]?X-Algorithm=...&X-Signature=...
+      const signedUrl = response.data || response.url || response;
+
+      if (signedUrl && typeof signedUrl === "string") {
+        console.log("🚀 Using signed URL for dedicated gateway access");
+        return signedUrl;
+      } else {
+        throw new Error("Invalid signed URL response format");
+      }
     } catch (error) {
       // Check if this is a 403 Forbidden error (free plan limitation)
       if (
         error.message.includes("403") ||
-        error.message.includes("Forbidden")
+        error.message.includes("Forbidden") ||
+        error.message.includes("Premium feature")
       ) {
         console.log(
-          "Free plan detected during request: Using optimized gateway for video streaming"
+          "🔓 Free plan detected: Signed URLs not available, using optimized gateway"
         );
 
         // Set flag to avoid future attempts
@@ -1848,61 +1900,99 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Get optimized video streaming URL using dedicated gateway if available
-   * Falls back to public gateway if dedicated gateway not detected
+   * Get optimized video streaming URL using dedicated gateway with proper authentication
+   * Uses the correct /files/[cid] endpoint format for dedicated gateways
+   * Falls back to public gateway if dedicated gateway not available
    */
   async getVideoStreamingUrl(cid) {
-    // Ensure gateway is detected before returning URL
-    await this._detectDedicatedGateway();
+    // If we have dedicated gateway from environment, try signed URL first
+    if (this.DEDICATED_GATEWAY && this.GATEWAY_KEY && !this._freePlanDetected) {
+      try {
+        console.log(
+          "🔐 Attempting to create signed URL for dedicated gateway..."
+        );
 
-    if (this.DEDICATED_GATEWAY) {
-      console.log(
-        "🚀 Using dedicated gateway for video streaming:",
-        this.DEDICATED_GATEWAY
-      );
-      return `https://${this.DEDICATED_GATEWAY}/${cid}`;
+        // Try to create a signed URL using the /files/sign endpoint
+        const signedUrl = await this.createPrivateAccessLink(cid, {
+          expires: 300, // 5 minutes - enough for video loading
+        });
+
+        if (
+          signedUrl &&
+          signedUrl.includes("/files/") &&
+          signedUrl.includes("X-Signature")
+        ) {
+          console.log(
+            "🚀 Using signed /files/ URL for dedicated gateway access"
+          );
+          return signedUrl;
+        }
+      } catch (error) {
+        console.log(
+          "Could not create signed URL, falling back to public gateway:",
+          error.message
+        );
+      }
     }
 
+    // If we have dedicated gateway but no signed URL, try basic gateway access
+    if (this.DEDICATED_GATEWAY) {
+      // Use /ipfs/ endpoint for basic dedicated gateway access (without authentication)
+      const gatewayUrl = this.DEDICATED_GATEWAY.endsWith("/ipfs")
+        ? `${this.DEDICATED_GATEWAY}/${cid}`
+        : `${this.DEDICATED_GATEWAY}/ipfs/${cid}`;
+
+      console.log("🔓 Using dedicated gateway without signed URL");
+      return gatewayUrl;
+    }
+
+    // Fallback to public gateway
     console.log("📡 Using public gateway for video streaming");
     return `${this.PUBLIC_GATEWAY}/${cid}`;
   }
 
   /**
-   * Get faster streaming URL by using dedicated gateway or signed URLs
+   * Get fastest streaming URL by prioritizing signed URLs for dedicated gateway access
    */
   async getFasterStreamingUrl(cid) {
     console.log("🚀 Getting fastest streaming URL for CID:", cid);
 
-    // First, ensure we have detected the dedicated gateway
-    await this._detectDedicatedGateway();
-
-    // If we have dedicated gateway, use it directly (fastest option)
-    if (this.DEDICATED_GATEWAY) {
-      const fastUrl = `https://${this.DEDICATED_GATEWAY}/${cid}`;
-      console.log("✅ Using dedicated gateway URL:", fastUrl);
-      return fastUrl;
-    }
-
-    // Try to create signed URL as fallback for paid plans
-    try {
-      if (!this._freePlanDetected) {
+    // First priority: Try to create signed URL for dedicated gateway access (fastest option)
+    if (this.DEDICATED_GATEWAY && !this._freePlanDetected) {
+      try {
+        console.log("🔐 Attempting to create signed URL for fastest access...");
         const signedUrl = await this.createPrivateAccessLink(cid, {
-          expires: 300, // 5 minutes, enough for video loading
+          expires: 600, // 10 minutes, enough for video loading and playback
         });
 
-        if (signedUrl && signedUrl.includes(".mypinata.cloud")) {
+        if (
+          signedUrl &&
+          signedUrl.includes("/files/") &&
+          signedUrl.includes("X-Signature")
+        ) {
           console.log(
-            "🚀 Using signed dedicated gateway URL for video streaming"
+            "🚀 Using signed /files/ URL for fastest dedicated gateway access"
           );
           return signedUrl;
         }
+      } catch (error) {
+        console.log("Could not create signed URL:", error.message);
       }
-    } catch (error) {
-      console.log("Could not create signed URL:", error.message);
     }
 
-    // Fallback to regular gateway optimization
-    return await this.getVideoStreamingUrl(cid);
+    // Second priority: Use dedicated gateway without authentication
+    if (this.DEDICATED_GATEWAY) {
+      console.log("🔓 Using dedicated gateway without signed URL");
+      const gatewayUrl = this.DEDICATED_GATEWAY.endsWith("/ipfs")
+        ? `${this.DEDICATED_GATEWAY}/${cid}`
+        : `${this.DEDICATED_GATEWAY}/ipfs/${cid}`;
+      return gatewayUrl;
+    }
+
+    // Fallback: Use public gateway (always works but slower)
+    const publicUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
+    console.log("📡 Using public gateway URL as fallback:", publicUrl);
+    return publicUrl;
   }
 }
 
