@@ -764,15 +764,6 @@ export default function CreateCourseScreen({ navigation }) {
     }
   }, [courseData.price, courseData.isPaid, currentMaxPrice]);
 
-  // Cleanup debounce timer on unmount
-  useEffect(() => {
-    return () => {
-      if (inputDebounceTimer) {
-        clearTimeout(inputDebounceTimer);
-      }
-    };
-  }, [inputDebounceTimer]);
-
   if (!isConnected) {
     return (
       <SafeAreaView style={styles.container}>
