@@ -15,6 +15,7 @@ import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { useAccount } from "wagmi";
 import { useSmartContract } from "../hooks/useBlockchain";
+import { pinataService } from "../services/PinataService";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -220,7 +221,7 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   };
 
-  // Convert IPFS URI to HTTP URL for playback
+  // Convert IPFS URI to HTTP URL for playback with optimized gateway
   const convertIPFSURI = (uri) => {
     if (!uri) return uri;
 
@@ -229,16 +230,26 @@ export default function SectionDetailScreen({ route, navigation }) {
       return uri;
     }
 
-    // Convert IPFS URI to gateway URL
+    // Convert IPFS URI to optimized gateway URL for video streaming
     if (uri.startsWith("ipfs://")) {
       const ipfsHash = uri.replace("ipfs://", "");
-      // Use Pinata gateway for better performance and reliability
-      return `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+      // Use PinataService to get the best available gateway for faster streaming
+      try {
+        return pinataService.getVideoStreamingUrl(ipfsHash);
+      } catch (error) {
+        console.warn("Failed to get optimized gateway, using fallback:", error);
+        return `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
+      }
     }
 
     // If it starts with just the hash, assume it's IPFS
     if (uri.match(/^[a-zA-Z0-9]{46,}/)) {
-      return `https://gateway.pinata.cloud/ipfs/${uri}`;
+      try {
+        return pinataService.getVideoStreamingUrl(uri);
+      } catch (error) {
+        console.warn("Failed to get optimized gateway, using fallback:", error);
+        return `https://gateway.pinata.cloud/ipfs/${uri}`;
+      }
     }
 
     return uri;

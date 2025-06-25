@@ -176,12 +176,32 @@ export default function IPFSTestScreen({ navigation }) {
     Alert.alert("Upload Error", error.message);
   };
 
-  // Test video playback dengan in-app player
-  const testVideoPlayback = (url, fileName = "Unknown Video") => {
+  // Test video playback dengan in-app player - gunakan optimized gateway
+  const testVideoPlayback = async (url, fileName = "Unknown Video") => {
     console.log("Opening video player for:", url);
+
+    // Try to optimize the URL if it's an IPFS URL
+    let optimizedUrl = url;
+    try {
+      if (
+        url.includes("gateway.pinata.cloud/ipfs/") ||
+        url.includes("/ipfs/")
+      ) {
+        const cid = url.split("/ipfs/")[1];
+        console.log("🔧 Optimizing video URL for CID:", cid);
+
+        // Use the fastest streaming URL available
+        optimizedUrl = await pinataService.getFasterStreamingUrl(cid);
+        console.log("🚀 Using fastest gateway URL:", optimizedUrl);
+      }
+    } catch (error) {
+      console.log("Could not optimize URL, using original:", error.message);
+    }
+
     setSelectedVideo({
-      url: url,
+      url: optimizedUrl,
       fileName: fileName,
+      originalUrl: url, // Keep original for reference
     });
     setShowVideoPlayer(true);
     setIsVideoLoading(true);

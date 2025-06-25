@@ -15,6 +15,11 @@ class PinataService {
     this.FILES_ENDPOINT = `${this.UPLOAD_URL}/files`;
     this.PRIVATE_FILES_ENDPOINT = `${this.BASE_URL}/files/private`;
 
+    // Gateway configuration - auto-detect dedicated gateway for faster video streaming
+    this.PUBLIC_GATEWAY = "https://gateway.pinata.cloud/ipfs";
+    this.DEDICATED_GATEWAY = null; // Will be auto-detected
+    this._gatewayDetected = false;
+
     // Initialize free plan detection flag
     this._freePlanDetected = false;
     this._planDetectionInProgress = false;
@@ -27,7 +32,7 @@ class PinataService {
         this.JWT.length
       );
 
-      // Auto-detect plan type on initialization to avoid 403 errors later
+      // Auto-detect plan type and gateway on initialization
       this._initializePlanDetection();
     }
   }
@@ -43,6 +48,9 @@ class PinataService {
     this._planDetectionInProgress = true;
 
     try {
+      // Detect dedicated gateway first for faster video streaming
+      await this._detectDedicatedGateway();
+
       // Silent test to detect plan type without showing errors
       await this.makeRequest(
         `${this.BASE_URL}/files/sign`,
@@ -74,6 +82,124 @@ class PinataService {
     } finally {
       this._planDetectionInProgress = false;
     }
+  }
+
+  /**
+   * Auto-detect dedicated gateway for faster streaming
+   */
+  async _detectDedicatedGateway() {
+    if (this._gatewayDetected) {
+      return;
+    }
+
+    try {
+      console.log("🔍 Detecting dedicated gateway...");
+
+      // First, try to manually set known dedicated gateway (copper-far-firefly-220.mypinata.cloud)
+      // This is much faster than API detection
+      this.DEDICATED_GATEWAY = "copper-far-firefly-220.mypinata.cloud/ipfs";
+      console.log("✅ Using known dedicated gateway:", this.DEDICATED_GATEWAY);
+      this._gatewayDetected = true;
+      return;
+
+      // Original API detection code as backup (commented out for speed)
+      /*
+      const response = await this.makeRequest(
+        `${this.BASE_URL}/files/sign`,
+        {
+          method: "POST",
+          headers: this.getHeaders(),
+          body: JSON.stringify({
+            cid: "QmTest", // Test CID
+            expires: 30,
+            date: Math.floor(Date.now() / 1000),
+            method: "GET",
+          }),
+          timeout: 5000,
+        },
+        1
+      );
+
+      if (response && typeof response === "string" && response.includes(".mypinata.cloud")) {
+        // Extract dedicated gateway from response URL
+        const urlMatch = response.match(/https:\/\/([^.]+\.mypinata\.cloud)/);
+        if (urlMatch) {
+          this.DEDICATED_GATEWAY = `${urlMatch[1]}/ipfs`;
+          console.log("✅ Dedicated gateway detected:", this.DEDICATED_GATEWAY);
+          this._gatewayDetected = true;
+          return;
+        }
+      }
+      */
+    } catch (error) {
+      console.log("ℹ️ Dedicated gateway detection failed:", error.message);
+    }
+
+    // Try to extract dedicated gateway from existing files
+    await this._extractDedicatedGatewayFromFiles();
+  }
+
+  /**
+   * Extract dedicated gateway from existing uploaded files
+   */
+  async _extractDedicatedGatewayFromFiles() {
+    try {
+      console.log(
+        "🔍 Trying to extract dedicated gateway from uploaded files..."
+      );
+
+      // Get recent files to check for dedicated gateway URLs
+      const filesResponse = await this.makeRequest(
+        `${this.PRIVATE_FILES_ENDPOINT}?limit=1&order=DESC`,
+        {
+          method: "GET",
+          headers: this.getHeaders(),
+          timeout: 5000,
+        },
+        1
+      );
+
+      if (
+        filesResponse &&
+        filesResponse.data &&
+        filesResponse.data.length > 0
+      ) {
+        const file = filesResponse.data[0];
+
+        // Try to create a private access link for this file
+        try {
+          const privateUrl = await this.createPrivateAccessLink(file.cid, {
+            expires: 30,
+          });
+
+          if (privateUrl && privateUrl.includes(".mypinata.cloud")) {
+            // Extract the dedicated gateway domain
+            const urlMatch = privateUrl.match(
+              /https:\/\/([^\/]+\.mypinata\.cloud)/
+            );
+            if (urlMatch) {
+              this.DEDICATED_GATEWAY = urlMatch[1];
+              console.log(
+                "✅ Dedicated gateway extracted from file:",
+                this.DEDICATED_GATEWAY
+              );
+              this._gatewayDetected = true;
+              return true;
+            }
+          }
+        } catch (error) {
+          // This will be caught in the parent method
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.log(
+        "ℹ️ Could not extract dedicated gateway from files:",
+        error.message
+      );
+    }
+
+    return false;
   }
 
   /**
@@ -826,9 +952,9 @@ Kemungkinan penyebab:
     // Check if we've already detected that this is a free plan
     if (this._freePlanDetected) {
       console.log(
-        "Free plan detected, using public gateway URL directly (no API call needed)"
+        "Free plan detected, using optimized gateway URL for video streaming"
       );
-      return `https://gateway.pinata.cloud/ipfs/${cid}`;
+      return await this.getVideoStreamingUrl(cid);
     }
 
     try {
@@ -859,7 +985,9 @@ Kemungkinan penyebab:
         1
       ); // Only 1 attempt, no retries
 
-      console.log("Private access link created successfully");
+      console.log("Private access link created successfully:", response);
+
+      // Return the dedicated gateway URL if available
       return response.data || response.url || response;
     } catch (error) {
       // Check if this is a 403 Forbidden error (free plan limitation)
@@ -868,22 +996,22 @@ Kemungkinan penyebab:
         error.message.includes("Forbidden")
       ) {
         console.log(
-          "Free plan detected during request: Private access links not available"
+          "Free plan detected during request: Using optimized gateway for video streaming"
         );
 
         // Set flag to avoid future attempts
         this._freePlanDetected = true;
 
-        // Return public gateway URL immediately
-        const publicUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-        console.log("Using public gateway URL for free plan:", publicUrl);
-        return publicUrl;
+        // Return optimized gateway URL for video streaming
+        const optimizedUrl = await this.getVideoStreamingUrl(cid);
+        console.log("Using optimized gateway URL for video:", optimizedUrl);
+        return optimizedUrl;
       }
 
-      // For other errors, also return public URL but log the error
+      // For other errors, also return optimized URL but log the error
       console.warn("Private access link creation failed:", error.message);
-      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-      console.log("Using fallback public gateway URL:", fallbackUrl);
+      const fallbackUrl = await this.getVideoStreamingUrl(cid);
+      console.log("Using fallback optimized gateway URL:", fallbackUrl);
       return fallbackUrl;
     }
   }
@@ -1717,6 +1845,64 @@ Kemungkinan penyebab:
       console.error("Test upload failed:", error.message);
       throw error;
     }
+  }
+
+  /**
+   * Get optimized video streaming URL using dedicated gateway if available
+   * Falls back to public gateway if dedicated gateway not detected
+   */
+  async getVideoStreamingUrl(cid) {
+    // Ensure gateway is detected before returning URL
+    await this._detectDedicatedGateway();
+
+    if (this.DEDICATED_GATEWAY) {
+      console.log(
+        "🚀 Using dedicated gateway for video streaming:",
+        this.DEDICATED_GATEWAY
+      );
+      return `https://${this.DEDICATED_GATEWAY}/${cid}`;
+    }
+
+    console.log("📡 Using public gateway for video streaming");
+    return `${this.PUBLIC_GATEWAY}/${cid}`;
+  }
+
+  /**
+   * Get faster streaming URL by using dedicated gateway or signed URLs
+   */
+  async getFasterStreamingUrl(cid) {
+    console.log("🚀 Getting fastest streaming URL for CID:", cid);
+
+    // First, ensure we have detected the dedicated gateway
+    await this._detectDedicatedGateway();
+
+    // If we have dedicated gateway, use it directly (fastest option)
+    if (this.DEDICATED_GATEWAY) {
+      const fastUrl = `https://${this.DEDICATED_GATEWAY}/${cid}`;
+      console.log("✅ Using dedicated gateway URL:", fastUrl);
+      return fastUrl;
+    }
+
+    // Try to create signed URL as fallback for paid plans
+    try {
+      if (!this._freePlanDetected) {
+        const signedUrl = await this.createPrivateAccessLink(cid, {
+          expires: 300, // 5 minutes, enough for video loading
+        });
+
+        if (signedUrl && signedUrl.includes(".mypinata.cloud")) {
+          console.log(
+            "🚀 Using signed dedicated gateway URL for video streaming"
+          );
+          return signedUrl;
+        }
+      }
+    } catch (error) {
+      console.log("Could not create signed URL:", error.message);
+    }
+
+    // Fallback to regular gateway optimization
+    return await this.getVideoStreamingUrl(cid);
   }
 }
 
