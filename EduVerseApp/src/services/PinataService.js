@@ -551,7 +551,7 @@ class PinataService {
   }
 
   /**
-   * Upload file ke IPFS - React Native Optimized - MAJOR FIX
+   * Upload file ke IPFS - React Native Optimized - MAJOR FIX 2025
    */
   async uploadFile(file, options = {}) {
     try {
@@ -563,7 +563,7 @@ class PinataService {
 
       const {
         name,
-        network = "private",
+        network = "public", // DEFAULT TO PUBLIC untuk compatibility yang lebih baik
         groupId,
         keyValues = {},
         metadata = {},
@@ -666,9 +666,15 @@ class PinataService {
       const uploadTimeout = Math.max(120000, (processedFile.size || 0) * 0.002); // 120s minimum atau 2ms per byte
       console.log(`Upload timeout set to: ${uploadTimeout}ms`);
 
-      // PERBAIKAN: Gunakan endpoint yang benar untuk Pinata v3
-      const uploadEndpoint = `https://uploads.pinata.cloud/v3/files`;
-      console.log("Upload endpoint:", uploadEndpoint);
+      // PERBAIKAN KRITIS 2025: Gunakan endpoint yang benar berdasarkan network type
+      let uploadEndpoint;
+      if (network === "public") {
+        uploadEndpoint = `https://uploads.pinata.cloud/v3/files`;
+        console.log("Using PUBLIC upload endpoint:", uploadEndpoint);
+      } else {
+        uploadEndpoint = `https://uploads.pinata.cloud/v3/files`;
+        console.log("Using PRIVATE upload endpoint:", uploadEndpoint);
+      }
 
       const response = await this.makeRequest(uploadEndpoint, {
         method: "POST",
@@ -727,6 +733,7 @@ class PinataService {
         ipfsHash: responseData.cid,
         fileName: responseData.name || processedFile.name,
         fileSize: responseData.size || processedFile.size,
+        network: network, // TAMBAHAN: Track network type
         publicUrl: `https://gateway.pinata.cloud/ipfs/${responseData.cid}`,
         privateUrl: null, // Will be set below if needed
         message: isDuplicate
@@ -734,11 +741,12 @@ class PinataService {
           : "File uploaded successfully",
       };
 
-      // Create private access link if network is private - IMPROVED HANDLING
-      if (network === "private") {
+      // PERBAIKAN 2025: Hanya buat private access link jika benar-benar network private
+      // Dan hanya jika file memang di-upload sebagai private
+      if (network === "private" && responseData.network === "private") {
         try {
           console.log(
-            "Creating private access link for CID:",
+            "Creating private access link for PRIVATE network file, CID:",
             responseData.cid
           );
 
@@ -770,6 +778,10 @@ class PinataService {
           result.warning =
             "Private access link creation failed. Using public gateway URL as fallback.";
         }
+      } else {
+        // Untuk public network, gunakan public gateway
+        console.log("File uploaded to PUBLIC network, using public gateway");
+        result.privateUrl = result.publicUrl;
       }
 
       return result;
@@ -803,7 +815,7 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Upload JSON data ke IPFS - React Native Optimized
+   * Upload JSON data ke IPFS - React Native Optimized - 2025 UPDATE
    */
   async uploadJson(jsonData, options = {}) {
     try {
@@ -813,7 +825,7 @@ Kemungkinan penyebab:
 
       const {
         name = "data.json",
-        network = "private",
+        network = "public", // DEFAULT TO PUBLIC untuk compatibility yang lebih baik
         groupId,
         keyValues = {},
         metadata = {},
@@ -854,12 +866,12 @@ Kemungkinan penyebab:
   }
 
   /**
-   * List files dari Pinata
+   * List files dari Pinata - 2025 UPDATE
    */
   async listFiles(options = {}) {
     try {
       const {
-        network = "private",
+        network = "public", // DEFAULT TO PUBLIC untuk compatibility yang lebih baik
         limit = 10,
         name,
         groupId,
@@ -1659,43 +1671,259 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Get file access URL with fallback strategies
+   * Get file access URL dengan deteksi network type otomatis - 2025 FIX
+   * Method ini akan mendeteksi apakah file public atau private dan return URL yang sesuai
    */
-  async getFileAccessUrl(cid, options = {}) {
-    const { isPrivate = true, forcePublic = false } = options;
+  async getOptimizedFileUrl(cid, options = {}) {
+    const {
+      forcePublic = false,
+      preferredNetwork = null,
+      useCache = true,
+    } = options;
 
-    console.log(`Getting access URL for CID: ${cid}, private: ${isPrivate}`);
+    console.log(`🔍 Getting optimized URL for CID: ${cid}`);
 
-    // If force public or not private, use public gateway
-    if (forcePublic || !isPrivate) {
-      const publicUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-      console.log("Using public gateway URL:", publicUrl);
+    // Jika force public, langsung return public gateway
+    if (forcePublic) {
+      const publicUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
+      console.log("🌐 Using forced public gateway:", publicUrl);
       return publicUrl;
     }
 
-    // Try to create private access link
     try {
-      const privateUrl = await this.createPrivateAccessLink(cid);
-      console.log("Created private access URL:", privateUrl);
-      return privateUrl;
-    } catch (error) {
-      console.warn(
-        "Private access failed, falling back to public gateway:",
-        error.message
-      );
+      // STEP 1: Coba deteksi network type dari file metadata
+      let fileNetwork = preferredNetwork;
 
-      // Fallback to public gateway
-      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-      console.log("Using fallback public gateway URL:", fallbackUrl);
+      if (!fileNetwork && useCache) {
+        try {
+          console.log("🔍 Detecting file network type...");
+
+          // Coba ambil info file untuk mengetahui network type
+          const fileInfo = await this.getFileInfo(cid);
+          if (fileInfo && fileInfo.network) {
+            fileNetwork = fileInfo.network;
+            console.log(`📋 File network detected: ${fileNetwork}`);
+          }
+        } catch (error) {
+          console.log("⚠️ Could not detect file network type:", error.message);
+        }
+      }
+
+      // STEP 2: Jika file adalah public network, gunakan public gateway
+      if (fileNetwork === "public") {
+        const publicUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
+        console.log("🌐 Using public gateway for public file:", publicUrl);
+        return publicUrl;
+      }
+
+      // STEP 3: Jika file private, coba buat signed URL untuk dedicated gateway
+      if (fileNetwork === "private" || !fileNetwork) {
+        // Coba dedicated gateway dengan authentication
+        if (this.DEDICATED_GATEWAY && !this._freePlanDetected) {
+          try {
+            console.log("🔐 Attempting signed URL for dedicated gateway...");
+            const signedUrl = await this.createPrivateAccessLink(cid, {
+              expires: 3600, // 1 hour
+            });
+
+            if (signedUrl && signedUrl !== `${this.PUBLIC_GATEWAY}/${cid}`) {
+              console.log("✅ Using signed dedicated gateway URL");
+              return signedUrl;
+            }
+          } catch (error) {
+            console.log("⚠️ Signed URL failed:", error.message);
+          }
+        }
+
+        // Fallback: Coba dedicated gateway tanpa authentication
+        if (this.DEDICATED_GATEWAY) {
+          const dedicatedUrl = this.DEDICATED_GATEWAY.endsWith("/ipfs")
+            ? `${this.DEDICATED_GATEWAY}/${cid}`
+            : `${this.DEDICATED_GATEWAY}/ipfs/${cid}`;
+
+          console.log(
+            "🔓 Trying dedicated gateway without auth:",
+            dedicatedUrl
+          );
+
+          // Test accessibility
+          try {
+            const testResponse = await fetch(dedicatedUrl, {
+              method: "HEAD",
+              timeout: 5000,
+            });
+
+            if (testResponse.ok) {
+              console.log("✅ Dedicated gateway accessible without auth");
+              return dedicatedUrl;
+            }
+          } catch (testError) {
+            console.log(
+              "❌ Dedicated gateway not accessible:",
+              testError.message
+            );
+          }
+        }
+      }
+
+      // STEP 4: Final fallback - public gateway
+      const fallbackUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
+      console.log("🆘 Using public gateway as final fallback:", fallbackUrl);
       return fallbackUrl;
+    } catch (error) {
+      console.error("❌ Error getting optimized URL:", error.message);
+
+      // Emergency fallback
+      const emergencyUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
+      console.log("🚨 Using emergency public gateway:", emergencyUrl);
+      return emergencyUrl;
     }
   }
 
   /**
-   * Alternative upload method with public network for testing
+   * Get file information including network type - 2025 METHOD
+   */
+  async getFileInfo(cid) {
+    try {
+      // Coba public API first untuk mendapatkan basic info
+      const publicResponse = await this.makeRequest(
+        `${this.BASE_URL}/files/public?cid=${cid}&limit=1`,
+        {
+          method: "GET",
+          headers: this.getHeaders(),
+          timeout: 5000,
+        },
+        1 // Single attempt
+      );
+
+      if (
+        publicResponse &&
+        publicResponse.data &&
+        publicResponse.data.length > 0
+      ) {
+        const fileInfo = publicResponse.data[0];
+        console.log("📋 File found in public network:", fileInfo);
+        return {
+          ...fileInfo,
+          network: "public",
+        };
+      }
+    } catch (error) {
+      // Not in public, might be private
+      console.log("File not found in public network, checking private...");
+    }
+
+    try {
+      // Coba private API
+      const privateResponse = await this.makeRequest(
+        `${this.BASE_URL}/files/private?cid=${cid}&limit=1`,
+        {
+          method: "GET",
+          headers: this.getHeaders(),
+          timeout: 5000,
+        },
+        1 // Single attempt
+      );
+
+      if (
+        privateResponse &&
+        privateResponse.data &&
+        privateResponse.data.length > 0
+      ) {
+        const fileInfo = privateResponse.data[0];
+        console.log("📋 File found in private network:", fileInfo);
+        return {
+          ...fileInfo,
+          network: "private",
+        };
+      }
+    } catch (error) {
+      console.log("File not found in private network either");
+    }
+
+    // Return null if not found in either network
+    return null;
+  }
+
+  /**
+   * Test file accessibility - 2025 METHOD
+   */
+  async testFileAccess(url, timeout = 5000) {
+    try {
+      const response = await fetch(url, {
+        method: "HEAD",
+        timeout: timeout,
+      });
+
+      return {
+        accessible: response.ok,
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+      };
+    } catch (error) {
+      return {
+        accessible: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get optimized video streaming URL using 2025 API standards
+   */
+  async getVideoStreamingUrl(cid) {
+    console.log("🎥 Getting optimized video streaming URL for CID:", cid);
+
+    // Gunakan method baru yang lebih smart
+    return await this.getOptimizedFileUrl(cid, {
+      forcePublic: false, // Jangan force public, biarkan auto-detect
+      preferredNetwork: null, // Auto detect network
+      useCache: true,
+    });
+  }
+
+  /**
+   * Get fastest streaming URL by prioritizing optimal access method - 2025 UPDATE
+   */
+  async getFasterStreamingUrl(cid) {
+    console.log("🚀 Getting fastest streaming URL for CID:", cid);
+
+    // Gunakan method baru yang sudah dioptimasi
+    return await this.getOptimizedFileUrl(cid, {
+      forcePublic: false,
+      preferredNetwork: null,
+      useCache: true,
+    });
+  }
+
+  /**
+   * Get file access URL untuk backward compatibility - 2025 UPDATE
+   */
+  async getFileAccessUrl(cid, options = {}) {
+    const { isPrivate = null, forcePublic = false } = options;
+
+    console.log(`🔗 Getting file access URL for CID: ${cid}`);
+
+    // Jika isPrivate diberikan secara eksplisit, gunakan itu
+    let preferredNetwork = null;
+    if (isPrivate === true) {
+      preferredNetwork = "private";
+    } else if (isPrivate === false) {
+      preferredNetwork = "public";
+    }
+
+    return await this.getOptimizedFileUrl(cid, {
+      forcePublic: forcePublic,
+      preferredNetwork: preferredNetwork,
+      useCache: true,
+    });
+  }
+
+  /**
+   * Upload file sebagai PUBLIC secara eksplisit - 2025 METHOD
    */
   async uploadFilePublic(file, options = {}) {
-    console.log("Uploading file as PUBLIC (for testing)...");
+    console.log("📤 Uploading file as PUBLIC for easy access...");
 
     return await this.uploadFile(file, {
       ...options,
@@ -1704,126 +1932,16 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Check API key permissions and capabilities - IMPROVED
+   * Get public gateway URL - Simple method untuk akses langsung
    */
-  async checkApiKeyPermissions() {
-    console.log("Checking API key permissions...");
-
-    // Wait for plan detection to complete if still in progress
-    while (this._planDetectionInProgress) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    // If we already detected the plan type, return the cached result
-    if (this._freePlanDetected !== null) {
-      const planType = this._freePlanDetected ? "free" : "paid";
-      console.log(`API key permissions: ${planType} plan (cached result)`);
-
-      return {
-        valid: true,
-        planType: planType,
-        features: {
-          upload: true,
-          privateFiles: !this._freePlanDetected,
-          privateAccess: !this._freePlanDetected,
-        },
-      };
-    }
-
-    // If not detected yet, perform the check
-    try {
-      // Test basic API access
-      const authTest = await this.makeRequest(
-        `${this.BASE_URL}/files/private?limit=1`,
-        {
-          method: "GET",
-          headers: this.getHeaders(),
-          timeout: 5000,
-        }
-      );
-
-      console.log("API key is valid - basic access confirmed");
-
-      // Try to test sign endpoint to detect free plan
-      try {
-        await this.makeRequest(
-          `${this.BASE_URL}/files/sign`,
-          {
-            method: "POST",
-            headers: this.getHeaders(),
-            body: JSON.stringify({
-              cid: "test-permissions-check",
-              expires: 3600,
-              date: Math.floor(Date.now() / 1000),
-              method: "GET",
-            }),
-            timeout: 5000,
-          },
-          1
-        );
-
-        console.log("API key has private access capabilities (paid plan)");
-        this._freePlanDetected = false;
-
-        return {
-          valid: true,
-          planType: "paid",
-          features: {
-            upload: true,
-            privateFiles: true,
-            privateAccess: true,
-          },
-        };
-      } catch (signError) {
-        if (
-          signError.message.includes("403") ||
-          signError.message.includes("Forbidden")
-        ) {
-          console.log("API key has basic capabilities only (free plan)");
-          this._freePlanDetected = true;
-
-          return {
-            valid: true,
-            planType: "free",
-            features: {
-              upload: true,
-              privateFiles: false,
-              privateAccess: false,
-            },
-          };
-        } else {
-          console.warn(
-            "Unexpected error testing sign endpoint:",
-            signError.message
-          );
-          return {
-            valid: true,
-            planType: "unknown",
-            features: {
-              upload: true,
-              privateFiles: false,
-              privateAccess: false,
-            },
-          };
-        }
-      }
-    } catch (error) {
-      console.error("API key validation failed:", error.message);
-      return {
-        valid: false,
-        planType: "invalid",
-        error: error.message,
-        features: {
-          upload: false,
-          privateFiles: false,
-          privateAccess: false,
-        },
-      };
-    }
+  getPublicGatewayUrl(cid) {
+    const url = `${this.PUBLIC_GATEWAY}/${cid}`;
+    console.log("🌐 Generated public gateway URL:", url);
+    return url;
   }
 
   /**
-   * Get current plan detection status
+   * Get current plan detection status - 2025 METHOD
    */
   getPlanStatus() {
     return {
@@ -1835,164 +1953,9 @@ Kemungkinan penyebab:
           : this._freePlanDetected
           ? "free"
           : "paid",
+      dedicatedGateway: this.DEDICATED_GATEWAY,
+      gatewayDetected: this._gatewayDetected,
     };
-  }
-
-  /**
-   * Format file size for display
-   */
-  formatFileSize(bytes) {
-    if (!bytes || bytes === 0) return "0 B";
-
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  }
-
-  /**
-   * Test upload with a small file (for debugging)
-   */
-  async testUpload() {
-    console.log("Testing upload with small test file...");
-
-    try {
-      // Create a small test file
-      const testData = JSON.stringify(
-        {
-          test: true,
-          timestamp: new Date().toISOString(),
-          message: "This is a test upload from EduVerse app",
-        },
-        null,
-        2
-      );
-
-      const testFile = {
-        uri: `data:application/json;base64,${btoa(testData)}`,
-        type: "application/json",
-        name: `test-upload-${Date.now()}.json`,
-        size: new Blob([testData]).size,
-      };
-
-      console.log("Test file created:", {
-        name: testFile.name,
-        size: this.formatFileSize(testFile.size),
-        type: testFile.type,
-      });
-
-      // Try public upload first
-      const publicResult = await this.uploadFilePublic(testFile, {
-        name: testFile.name,
-        metadata: {
-          purpose: "API test",
-          app: "EduVerse",
-        },
-      });
-
-      console.log("Public upload test successful:", publicResult);
-      return publicResult;
-    } catch (error) {
-      console.error("Test upload failed:", error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * Get optimized video streaming URL using dedicated gateway with proper authentication
-   * Uses the correct /files/[cid] endpoint format for dedicated gateways
-   * Falls back to public gateway if dedicated gateway not available
-   */
-  async getVideoStreamingUrl(cid) {
-    // If we have dedicated gateway from environment, try signed URL first
-    if (this.DEDICATED_GATEWAY && this.GATEWAY_KEY && !this._freePlanDetected) {
-      try {
-        console.log(
-          "🔐 Attempting to create signed URL for dedicated gateway..."
-        );
-
-        // Try to create a signed URL using the /files/sign endpoint
-        const signedUrl = await this.createPrivateAccessLink(cid, {
-          expires: 300, // 5 minutes - enough for video loading
-        });
-
-        if (
-          signedUrl &&
-          signedUrl.includes("/files/") &&
-          signedUrl.includes("X-Signature")
-        ) {
-          console.log(
-            "🚀 Using signed /files/ URL for dedicated gateway access"
-          );
-          return signedUrl;
-        }
-      } catch (error) {
-        console.log(
-          "Could not create signed URL, falling back to public gateway:",
-          error.message
-        );
-      }
-    }
-
-    // If we have dedicated gateway but no signed URL, try basic gateway access
-    if (this.DEDICATED_GATEWAY) {
-      // Use /ipfs/ endpoint for basic dedicated gateway access (without authentication)
-      const gatewayUrl = this.DEDICATED_GATEWAY.endsWith("/ipfs")
-        ? `${this.DEDICATED_GATEWAY}/${cid}`
-        : `${this.DEDICATED_GATEWAY}/ipfs/${cid}`;
-
-      console.log("🔓 Using dedicated gateway without signed URL");
-      return gatewayUrl;
-    }
-
-    // Fallback to public gateway
-    console.log("📡 Using public gateway for video streaming");
-    return `${this.PUBLIC_GATEWAY}/${cid}`;
-  }
-
-  /**
-   * Get fastest streaming URL by prioritizing signed URLs for dedicated gateway access
-   */
-  async getFasterStreamingUrl(cid) {
-    console.log("🚀 Getting fastest streaming URL for CID:", cid);
-
-    // First priority: Try to create signed URL for dedicated gateway access (fastest option)
-    if (this.DEDICATED_GATEWAY && !this._freePlanDetected) {
-      try {
-        console.log("🔐 Attempting to create signed URL for fastest access...");
-        const signedUrl = await this.createPrivateAccessLink(cid, {
-          expires: 600, // 10 minutes, enough for video loading and playback
-        });
-
-        if (
-          signedUrl &&
-          signedUrl.includes("/files/") &&
-          signedUrl.includes("X-Signature")
-        ) {
-          console.log(
-            "🚀 Using signed /files/ URL for fastest dedicated gateway access"
-          );
-          return signedUrl;
-        }
-      } catch (error) {
-        console.log("Could not create signed URL:", error.message);
-      }
-    }
-
-    // Second priority: Use dedicated gateway without authentication
-    if (this.DEDICATED_GATEWAY) {
-      console.log("🔓 Using dedicated gateway without signed URL");
-      const gatewayUrl = this.DEDICATED_GATEWAY.endsWith("/ipfs")
-        ? `${this.DEDICATED_GATEWAY}/${cid}`
-        : `${this.DEDICATED_GATEWAY}/ipfs/${cid}`;
-      return gatewayUrl;
-    }
-
-    // Fallback: Use public gateway (always works but slower)
-    const publicUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
-    console.log("📡 Using public gateway URL as fallback:", publicUrl);
-    return publicUrl;
   }
 }
 
