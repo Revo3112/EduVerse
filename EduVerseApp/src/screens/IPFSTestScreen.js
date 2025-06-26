@@ -148,18 +148,23 @@ export default function IPFSTestScreen({ navigation }) {
   const handleVideoUploadComplete = (result) => {
     console.log("Video upload completed:", result);
     setUploadedVideos((prev) => [...prev, result]);
-    loadUsageInfo(); // Refresh usage info
+    loadUsageInfo();
+
+    const networkInfo = result.isPrivate
+      ? "Private (signed URL required)"
+      : "Public (direct access)";
 
     Alert.alert(
       "Video Upload Success! 🎉",
       `CID: ${result.ipfsHash.substring(0, 20)}...\n` +
         `Size: ${result.videoInfo.formattedSize}\n` +
-        `URL: ${result.publicUrl}`,
+        `Network: ${networkInfo}\n` +
+        `Duplicate: ${result.isDuplicate ? "Yes" : "No"}`,
       [
         { text: "OK" },
         {
           text: "Test Playback",
-          onPress: () => testVideoPlayback(result.publicUrl),
+          onPress: () => testVideoPlayback(result),
         },
       ]
     );
@@ -176,35 +181,68 @@ export default function IPFSTestScreen({ navigation }) {
     Alert.alert("Upload Error", error.message);
   };
 
-  // Test video playback dengan in-app player - gunakan optimized gateway
-  const testVideoPlayback = async (url, fileName = "Unknown Video") => {
-    console.log("Opening video player for:", url);
+  // Test video playback dengan signed URL untuk private files
+  const testVideoPlayback = async (result) => {
+    console.log("Opening video player for result:", result);
 
-    // Try to optimize the URL if it's an IPFS URL
-    let optimizedUrl = url;
     try {
-      if (
-        url.includes("gateway.pinata.cloud/ipfs/") ||
-        url.includes("/ipfs/")
-      ) {
-        const cid = url.split("/ipfs/")[1];
-        console.log("🔧 Optimizing video URL for CID:", cid);
+      let streamingUrl;
+      const fileName = result.fileName || "Unknown Video";
 
-        // Use the fastest streaming URL available
-        optimizedUrl = await pinataService.getFasterStreamingUrl(cid);
-        console.log("🚀 Using fastest gateway URL:", optimizedUrl);
+      // Determine streaming URL based on network
+      if (result.isPrivate || result.network === "private") {
+        console.log("🔐 Video is private, generating signed URL...");
+
+        const streamingResult = await videoService.getVideoStreamingUrl(
+          result.ipfsHash,
+          result.network,
+          7200 // 2 hours
+        );
+
+        if (streamingResult.success) {
+          streamingUrl = streamingResult.streamingUrl;
+          console.log("✅ Generated signed URL for private video");
+        } else {
+          console.log("❌ Failed to generate signed URL, using fallback");
+          streamingUrl = streamingResult.fallbackUrl;
+        }
+      } else {
+        // Public file - use direct URL
+        streamingUrl = result.urls?.streaming || result.publicUrl;
+        console.log("🌐 Using public URL for video");
       }
-    } catch (error) {
-      console.log("Could not optimize URL, using original:", error.message);
-    }
 
-    setSelectedVideo({
-      url: optimizedUrl,
-      fileName: fileName,
-      originalUrl: url, // Keep original for reference
-    });
-    setShowVideoPlayer(true);
-    setIsVideoLoading(true);
+      // PERBAIKAN: Pastikan streamingUrl tidak undefined
+      if (!streamingUrl) {
+        console.log("⚠️ No streaming URL found, trying to generate one...");
+        // Fallback: generate URL dari CID
+        if (result.ipfsHash) {
+          streamingUrl = `https://gateway.pinata.cloud/ipfs/${result.ipfsHash}`;
+          console.log("🆘 Generated fallback URL from CID:", streamingUrl);
+        } else {
+          throw new Error("Cannot generate streaming URL - no CID available");
+        }
+      }
+
+      console.log("Final streaming URL:", streamingUrl);
+
+      setSelectedVideo({
+        url: streamingUrl,
+        fileName: fileName,
+        originalUrl: result.publicUrl || streamingUrl,
+        isPrivate: result.isPrivate || false,
+        network: result.network || "public",
+        cid: result.ipfsHash,
+      });
+      setShowVideoPlayer(true);
+      setIsVideoLoading(true);
+    } catch (error) {
+      console.error("Error preparing video playback:", error);
+      Alert.alert(
+        "Video Playback Error",
+        `Failed to prepare video for playback: ${error.message}`
+      );
+    }
   };
 
   // Handle video player events
@@ -554,17 +592,23 @@ export default function IPFSTestScreen({ navigation }) {
                   <Text style={styles.fileDetails}>
                     {video.videoInfo.formattedSize} • {video.videoInfo.mimeType}
                   </Text>
+                  <Text style={styles.networkInfo}>
+                    Network: {video.network} {video.isPrivate && "(🔐 Private)"}
+                  </Text>
                   <Text style={styles.fileCid}>
                     CID: {video.ipfsHash.substring(0, 30)}...
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.playButton}
-                  onPress={() =>
-                    testVideoPlayback(video.publicUrl, video.fileName)
-                  }
+                  style={[
+                    styles.playButton,
+                    video.isPrivate && styles.privatePlayButton,
+                  ]}
+                  onPress={() => testVideoPlayback(video)} // PERBAIKAN: Pass video object, bukan URL
                 >
-                  <Text style={styles.playButtonText}>🎬 Play Video</Text>
+                  <Text style={styles.playButtonText}>
+                    {video.isPrivate ? "🔐 Play (Signed)" : "🎬 Play Video"}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -942,11 +986,33 @@ const styles = StyleSheet.create({
     minWidth: 80,
     alignItems: "center",
   },
+  privatePlayButton: {
+    backgroundColor: Colors.primary, // Different color for private videos
+  },
   playButtonText: {
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "600",
   },
+
+  // Add networkInfo style
+  networkInfo: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: "500",
+    marginBottom: 2,
+  },
+  fileDetails: {
+    fontSize: 12,
+    color: Colors.gray,
+    marginBottom: 2,
+  },
+  fileCid: {
+    fontSize: 10,
+    color: Colors.gray,
+    fontFamily: "monospace",
+  },
+
   // Video Player Modal Styles
   videoPlayerContainer: {
     flex: 1,

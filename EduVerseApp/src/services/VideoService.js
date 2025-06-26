@@ -1,7 +1,6 @@
 /**
- * VideoService.js - Video Upload & Management Service
- * Service khusus untuk menangani video upload dan management di IPFS Pinata
- * Optimized untuk React Native dan free tier Pinata
+ * VideoService.js - Video Upload & Management Service (Updated untuk Signed URL)
+ * Service untuk menangani video upload dan management di IPFS Pinata
  */
 
 import { pinataService } from "./PinataService";
@@ -10,44 +9,33 @@ class VideoService {
   constructor() {
     this.pinataService = pinataService;
 
-    // Free tier limits - Updated for 2025
+    // Free tier limits
     this.FREE_TIER_LIMITS = {
       maxFiles: 500,
       maxStorage: 1024 * 1024 * 1024, // 1GB
-      maxBandwidth: 10 * 1024 * 1024 * 1024, // 10GB/month
-      maxFileSize: 25 * 1024 * 1024 * 1024, // 25GB per file (Pinata limit)
-      maxRequests: 10000, // per month
-      rateLimit: 60, // per minute
-      resumableThreshold: 100 * 1024 * 1024, // 100MB - auto resumable upload
+      maxFileSize: 25 * 1024 * 1024 * 1024, // 25GB per file
     };
 
     // Video optimization settings
     this.VIDEO_SETTINGS = {
-      // Recommended file sizes for free tier
-      small: 10 * 1024 * 1024, // 10MB - short clips
-      medium: 25 * 1024 * 1024, // 25MB - lessons
-      large: 50 * 1024 * 1024, // 50MB - full content
-      maxRecommended: 100 * 1024 * 1024, // 100MB - absolute max for free tier
+      small: 10 * 1024 * 1024, // 10MB
+      medium: 25 * 1024 * 1024, // 25MB
+      large: 50 * 1024 * 1024, // 50MB
+      maxRecommended: 100 * 1024 * 1024, // 100MB
 
-      // Supported formats (prioritized by efficiency)
       supportedFormats: [
-        "video/mp4", // Most efficient, widely supported
-        "video/webm", // Good compression, web-optimized
-        "video/quicktime", // MOV format
-        "video/x-msvideo", // AVI format
-        "video/x-matroska", // MKV format
-        "video/x-flv", // FLV format
-        "video/x-ms-wmv", // WMV format
-        "video/3gpp", // 3GP format
-        "video/ogg", // OGG video
-        "video/x-m4v", // M4V format
-        "video/x-f4v", // F4V format
-        "video/x-ms-asf", // ASF format
-        "video/vnd.rn-realvideo", // RealVideo formats
-        "video/x-ms-vob", // VOB format
+        "video/mp4",
+        "video/webm",
+        "video/quicktime",
+        "video/x-msvideo",
+        "video/x-matroska",
+        "video/x-flv",
+        "video/x-ms-wmv",
+        "video/3gpp",
+        "video/ogg",
+        "video/x-m4v",
       ],
 
-      // Recommended encoding settings
       encoding: {
         format: "MP4",
         codec: "H.264",
@@ -62,7 +50,6 @@ class VideoService {
           medium: "1000-2000 kbps",
           high: "2000-4000 kbps",
         },
-        audio: "AAC 128kbps",
       },
     };
 
@@ -70,11 +57,47 @@ class VideoService {
   }
 
   /**
-   * Validate video file for upload - ENHANCED FOR MIME TYPE DETECTION
+   * Detect MIME type from filename
+   */
+  detectMimeTypeFromFileName(fileName) {
+    if (!fileName) return "application/octet-stream";
+
+    const extension = fileName.toLowerCase().split(".").pop();
+    const videoMimeTypes = {
+      mp4: "video/mp4",
+      webm: "video/webm",
+      mov: "video/quicktime",
+      avi: "video/x-msvideo",
+      mkv: "video/x-matroska",
+      flv: "video/x-flv",
+      wmv: "video/x-ms-wmv",
+      "3gp": "video/3gpp",
+      m4v: "video/x-m4v",
+      ogv: "video/ogg",
+    };
+
+    const detectedType = videoMimeTypes[extension];
+    console.log(
+      `MIME detection: ${fileName} (${extension}) -> ${
+        detectedType || "not found"
+      }`
+    );
+
+    return detectedType || "application/octet-stream";
+  }
+
+  /**
+   * Alias untuk detectMimeTypeFromFileName untuk kompatibilitas
+   */
+  detectMimeType(fileName) {
+    return this.detectMimeTypeFromFileName(fileName);
+  }
+
+  /**
+   * Validate video file for upload
    */
   validateVideo(videoFile) {
     console.log("Validating video file:", videoFile?.name);
-    console.log("Original file data:", videoFile);
 
     if (!videoFile) {
       return {
@@ -84,7 +107,6 @@ class VideoService {
       };
     }
 
-    // Check file name
     if (!videoFile.name || videoFile.name.trim() === "") {
       return {
         isValid: false,
@@ -93,11 +115,10 @@ class VideoService {
       };
     }
 
-    // ENHANCED: Detect MIME type with fallback for generic "video" type
+    // Detect MIME type with fallback
     let mimeType = videoFile.type;
     const fileName = videoFile.name;
 
-    // Handle generic "video" type or missing type
     if (!mimeType || mimeType === "video" || !mimeType.startsWith("video/")) {
       mimeType = this.detectMimeTypeFromFileName(fileName);
       console.log(
@@ -109,7 +130,6 @@ class VideoService {
 
     // Check if MIME type is supported
     if (!this.VIDEO_SETTINGS.supportedFormats.includes(mimeType)) {
-      console.log("Supported formats:", this.VIDEO_SETTINGS.supportedFormats);
       return {
         isValid: false,
         error: `Format video tidak didukung: ${mimeType}. Gunakan: ${this.VIDEO_SETTINGS.supportedFormats
@@ -118,7 +138,6 @@ class VideoService {
         code: "UNSUPPORTED_FORMAT",
         detectedMimeType: mimeType,
         originalType: videoFile.type,
-        supportedFormats: this.VIDEO_SETTINGS.supportedFormats,
       };
     }
 
@@ -241,15 +260,6 @@ class VideoService {
         );
       }
 
-      // Add recommendations if approaching limits
-      if (storagePercent > 70) {
-        result.recommendations = [
-          "Pertimbangkan kompresi video sebelum upload",
-          "Hapus video lama yang tidak terpakai",
-          "Gunakan resolusi 720p instead of 1080p",
-        ];
-      }
-
       console.log("Upload capacity check completed:", {
         possible: result.possible,
         warnings: result.warnings.length,
@@ -260,7 +270,7 @@ class VideoService {
     } catch (error) {
       console.error("Failed to check upload capacity:", error);
       return {
-        possible: true, // Default to allowing if check fails
+        possible: true,
         warnings: ["Tidak dapat memeriksa kapasitas. Upload dengan hati-hati."],
         error: error.message,
       };
@@ -268,7 +278,7 @@ class VideoService {
   }
 
   /**
-   * Upload video to IPFS with optimizations
+   * Upload video to IPFS dengan network selection
    */
   async uploadVideo(videoFile, options = {}) {
     try {
@@ -282,7 +292,7 @@ class VideoService {
         this.formatFileSize(videoFile?.size || 0)
       );
 
-      // Validate video first (this will also correct the MIME type)
+      // Validate video first
       const validation = this.validateVideo(videoFile);
       if (!validation.isValid) {
         console.error("Video validation failed:", validation);
@@ -295,10 +305,10 @@ class VideoService {
         fileSize: validation.formattedSize,
       });
 
-      // Create a corrected file object with proper MIME type
+      // Create corrected file object with proper MIME type
       const correctedVideoFile = {
         ...videoFile,
-        type: validation.mimeType, // Use the validated/corrected MIME type
+        type: validation.mimeType,
       };
 
       console.log("Corrected video file object:", correctedVideoFile);
@@ -315,45 +325,41 @@ class VideoService {
         name,
         courseId,
         sectionId,
-        metadata = {},
-        keyValues = {},
-        onProgress,
-        network = "public", // CHANGED: Default to PUBLIC for better accessibility
+        network = "public", // DEFAULT public untuk video agar mudah diakses
+        group_id,
+        usePrivate = false, // Option to force private
       } = options;
 
-      // Prepare video-specific metadata
-      const videoMetadata = {
-        ...metadata,
+      // Determine final network
+      const finalNetwork = usePrivate ? "private" : network;
+
+      console.log(`Upload akan menggunakan network: ${finalNetwork}`);
+
+      // Prepare video-specific keyvalues for API v3
+      const videoKeyvalues = {
         type: "video",
         contentType: "course-video",
-        originalSize: videoFile.size,
+        originalSize: videoFile.size?.toString() || "0",
         formattedSize: validation.formattedSize,
         mimeType: validation.mimeType,
-        courseId: courseId,
-        sectionId: sectionId,
-        uploadedAt: new Date().toISOString(),
-        app: "EduVerse",
-        freeTierOptimized: true,
-      };
-
-      // Prepare video-specific key values
-      const videoKeyValues = {
-        ...keyValues,
-        type: "video",
-        category: "education",
-        platform: "react-native",
         courseId: courseId || "unknown",
         sectionId: sectionId || "unknown",
+        uploadedAt: new Date().toISOString(),
+        app: "EduVerse",
+        freeTierOptimized: "true",
+        category: "education",
+        platform: "react-native",
+        uploadSource: "VideoService",
       };
 
-      console.log("Starting video upload with metadata:", videoMetadata);
+      console.log("Starting video upload with keyvalues:", videoKeyvalues);
 
-      // Upload using enhanced PinataService with corrected MIME type
+      // Upload using PinataService
       const result = await this.pinataService.uploadFile(correctedVideoFile, {
         name: name || videoFile.name,
-        network: network,
-        metadata: videoMetadata,
-        keyValues: videoKeyValues,
+        network: finalNetwork,
+        group_id: group_id,
+        keyvalues: videoKeyvalues,
       });
 
       // Enhance result with video-specific data
@@ -366,14 +372,27 @@ class VideoService {
         compressionRecommended: validation.compressionRecommended,
       };
 
+      // Generate streaming URL berdasarkan network
+      let streamingUrl;
+      if (result.isPrivate) {
+        console.log(
+          "Video is private, streaming URL will be generated on demand"
+        );
+        streamingUrl = null; // Will be created when needed via signed URL
+      } else {
+        streamingUrl = result.publicUrl;
+      }
+
       result.urls = {
         ipfs: `ipfs://${result.ipfsHash}`,
         gateway: result.publicUrl,
-        streaming: result.publicUrl,
+        streaming: streamingUrl,
       };
 
       console.log("=== VIDEO UPLOAD COMPLETED ===");
       console.log("CID:", result.ipfsHash);
+      console.log("Network:", result.network);
+      console.log("Is Private:", result.isPrivate);
       console.log("Gateway URL:", result.publicUrl);
       console.log("Video Info:", result.videoInfo);
 
@@ -385,15 +404,73 @@ class VideoService {
   }
 
   /**
-   * Upload video to IPFS with PUBLIC access (recommended for course videos)
+   * Upload video to IPFS dengan PUBLIC access (untuk kemudahan)
    */
   async uploadVideoPublic(videoFile, options = {}) {
     console.log("🌐 Uploading video with PUBLIC access for easy sharing...");
-
     return await this.uploadVideo(videoFile, {
       ...options,
-      network: "public", // Force public network
+      network: "public",
+      usePrivate: false,
     });
+  }
+
+  /**
+   * Get streaming URL untuk video (dengan signed URL jika private)
+   */
+  async getVideoStreamingUrl(cid, network = null, expires = 7200) {
+    try {
+      console.log(
+        `🎬 Getting streaming URL for video CID: ${cid} (network: ${network})`
+      );
+
+      if (!cid) {
+        throw new Error("CID is required for streaming URL");
+      }
+
+      const streamingUrl = await this.pinataService.getFasterStreamingUrl(
+        cid,
+        network
+      );
+
+      // PERBAIKAN: Pastikan streamingUrl tidak null/undefined
+      if (!streamingUrl) {
+        console.log(
+          "⚠️ No URL returned from getFasterStreamingUrl, generating fallback..."
+        );
+        const fallbackUrl = `${this.pinataService.PUBLIC_GATEWAY}/${cid}`;
+
+        return {
+          success: true,
+          streamingUrl: fallbackUrl,
+          cid: cid,
+          network: network,
+          isTemporary: false,
+          isFallback: true,
+        };
+      }
+
+      return {
+        success: true,
+        streamingUrl: streamingUrl,
+        cid: cid,
+        network: network,
+        isTemporary: network === "private", // Private URLs are temporary (signed)
+        isFallback: false,
+      };
+    } catch (error) {
+      console.error("Failed to get streaming URL:", error);
+
+      // Generate emergency fallback URL
+      const emergencyUrl = `${this.pinataService.PUBLIC_GATEWAY}/${cid}`;
+
+      return {
+        success: false,
+        error: error.message,
+        fallbackUrl: emergencyUrl,
+        streamingUrl: emergencyUrl, // Add this for consistency
+      };
+    }
   }
 
   /**
@@ -403,19 +480,27 @@ class VideoService {
     try {
       console.log("Getting current usage statistics...");
 
-      // Get files from Pinata
-      const filesResponse = await this.pinataService.listFiles({
+      // Get files from both networks
+      const publicFilesResponse = await this.pinataService.listFiles({
+        network: "public",
         limit: this.FREE_TIER_LIMITS.maxFiles,
       });
 
-      const files = filesResponse.files || [];
+      const privateFilesResponse = await this.pinataService.listFiles({
+        network: "private",
+        limit: this.FREE_TIER_LIMITS.maxFiles,
+      });
+
+      const publicFiles = publicFilesResponse.files || [];
+      const privateFiles = privateFilesResponse.files || [];
+      const allFiles = [...publicFiles, ...privateFiles];
 
       // Calculate totals
-      const totalStorage = files.reduce(
+      const totalStorage = allFiles.reduce(
         (sum, file) => sum + (file.size || 0),
         0
       );
-      const videoFiles = files.filter(
+      const videoFiles = allFiles.filter(
         (file) => file.mime_type && file.mime_type.startsWith("video/")
       );
       const videoStorage = videoFiles.reduce(
@@ -425,10 +510,10 @@ class VideoService {
 
       const usage = {
         files: {
-          used: files.length,
+          used: allFiles.length,
           limit: this.FREE_TIER_LIMITS.maxFiles,
-          remaining: this.FREE_TIER_LIMITS.maxFiles - files.length,
-          usedPercent: (files.length / this.FREE_TIER_LIMITS.maxFiles) * 100,
+          remaining: this.FREE_TIER_LIMITS.maxFiles - allFiles.length,
+          usedPercent: (allFiles.length / this.FREE_TIER_LIMITS.maxFiles) * 100,
         },
         storage: {
           used: totalStorage,
@@ -448,9 +533,13 @@ class VideoService {
           storagePercent:
             totalStorage > 0 ? (videoStorage / totalStorage) * 100 : 0,
         },
+        networks: {
+          public: publicFiles.length,
+          private: privateFiles.length,
+        },
       };
 
-      // Generate status
+      // Generate warnings and recommendations
       const warnings = [];
       const recommendations = [];
 
@@ -477,17 +566,6 @@ class VideoService {
         );
       }
 
-      if (usage.files.usedPercent > 70) {
-        recommendations.push("Gunakan Groups untuk mengorganisir file");
-        recommendations.push("Hapus file duplikat atau yang tidak terpakai");
-      }
-
-      if (usage.storage.usedPercent > 85 || usage.files.usedPercent > 85) {
-        recommendations.push(
-          "Pertimbangkan upgrade ke Picnic plan ($20/bulan)"
-        );
-      }
-
       usage.warnings = warnings;
       usage.recommendations = recommendations;
 
@@ -495,6 +573,7 @@ class VideoService {
         storage: `${usage.storage.usedFormatted} / ${usage.storage.limitFormatted}`,
         files: `${usage.files.used} / ${usage.files.limit}`,
         videos: `${usage.videos.count} videos (${usage.videos.storageFormatted})`,
+        networks: `Public: ${usage.networks.public}, Private: ${usage.networks.private}`,
       });
 
       return usage;
@@ -513,6 +592,7 @@ class VideoService {
           usedPercent: 0,
         },
         videos: { count: 0, storage: 0 },
+        networks: { public: 0, private: 0 },
         warnings: ["Tidak dapat memeriksa usage saat ini"],
         recommendations: [],
       };
@@ -535,14 +615,12 @@ class VideoService {
         "Resolusi 720p optimal untuk e-learning content",
         "Frame rate 30fps cukup untuk video edukasi",
         "Bitrate 1-2 Mbps untuk keseimbangan kualitas-ukuran",
-        "Audio AAC 128kbps untuk kualitas yang baik",
       ],
       tools: [
         "HandBrake (gratis, user-friendly)",
         "FFmpeg (command line, powerful)",
         "Adobe Media Encoder (professional)",
         "Online compressors (quick solution)",
-        "VLC Media Player (basic compression)",
       ],
       freeTierSpecific: [
         `Target ukuran video: ${this.formatFileSize(
@@ -551,7 +629,12 @@ class VideoService {
         "Gunakan resolusi 720p untuk menghemat storage",
         "Pertimbangkan split video panjang menjadi beberapa part",
         "Hapus video lama secara berkala",
-        "Monitor usage dashboard secara rutin",
+      ],
+      networkTips: [
+        "Upload ke 'public' network untuk akses mudah",
+        "Gunakan 'private' network untuk konten sensitif",
+        "File private memerlukan signed URL untuk akses",
+        "Signed URL memiliki batas waktu akses",
       ],
     };
 
@@ -565,12 +648,6 @@ class VideoService {
           )} ke max ${this.formatFileSize(this.VIDEO_SETTINGS.maxRecommended)}`,
           'Gunakan preset "Web optimized" di software kompresi',
         ];
-      } else if (currentSize > this.VIDEO_SETTINGS.large) {
-        tips.recommended = [
-          "File cukup besar, kompresi disarankan",
-          "Pertimbangkan reduce bitrate atau resolution",
-          "Test upload di waktu internet stabil",
-        ];
       }
     }
 
@@ -578,200 +655,14 @@ class VideoService {
   }
 
   /**
-   * Generate video access URL from CID
-   */
-  async getVideoUrl(cid, options = {}) {
-    try {
-      const { preferPrivate = true, forcePublic = false } = options;
-
-      console.log(`Generating video URL for CID: ${cid}`);
-
-      if (forcePublic || !preferPrivate) {
-        const publicUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-        console.log("Using public gateway URL:", publicUrl);
-        return publicUrl;
-      }
-
-      // Try to get private access URL, fallback to public
-      const url = await this.pinataService.createPrivateAccessLink(cid);
-      console.log("Generated video access URL:", url);
-
-      return url;
-    } catch (error) {
-      console.error("Failed to generate video URL:", error);
-
-      // Fallback to public gateway
-      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-      console.log("Using fallback public URL:", fallbackUrl);
-      return fallbackUrl;
-    }
-  }
-
-  /**
-   * Get video metadata by CID
-   */
-  async getVideoMetadata(cid) {
-    try {
-      console.log("Getting video metadata for CID:", cid);
-
-      // Search for the file by CID
-      const filesResponse = await this.pinataService.listFiles({
-        cid: cid,
-        limit: 1,
-      });
-
-      const files = filesResponse.files || [];
-      if (files.length === 0) {
-        throw new Error("Video not found");
-      }
-
-      const videoFile = files[0];
-
-      return {
-        success: true,
-        metadata: {
-          id: videoFile.id,
-          name: videoFile.name,
-          cid: videoFile.cid,
-          size: videoFile.size,
-          formattedSize: this.formatFileSize(videoFile.size),
-          mimeType: videoFile.mime_type,
-          createdAt: videoFile.created_at,
-          isVideo: videoFile.mime_type?.startsWith("video/") || false,
-        },
-      };
-    } catch (error) {
-      console.error("Failed to get video metadata:", error);
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-  }
-
-  /**
-   * Delete video by CID
-   */
-  async deleteVideo(fileId) {
-    try {
-      console.log("Deleting video file ID:", fileId);
-
-      const result = await this.pinataService.deleteFile(fileId);
-
-      console.log("Video deleted successfully");
-      return result;
-    } catch (error) {
-      console.error("Failed to delete video:", error);
-      throw new Error(`Gagal hapus video: ${error.message}`);
-    }
-  }
-
-  /**
-   * Detect MIME type from filename - Enhanced for video files
-   */
-  detectMimeTypeFromFileName(fileName) {
-    if (!fileName) return "application/octet-stream";
-
-    const extension = fileName.toLowerCase().split(".").pop();
-    const videoMimeTypes = {
-      // Primary video formats (most common)
-      mp4: "video/mp4",
-      webm: "video/webm",
-      mov: "video/quicktime",
-      avi: "video/x-msvideo",
-      mkv: "video/x-matroska",
-
-      // Additional video formats
-      flv: "video/x-flv",
-      wmv: "video/x-ms-wmv",
-      "3gp": "video/3gpp",
-      m4v: "video/x-m4v",
-      ogv: "video/ogg",
-      f4v: "video/x-f4v",
-      asf: "video/x-ms-asf",
-      rm: "video/vnd.rn-realvideo",
-      rmvb: "video/vnd.rn-realvideo",
-      vob: "video/x-ms-vob",
-    };
-
-    const detectedType = videoMimeTypes[extension];
-    console.log(
-      `MIME detection: ${fileName} (${extension}) -> ${
-        detectedType || "not found"
-      }`
-    );
-
-    return detectedType || "application/octet-stream";
-  }
-
-  /**
-   * Utility: Format file size
+   * Format file size utility
    */
   formatFileSize(bytes) {
     if (!bytes || bytes === 0) return "0 B";
-
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  }
-
-  /**
-   * Generate comprehensive usage report
-   */
-  async generateUsageReport() {
-    try {
-      const usage = await this.getCurrentUsage();
-      const tips = this.getOptimizationTips();
-
-      const report = {
-        timestamp: new Date().toISOString(),
-        plan: "Free Plan",
-        usage: usage,
-        limits: this.FREE_TIER_LIMITS,
-        videoSettings: this.VIDEO_SETTINGS,
-        optimizationTips: tips,
-        summary: {
-          canUploadVideos:
-            usage.storage.usedPercent < 95 && usage.files.usedPercent < 95,
-          recommendedVideoSize:
-            usage.storage.remaining > this.VIDEO_SETTINGS.medium
-              ? this.formatFileSize(this.VIDEO_SETTINGS.medium)
-              : this.formatFileSize(usage.storage.remaining),
-          urgentActions: [],
-        },
-      };
-
-      // Generate urgent actions
-      if (usage.storage.usedPercent > 95) {
-        report.summary.urgentActions.push(
-          "Storage critical - hapus file sekarang"
-        );
-      } else if (usage.storage.usedPercent > 90) {
-        report.summary.urgentActions.push(
-          "Storage hampir penuh - cleanup diperlukan"
-        );
-      }
-
-      if (usage.files.usedPercent > 95) {
-        report.summary.urgentActions.push(
-          "File limit critical - hapus file sekarang"
-        );
-      } else if (usage.files.usedPercent > 90) {
-        report.summary.urgentActions.push(
-          "File count hampir limit - organize files"
-        );
-      }
-
-      return report;
-    } catch (error) {
-      return {
-        error: error.message,
-        timestamp: new Date().toISOString(),
-        plan: "Free Plan",
-      };
-    }
   }
 }
 

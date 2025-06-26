@@ -1,3 +1,4 @@
+// filepath: c:\Web3\Eduverse\EduVerseApp\src\components\IPFSUploader.js
 import React, { useState } from "react";
 import {
   TouchableOpacity,
@@ -28,7 +29,7 @@ export const IPFSUploader = ({
   disabled = false,
   metadata = {},
   keyValues = {},
-  network = "public", // CHANGED: Default to PUBLIC for better accessibility
+  network = "public",
   groupId,
   buttonStyle,
   textStyle,
@@ -159,9 +160,6 @@ export const IPFSUploader = ({
     try {
       console.log("Starting upload with file:", file);
 
-      // DEBUG: Tambahkan debug file structure
-      pinataService.debugFileStructure(file);
-
       // Custom validation yang lebih toleran
       if (!file) {
         throw new Error("File tidak boleh kosong");
@@ -247,27 +245,25 @@ export const IPFSUploader = ({
         type: file.type,
         size: file.size,
         uri: file.uri,
-        hasData: !!file._data,
       });
+
+      // Prepare keyvalues sesuai API v3
+      const uploadKeyvalues = {
+        ...keyValues,
+        fileName: file.name,
+        fileType: file.type,
+        uploadedAt: new Date().toISOString(),
+        source: "EduVerse Mobile App",
+        platform: "React Native",
+        originalSize: file.size?.toString() || "0",
+        ...metadata, // Merge metadata ke keyvalues
+      };
 
       const result = await pinataService.uploadFile(file, {
         name: file.name,
         network,
-        groupId,
-        keyValues: {
-          ...keyValues,
-          fileName: file.name,
-          fileType: file.type,
-          uploadedAt: new Date().toISOString(),
-          source: "EduVerse Mobile App",
-        },
-        metadata: {
-          ...metadata,
-          originalSize: file.size,
-          mimeType: file.type,
-          uploadDate: new Date().toISOString(),
-          platform: "React Native",
-        },
+        group_id: groupId,
+        keyvalues: uploadKeyvalues,
       });
 
       clearInterval(progressInterval);
@@ -385,6 +381,18 @@ export const useIPFSJsonUpload = () => {
       setUploading(true);
       setProgress(0);
 
+      // Create a blob for JSON data
+      const jsonString = JSON.stringify(jsonData, null, 2);
+      const jsonBlob = new Blob([jsonString], { type: "application/json" });
+
+      // Create file object
+      const file = {
+        uri: URL.createObjectURL(jsonBlob),
+        type: "application/json",
+        name: options.name || `data_${Date.now()}.json`,
+        size: jsonBlob.size,
+      };
+
       // Simulate progress
       const progressInterval = setInterval(() => {
         setProgress((prev) => {
@@ -396,13 +404,13 @@ export const useIPFSJsonUpload = () => {
         });
       }, 100);
 
-      const result = await pinataService.uploadJson(jsonData, {
-        network: "public", // CHANGED: Default to PUBLIC for better accessibility
+      const result = await pinataService.uploadFile(file, {
+        network: "public",
         ...options,
-        metadata: {
-          ...options.metadata,
-          uploadDate: new Date().toISOString(),
+        keyvalues: {
+          ...options.keyvalues,
           dataType: "json",
+          uploadDate: new Date().toISOString(),
         },
       });
 
@@ -423,69 +431,6 @@ export const useIPFSJsonUpload = () => {
     uploadJson,
     uploading,
     progress,
-  };
-};
-
-/**
- * Custom hook untuk file operations
- */
-export const useIPFSFileOperations = () => {
-  const [loading, setLoading] = useState(false);
-
-  const listFiles = async (options = {}) => {
-    try {
-      setLoading(true);
-      return await pinataService.listFiles(options);
-    } catch (error) {
-      console.error("List files error:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteFile = async (fileId, network = "private") => {
-    try {
-      setLoading(true);
-      return await pinataService.deleteFile(fileId, network);
-    } catch (error) {
-      console.error("Delete file error:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getFile = async (fileId, network = "private") => {
-    try {
-      setLoading(true);
-      return await pinataService.getFile(fileId, network);
-    } catch (error) {
-      console.error("Get file error:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateFile = async (fileId, updates, network = "private") => {
-    try {
-      setLoading(true);
-      return await pinataService.updateFile(fileId, updates, network);
-    } catch (error) {
-      console.error("Update file error:", error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return {
-    listFiles,
-    deleteFile,
-    getFile,
-    updateFile,
-    loading,
   };
 };
 
