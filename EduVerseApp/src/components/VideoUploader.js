@@ -188,7 +188,7 @@ export const VideoUploader = ({
         });
       }, 500);
 
-      const result = await videoService.uploadVideo(videoFile, {
+      const result = await videoService.uploadVideoPublic(videoFile, {
         courseId,
         sectionId,
         metadata: {

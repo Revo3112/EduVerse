@@ -375,7 +375,7 @@ export default function IPFSTestScreen({ navigation }) {
               category: "test",
               source: "demo",
             }}
-            network="private"
+            network="public"
           />
           <IPFSUploader
             onUploadComplete={handleFileUploadComplete}
@@ -391,7 +391,7 @@ export default function IPFSTestScreen({ navigation }) {
               category: "image",
               source: "demo",
             }}
-            network="private"
+            network="public"
           />
         </View>
 

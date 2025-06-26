@@ -318,7 +318,7 @@ class VideoService {
         metadata = {},
         keyValues = {},
         onProgress,
-        network = "private",
+        network = "public", // CHANGED: Default to PUBLIC for better accessibility
       } = options;
 
       // Prepare video-specific metadata
@@ -382,6 +382,18 @@ class VideoService {
       console.error("Video upload failed:", error);
       throw new Error(`Video upload gagal: ${error.message}`);
     }
+  }
+
+  /**
+   * Upload video to IPFS with PUBLIC access (recommended for course videos)
+   */
+  async uploadVideoPublic(videoFile, options = {}) {
+    console.log("🌐 Uploading video with PUBLIC access for easy sharing...");
+
+    return await this.uploadVideo(videoFile, {
+      ...options,
+      network: "public", // Force public network
+    });
   }
 
   /**

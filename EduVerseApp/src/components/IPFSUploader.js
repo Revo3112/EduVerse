@@ -28,7 +28,7 @@ export const IPFSUploader = ({
   disabled = false,
   metadata = {},
   keyValues = {},
-  network = "private",
+  network = "public", // CHANGED: Default to PUBLIC for better accessibility
   groupId,
   buttonStyle,
   textStyle,
@@ -397,7 +397,7 @@ export const useIPFSJsonUpload = () => {
       }, 100);
 
       const result = await pinataService.uploadJson(jsonData, {
-        network: "private",
+        network: "public", // CHANGED: Default to PUBLIC for better accessibility
         ...options,
         metadata: {
           ...options.metadata,
