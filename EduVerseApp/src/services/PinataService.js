@@ -551,7 +551,7 @@ class PinataService {
   }
 
   /**
-   * Upload file ke IPFS - React Native Optimized - MAJOR FIX 2025
+   * Upload file ke IPFS - React Native Optimized dengan Pinata v3 API
    */
   async uploadFile(file, options = {}) {
     try {
@@ -563,7 +563,7 @@ class PinataService {
 
       const {
         name,
-        network = "public", // DEFAULT TO PUBLIC untuk compatibility yang lebih baik
+        network = "public", // DEFAULT TO PUBLIC
         groupId,
         keyValues = {},
         metadata = {},
@@ -578,14 +578,13 @@ class PinataService {
         throw new Error("File URI atau data tidak ditemukan");
       }
 
-      // PERBAIKAN UTAMA: Buat FormData dengan struktur yang benar sesuai Pinata API
+      // SESUAI DOKUMENTASI PINATA V3: Buat FormData dengan format yang benar
       const formData = new FormData();
 
-      // Tentukan file object yang akan diupload - FIXED untuk React Native
+      // Tentukan file object yang akan diupload
       let fileForUpload;
 
       if (processedFile._data && processedFile._data.blobId) {
-        // Untuk file dengan _data structure (React Native Blob)
         console.log("Using _data blob structure");
         fileForUpload = {
           uri: processedFile.uri || `blob:${processedFile._data.blobId}`,
@@ -593,7 +592,6 @@ class PinataService {
           name: processedFile.name,
         };
       } else if (processedFile.uri) {
-        // Untuk file dengan URI standar - IMPROVED
         console.log("Using standard URI structure");
         fileForUpload = {
           uri: processedFile.uri,
@@ -606,82 +604,71 @@ class PinataService {
 
       console.log("Final file object for upload:", fileForUpload);
 
-      // PERBAIKAN: Validasi MIME type sebelum upload
-      if (!fileForUpload.type || fileForUpload.type === "image") {
+      // Validasi MIME type sebelum upload
+      if (
+        !fileForUpload.type ||
+        fileForUpload.type === "image" ||
+        fileForUpload.type === "video"
+      ) {
         const detectedType = this.detectMimeType(fileForUpload.name);
         fileForUpload.type = detectedType;
         console.log("Corrected MIME type to:", detectedType);
       }
 
-      // PERBAIKAN KRITIS: Format FormData sesuai dengan Pinata v3 API
-      // Append file ke FormData dengan format yang benar
+      // SESUAI DOKUMENTASI V3: Append file dengan parameter yang benar
       formData.append("file", fileForUpload);
 
-      // Append required fields sesuai dokumentasi Pinata
-      const pinataOptions = {
-        cidVersion: 1,
+      // SESUAI DOKUMENTASI V3: Network parameter (required)
+      formData.append("network", network);
+
+      // SESUAI DOKUMENTASI V3: Name parameter (optional)
+      if (name || processedFile.name) {
+        formData.append("name", name || processedFile.name);
+      }
+
+      // SESUAI DOKUMENTASI V3: Group ID parameter (optional)
+      if (groupId) {
+        formData.append("group_id", groupId);
+      }
+
+      // SESUAI DOKUMENTASI V3: Key values parameter (optional)
+      const combinedKeyValues = {
+        ...keyValues,
+        ...metadata,
+        originalFileName: processedFile.name,
+        fileSize: processedFile.size?.toString(),
+        mimeType: fileForUpload.type,
+        uploadedAt: new Date().toISOString(),
       };
 
-      const pinataMetadata = {
-        name: name || processedFile.name,
-        keyvalues: {
-          ...keyValues,
-          ...metadata,
-          originalFileName: processedFile.name,
-          fileSize: processedFile.size.toString(),
-          mimeType: fileForUpload.type,
-          uploadedAt: new Date().toISOString(),
-        },
-      };
-
-      // Append Pinata specific fields
-      formData.append("pinataOptions", JSON.stringify(pinataOptions));
-      formData.append("pinataMetadata", JSON.stringify(pinataMetadata));
-
-      // Network parameter untuk Pinata v3
-      if (network === "private") {
-        formData.append(
-          "pinataOptions",
-          JSON.stringify({
-            ...pinataOptions,
-            customPinPolicy: {
-              regions: [
-                {
-                  id: "FRA1",
-                  desiredReplicationCount: 1,
-                },
-              ],
-            },
-          })
-        );
+      if (Object.keys(combinedKeyValues).length > 0) {
+        // Convert key-value pairs to strings as required by API
+        const stringKeyValues = {};
+        Object.entries(combinedKeyValues).forEach(([key, value]) => {
+          stringKeyValues[key] = String(value);
+        });
+        formData.append("keyvalues", JSON.stringify(stringKeyValues));
       }
 
       console.log("FormData prepared for Pinata v3 API");
-      console.log("Pinata Options:", pinataOptions);
-      console.log("Pinata Metadata:", pinataMetadata);
-
-      console.log("Sending upload request to Pinata v3 API...");
+      console.log("Network:", network);
+      console.log("Name:", name || processedFile.name);
+      console.log("Group ID:", groupId);
+      console.log("Key Values:", combinedKeyValues);
 
       // Gunakan timeout yang dinamis berdasarkan ukuran file
-      const uploadTimeout = Math.max(120000, (processedFile.size || 0) * 0.002); // 120s minimum atau 2ms per byte
+      const uploadTimeout = Math.max(120000, (processedFile.size || 0) * 0.002);
       console.log(`Upload timeout set to: ${uploadTimeout}ms`);
 
-      // PERBAIKAN KRITIS 2025: Gunakan endpoint yang benar berdasarkan network type
-      let uploadEndpoint;
-      if (network === "public") {
-        uploadEndpoint = `https://uploads.pinata.cloud/v3/files`;
-        console.log("Using PUBLIC upload endpoint:", uploadEndpoint);
-      } else {
-        uploadEndpoint = `https://uploads.pinata.cloud/v3/files`;
-        console.log("Using PRIVATE upload endpoint:", uploadEndpoint);
-      }
+      // SESUAI DOKUMENTASI V3: Gunakan endpoint upload yang benar
+      const uploadEndpoint = `${this.UPLOAD_URL}/files`;
+      console.log("Using upload endpoint:", uploadEndpoint);
 
       const response = await this.makeRequest(uploadEndpoint, {
         method: "POST",
         headers: {
-          // PERBAIKAN: Hanya Authorization header untuk FormData
           Authorization: `Bearer ${this.JWT}`,
-          // Jangan set Content-Type untuk FormData - biarkan browser/RN yang handle
+          // Jangan set Content-Type untuk FormData
         },
         body: formData,
         timeout: uploadTimeout,
@@ -689,31 +676,20 @@ class PinataService {
 
       console.log("Upload successful:", response);
 
-      // Handle different response formats from Pinata v3 API - IMPROVED DUPLICATE HANDLING
+      // SESUAI DOKUMENTASI V3: Handle response format
       let responseData;
       let isDuplicate = false;
 
-      // Check for duplicate file response
-      if (response && (response.is_duplicate || response.isDuplicate)) {
-        isDuplicate = true;
-        console.log("Duplicate file detected - file already exists on IPFS");
-      }
-
-      // Pinata v3 API structure
+      // Response format: { data: { id, name, cid, created_at, size, number_of_files, mime_type, user_id, group_id, is_duplicate } }
       if (response && response.data) {
         responseData = response.data;
-        isDuplicate = isDuplicate || response.data.is_duplicate;
-      } else if (response && response.IpfsHash) {
-        // Legacy v2 format fallback
-        responseData = {
-          cid: response.IpfsHash,
-          name: response.PinSize ? `${response.PinSize}` : processedFile.name,
-          size: response.PinSize || processedFile.size,
-        };
+        isDuplicate = Boolean(response.data.is_duplicate);
+        console.log("Using v3 API response format");
       } else {
-        // Direct response
+        // Fallback untuk format response yang tidak standar
         responseData = response;
-        isDuplicate = isDuplicate || response.is_duplicate;
+        isDuplicate = Boolean(response.is_duplicate);
+        console.log("Using fallback response format");
       }
 
       console.log("Processed response data:", responseData);
@@ -721,7 +697,7 @@ class PinataService {
         console.log("File was a duplicate - this is normal and not an error");
       }
 
-      // Validate required fields
+      // Validate required fields dari v3 API response
       if (!responseData || !responseData.cid) {
         throw new Error("Invalid response from Pinata - missing CID");
       }
@@ -733,20 +709,25 @@ class PinataService {
         ipfsHash: responseData.cid,
         fileName: responseData.name || processedFile.name,
         fileSize: responseData.size || processedFile.size,
-        network: network, // TAMBAHAN: Track network type
-        publicUrl: `https://gateway.pinata.cloud/ipfs/${responseData.cid}`,
+        fileId: responseData.id, // V3 API provides file ID
+        mimeType: responseData.mime_type || fileForUpload.type,
+        createdAt: responseData.created_at,
+        userId: responseData.user_id,
+        groupId: responseData.group_id,
+        numberOfFiles: responseData.number_of_files,
+        network: network,
+        publicUrl: `${this.PUBLIC_GATEWAY}/${responseData.cid}`,
         privateUrl: null, // Will be set below if needed
         message: isDuplicate
           ? "File uploaded successfully (duplicate detected - file already exists)"
           : "File uploaded successfully",
       };
 
-      // PERBAIKAN 2025: Hanya buat private access link jika benar-benar network private
-      // Dan hanya jika file memang di-upload sebagai private
-      if (network === "private" && responseData.network === "private") {
+      // Untuk private network, coba buat signed URL
+      if (network === "private") {
         try {
           console.log(
-            "Creating private access link for PRIVATE network file, CID:",
+            "Creating signed URL for private network file, CID:",
             responseData.cid
           );
 
@@ -758,25 +739,12 @@ class PinataService {
           result.privateUrl = await this.createPrivateAccessLink(
             responseData.cid
           );
-          console.log(
-            "Private access link created successfully:",
-            result.privateUrl
-          );
+          console.log("Signed URL created successfully:", result.privateUrl);
         } catch (linkError) {
-          console.warn(
-            "Failed to create private access link:",
-            linkError.message
-          );
-          // IMPROVED: Set a fallback URL instead of null
-          result.privateUrl = `https://gateway.pinata.cloud/ipfs/${responseData.cid}`;
-          console.warn(
-            "Using fallback gateway URL for private file:",
-            result.privateUrl
-          );
-
-          // Add warning message to result
+          console.warn("Failed to create signed URL:", linkError.message);
+          result.privateUrl = result.publicUrl;
           result.warning =
-            "Private access link creation failed. Using public gateway URL as fallback.";
+            "Signed URL creation failed. Using public gateway URL as fallback.";
         }
       } else {
         // Untuk public network, gunakan public gateway
@@ -788,7 +756,7 @@ class PinataService {
     } catch (error) {
       console.error("Upload file error:", error);
 
-      // Enhanced error handling dengan informasi lebih detail
+      // Enhanced error handling
       let errorMessage = error.message;
 
       if (error.message === "Network request failed") {
@@ -815,7 +783,7 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Upload JSON data ke IPFS - React Native Optimized - 2025 UPDATE
+   * Upload JSON data ke IPFS - SESUAI PINATA V3 API
    */
   async uploadJson(jsonData, options = {}) {
     try {
@@ -825,19 +793,19 @@ Kemungkinan penyebab:
 
       const {
         name = "data.json",
-        network = "public", // DEFAULT TO PUBLIC untuk compatibility yang lebih baik
+        network = "public", // DEFAULT TO PUBLIC
         groupId,
         keyValues = {},
         metadata = {},
       } = options;
 
-      // Convert JSON to proper format untuk React Native
+      // Convert JSON to string
       const jsonString =
         typeof jsonData === "string"
           ? jsonData
           : JSON.stringify(jsonData, null, 2);
 
-      // Create file object compatible dengan React Native
+      // Create file object untuk React Native
       const fileObject = {
         uri: `data:application/json;base64,${btoa(jsonString)}`,
         type: "application/json",
@@ -849,6 +817,7 @@ Kemungkinan penyebab:
         name: fileObject.name,
         type: fileObject.type,
         size: fileObject.size,
+        network: network,
         preview: jsonString.substring(0, 100) + "...",
       });
 
@@ -856,8 +825,16 @@ Kemungkinan penyebab:
         name,
         network,
         groupId,
-        keyValues: { ...keyValues, type: "json" },
-        metadata: { ...metadata, contentType: "application/json" },
+        keyValues: {
+          ...keyValues,
+          contentType: "json",
+          dataType: "application/json",
+        },
+        metadata: {
+          ...metadata,
+          mimeType: "application/json",
+          isJsonData: "true",
+        },
       });
     } catch (error) {
       console.error("Upload JSON error:", error);
@@ -866,12 +843,86 @@ Kemungkinan penyebab:
   }
 
   /**
-   * List files dari Pinata - 2025 UPDATE
+   * Get file content by CID - IMPROVED dengan smart URL detection
+   */
+  async getFileContent(cid, options = {}) {
+    try {
+      const {
+        network = null,
+        groupId = null,
+        timeout = 30000,
+        preferSigned = false,
+      } = options;
+
+      console.log("Getting file content for CID:", cid);
+
+      // Get optimal access URL
+      const accessUrl = await this.getFileAccessUrl(cid, {
+        network,
+        groupId,
+        preferSigned,
+      });
+
+      console.log("Using access URL:", accessUrl);
+
+      // Fetch content with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      try {
+        const response = await fetch(accessUrl, {
+          signal: controller.signal,
+          headers: {
+            // Add any necessary headers
+          },
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const contentType =
+          response.headers.get("content-type") || "application/octet-stream";
+
+        return {
+          success: true,
+          url: accessUrl,
+          content: response,
+          contentType: contentType,
+          size: response.headers.get("content-length"),
+          cid: cid,
+          // Helper methods untuk different content types
+          async text() {
+            return await response.text();
+          },
+          async json() {
+            return await response.json();
+          },
+          async blob() {
+            return await response.blob();
+          },
+          async arrayBuffer() {
+            return await response.arrayBuffer();
+          },
+        };
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } catch (error) {
+      console.error("Get file content error:", error);
+      throw new Error(`Gagal mengambil konten file: ${error.message}`);
+    }
+  }
+
+  /**
+   * List files dari Pinata v3 API - SESUAI DOKUMENTASI
    */
   async listFiles(options = {}) {
     try {
       const {
-        network = "public", // DEFAULT TO PUBLIC untuk compatibility yang lebih baik
+        network = "public", // DEFAULT TO PUBLIC
         limit = 10,
         name,
         groupId,
@@ -883,11 +934,12 @@ Kemungkinan penyebab:
         pageToken,
       } = options;
 
-      // Build query parameters
+      // Build query parameters sesuai dokumentasi v3 API
       const params = new URLSearchParams();
+
       if (limit) params.append("limit", limit.toString());
       if (name) params.append("name", name);
-      if (groupId) params.append("group", groupId);
+      if (groupId) params.append("group", groupId); // API uses 'group' not 'group_id'
       if (mimeType) params.append("mimeType", mimeType);
       if (cid) params.append("cid", cid);
       if (cidPending !== undefined)
@@ -895,36 +947,55 @@ Kemungkinan penyebab:
       if (order) params.append("order", order);
       if (pageToken) params.append("pageToken", pageToken);
 
-      // Handle metadata filtering
+      // Handle metadata filtering - sesuai dokumentasi v3 API
       if (metadata && typeof metadata === "object") {
-        // Convert metadata object ke format yang diharapkan API
         Object.entries(metadata).forEach(([key, value]) => {
-          params.append(`metadata[${key}]`, value);
+          params.append(`metadata[${key}]`, value.toString());
         });
       }
 
       const queryString = params.toString();
+
+      // SESUAI DOKUMENTASI V3: Format URL dengan network di path
       const url = `${this.BASE_URL}/files/${network}${
         queryString ? `?${queryString}` : ""
       }`;
+
+      console.log("Listing files from:", url);
 
       const response = await this.makeRequest(url, {
         method: "GET",
         headers: this.getHeaders(),
       });
 
+      console.log("List files response:", response);
+
+      // SESUAI DOKUMENTASI V3: Response format
+      // { data: { files: [...], next_page_token: string } }
+      const files = response.data?.files || [];
+      const nextPageToken = response.data?.next_page_token || null;
+
       return {
         success: true,
-        files: response.data.files || [],
-        count: response.data.files ? response.data.files.length : 0,
-        nextPageToken: response.data.next_page_token,
+        files: files,
+        count: files.length,
+        nextPageToken: nextPageToken,
+        hasMore: !!nextPageToken,
+        network: network,
         data: response.data,
+        // Tambahan untuk kompatibilitas
+        totalFiles: files.length,
+        currentPage: pageToken || "first",
       };
     } catch (error) {
       console.error("List files error:", error);
       return {
         success: false,
         error: error.message || "Gagal mengambil daftar file",
+        files: [],
+        count: 0,
+        nextPageToken: null,
+        hasMore: false,
       };
     }
   }
@@ -997,111 +1068,123 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Create signed URL for dedicated gateway access using /files/sign endpoint
+   * Create signed URL untuk akses file private - SESUAI DOKUMENTASI V3 API
    */
-  async createPrivateAccessLink(cid, options = {}) {
-    // Wait for plan detection to complete if still in progress
-    while (this._planDetectionInProgress) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    // Check if we've already detected that this is a free plan
-    if (this._freePlanDetected) {
-      console.log(
-        "Free plan detected, using optimized gateway URL for video streaming"
-      );
-      return await this.getVideoStreamingUrl(cid);
-    }
-
+  async createSignedUrl(cid, options = {}) {
     try {
       const {
-        expires = 3600, // 1 hour default (in seconds from now)
+        expires = 3600, // Default 1 hour in seconds
         method = "GET",
+        date = Math.floor(Date.now() / 1000), // Current timestamp in seconds
       } = options;
 
       console.log("🔐 Creating signed URL for CID:", cid);
+      console.log("Options:", { expires, method, date });
 
-      // Use correct endpoint and payload format based on Pinata API docs
+      // SESUAI DOKUMENTASI V3: Request body format
       const requestBody = {
         cid: cid,
-        expires: expires, // expires in seconds from now
+        expires: expires,
+        date: date,
         method: method,
       };
 
-      // Single attempt without retries for 403 errors
-      const response = await this.makeRequest(
-        `${this.BASE_URL}/files/sign`,
-        {
-          method: "POST",
-          headers: this.getHeaders(),
-          body: JSON.stringify(requestBody),
-          timeout: 15000,
-        },
-        1
-      ); // Only 1 attempt, no retries
+      console.log("Request body:", requestBody);
 
-      console.log("✅ Signed URL created successfully");
+      // SESUAI DOKUMENTASI V3: Endpoint untuk signed URLs
+      const signedUrlEndpoint = `${this.BASE_URL}/files/sign`;
 
-      // The response should contain a signed URL in the format:
-      // https://dedicated-gateway.mypinata.cloud/files/[cid]?X-Algorithm=...&X-Signature=...
-      const signedUrl = response.data || response.url || response;
+      const response = await this.makeRequest(signedUrlEndpoint, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify(requestBody),
+        timeout: 15000,
+      });
 
-      if (signedUrl && typeof signedUrl === "string") {
-        console.log("🚀 Using signed URL for dedicated gateway access");
-        return signedUrl;
+      console.log("Signed URL response:", response);
+
+      // Response bisa berupa string URL langsung atau object dengan data
+      let signedUrl;
+      if (typeof response === "string") {
+        signedUrl = response;
+      } else if (response.data) {
+        signedUrl = response.data;
+      } else if (response.url) {
+        signedUrl = response.url;
       } else {
         throw new Error("Invalid signed URL response format");
       }
-    } catch (error) {
-      // Check if this is a 403 Forbidden error (free plan limitation)
-      if (
-        error.message.includes("403") ||
-        error.message.includes("Forbidden") ||
-        error.message.includes("Premium feature")
-      ) {
-        console.log(
-          "🔓 Free plan detected: Signed URLs not available, using optimized gateway"
-        );
 
-        // Set flag to avoid future attempts
-        this._freePlanDetected = true;
-
-        // Return optimized gateway URL for video streaming
-        const optimizedUrl = await this.getVideoStreamingUrl(cid);
-        console.log("Using optimized gateway URL for video:", optimizedUrl);
-        return optimizedUrl;
+      if (!signedUrl || typeof signedUrl !== "string") {
+        throw new Error("Failed to generate signed URL");
       }
 
-      // For other errors, also return optimized URL but log the error
-      console.warn("Private access link creation failed:", error.message);
-      const fallbackUrl = await this.getVideoStreamingUrl(cid);
-      console.log("Using fallback optimized gateway URL:", fallbackUrl);
-      return fallbackUrl;
+      console.log("✅ Signed URL created successfully");
+
+      return {
+        success: true,
+        signedUrl: signedUrl,
+        cid: cid,
+        expires: expires,
+        expiresAt: new Date((date + expires) * 1000).toISOString(),
+        method: method,
+      };
+    } catch (error) {
+      console.error("Create signed URL error:", error);
+
+      // Handle specific error cases
+      if (
+        error.message.includes("403") ||
+        error.message.includes("Forbidden")
+      ) {
+        throw new Error(
+          "Signed URLs require a paid Pinata plan. This feature is not available on the free tier."
+        );
+      }
+
+      if (
+        error.message.includes("401") ||
+        error.message.includes("Unauthorized")
+      ) {
+        throw new Error(
+          "Invalid API key or insufficient permissions for signed URL creation."
+        );
+      }
+
+      throw new Error(`Failed to create signed URL: ${error.message}`);
     }
   }
 
   /**
-   * Create group
+   * Create group - SESUAI DOKUMENTASI V3 API
    */
   async createGroup(name, options = {}) {
     try {
       const { network = "private", isPublic = false } = options;
+
+      const requestBody = {
+        name: name,
+        is_public: isPublic,
+      };
+
+      console.log("Creating group:", requestBody);
 
       const response = await this.makeRequest(
         `${this.BASE_URL}/groups/${network}`,
         {
           method: "POST",
           headers: this.getHeaders(),
-          body: JSON.stringify({
-            name,
-            is_public: isPublic,
-          }),
+          body: JSON.stringify(requestBody),
         }
       );
 
       return {
         success: true,
         data: response.data,
+        groupId: response.data?.id,
+        name: response.data?.name,
+        isPublic: response.data?.is_public,
+        network: network,
       };
     } catch (error) {
       console.error("Create group error:", error);
@@ -1110,7 +1193,7 @@ Kemungkinan penyebab:
   }
 
   /**
-   * List groups
+   * List groups - SESUAI DOKUMENTASI V3 API
    */
   async listGroups(network = "private", options = {}) {
     try {
@@ -1135,8 +1218,11 @@ Kemungkinan penyebab:
 
       return {
         success: true,
-        groups: response.data.groups || [],
-        nextPageToken: response.data.next_page_token,
+        groups: response.data?.groups || [],
+        count: response.data?.groups?.length || 0,
+        nextPageToken: response.data?.next_page_token,
+        hasMore: !!response.data?.next_page_token,
+        network: network,
       };
     } catch (error) {
       console.error("List groups error:", error);
@@ -1145,7 +1231,7 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Add file to group
+   * Add file to group - SESUAI DOKUMENTASI V3 API
    */
   async addFileToGroup(groupId, fileId, network = "private") {
     try {
@@ -1160,6 +1246,9 @@ Kemungkinan penyebab:
       return {
         success: true,
         message: "File berhasil ditambahkan ke group",
+        groupId: groupId,
+        fileId: fileId,
+        network: network,
       };
     } catch (error) {
       console.error("Add file to group error:", error);
@@ -1168,7 +1257,7 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Remove file from group
+   * Remove file from group - SESUAI DOKUMENTASI V3 API
    */
   async removeFileFromGroup(groupId, fileId, network = "private") {
     try {
@@ -1183,6 +1272,9 @@ Kemungkinan penyebab:
       return {
         success: true,
         message: "File berhasil dihapus dari group",
+        groupId: groupId,
+        fileId: fileId,
+        network: network,
       };
     } catch (error) {
       console.error("Remove file from group error:", error);
@@ -1671,277 +1763,227 @@ Kemungkinan penyebab:
   }
 
   /**
-   * Get file access URL dengan deteksi network type otomatis - 2025 FIX
-   * Method ini akan mendeteksi apakah file public atau private dan return URL yang sesuai
+   * Comprehensive API health check
    */
-  async getOptimizedFileUrl(cid, options = {}) {
-    const {
-      forcePublic = false,
-      preferredNetwork = null,
-      useCache = true,
-    } = options;
+  async healthCheck() {
+    console.log("🏥 Performing comprehensive health check...");
 
-    console.log(`🔍 Getting optimized URL for CID: ${cid}`);
-
-    // Jika force public, langsung return public gateway
-    if (forcePublic) {
-      const publicUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
-      console.log("🌐 Using forced public gateway:", publicUrl);
-      return publicUrl;
-    }
+    const results = {
+      timestamp: new Date().toISOString(),
+      overall: "unknown",
+      checks: {},
+    };
 
     try {
-      // STEP 1: Coba deteksi network type dari file metadata
-      let fileNetwork = preferredNetwork;
-
-      if (!fileNetwork && useCache) {
-        try {
-          console.log("🔍 Detecting file network type...");
-
-          // Coba ambil info file untuk mengetahui network type
-          const fileInfo = await this.getFileInfo(cid);
-          if (fileInfo && fileInfo.network) {
-            fileNetwork = fileInfo.network;
-            console.log(`📋 File network detected: ${fileNetwork}`);
+      // 1. Basic authentication test
+      console.log("1. Testing basic authentication...");
+      try {
+        const authResponse = await this.makeRequest(
+          "https://api.pinata.cloud/data/testAuthentication",
+          {
+            method: "GET",
+            headers: this.getHeaders(),
+            timeout: 10000,
           }
-        } catch (error) {
-          console.log("⚠️ Could not detect file network type:", error.message);
-        }
+        );
+        results.checks.authentication = {
+          status: "success",
+          message: "Authentication successful",
+          data: authResponse,
+        };
+      } catch (error) {
+        results.checks.authentication = {
+          status: "failed",
+          message: error.message,
+        };
       }
 
-      // STEP 2: Jika file adalah public network, gunakan public gateway
-      if (fileNetwork === "public") {
-        const publicUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
-        console.log("🌐 Using public gateway for public file:", publicUrl);
-        return publicUrl;
-      }
-
-      // STEP 3: Jika file private, coba buat signed URL untuk dedicated gateway
-      if (fileNetwork === "private" || !fileNetwork) {
-        // Coba dedicated gateway dengan authentication
-        if (this.DEDICATED_GATEWAY && !this._freePlanDetected) {
-          try {
-            console.log("🔐 Attempting signed URL for dedicated gateway...");
-            const signedUrl = await this.createPrivateAccessLink(cid, {
-              expires: 3600, // 1 hour
-            });
-
-            if (signedUrl && signedUrl !== `${this.PUBLIC_GATEWAY}/${cid}`) {
-              console.log("✅ Using signed dedicated gateway URL");
-              return signedUrl;
-            }
-          } catch (error) {
-            console.log("⚠️ Signed URL failed:", error.message);
-          }
-        }
-
-        // Fallback: Coba dedicated gateway tanpa authentication
-        if (this.DEDICATED_GATEWAY) {
-          const dedicatedUrl = this.DEDICATED_GATEWAY.endsWith("/ipfs")
-            ? `${this.DEDICATED_GATEWAY}/${cid}`
-            : `${this.DEDICATED_GATEWAY}/ipfs/${cid}`;
-
-          console.log(
-            "🔓 Trying dedicated gateway without auth:",
-            dedicatedUrl
-          );
-
-          // Test accessibility
-          try {
-            const testResponse = await fetch(dedicatedUrl, {
-              method: "HEAD",
-              timeout: 5000,
-            });
-
-            if (testResponse.ok) {
-              console.log("✅ Dedicated gateway accessible without auth");
-              return dedicatedUrl;
-            }
-          } catch (testError) {
-            console.log(
-              "❌ Dedicated gateway not accessible:",
-              testError.message
-            );
-          }
-        }
-      }
-
-      // STEP 4: Final fallback - public gateway
-      const fallbackUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
-      console.log("🆘 Using public gateway as final fallback:", fallbackUrl);
-      return fallbackUrl;
-    } catch (error) {
-      console.error("❌ Error getting optimized URL:", error.message);
-
-      // Emergency fallback
-      const emergencyUrl = `${this.PUBLIC_GATEWAY}/${cid}`;
-      console.log("🚨 Using emergency public gateway:", emergencyUrl);
-      return emergencyUrl;
-    }
-  }
-
-  /**
-   * Get file information including network type - 2025 METHOD
-   */
-  async getFileInfo(cid) {
-    try {
-      // Coba public API first untuk mendapatkan basic info
-      const publicResponse = await this.makeRequest(
-        `${this.BASE_URL}/files/public?cid=${cid}&limit=1`,
-        {
-          method: "GET",
-          headers: this.getHeaders(),
-          timeout: 5000,
-        },
-        1 // Single attempt
-      );
-
-      if (
-        publicResponse &&
-        publicResponse.data &&
-        publicResponse.data.length > 0
-      ) {
-        const fileInfo = publicResponse.data[0];
-        console.log("📋 File found in public network:", fileInfo);
-        return {
-          ...fileInfo,
+      // 2. List files test
+      console.log("2. Testing file listing...");
+      try {
+        const listResult = await this.listFiles({
+          limit: 1,
           network: "public",
+        });
+        results.checks.fileListAccess = {
+          status: listResult.success ? "success" : "failed",
+          message: listResult.success ? "File listing works" : listResult.error,
+          fileCount: listResult.count,
+        };
+      } catch (error) {
+        results.checks.fileListAccess = {
+          status: "failed",
+          message: error.message,
         };
       }
-    } catch (error) {
-      // Not in public, might be private
-      console.log("File not found in public network, checking private...");
-    }
 
-    try {
-      // Coba private API
-      const privateResponse = await this.makeRequest(
-        `${this.BASE_URL}/files/private?cid=${cid}&limit=1`,
-        {
-          method: "GET",
-          headers: this.getHeaders(),
+      // 3. Upload endpoint test (without actual upload)
+      console.log("3. Testing upload endpoint accessibility...");
+      try {
+        const uploadEndpointTest = await fetch(`${this.UPLOAD_URL}/files`, {
+          method: "OPTIONS",
+          headers: { Authorization: `Bearer ${this.JWT}` },
+        });
+        results.checks.uploadEndpoint = {
+          status: uploadEndpointTest.ok ? "success" : "warning",
+          message: uploadEndpointTest.ok
+            ? "Upload endpoint accessible"
+            : "Upload endpoint may have issues",
+          statusCode: uploadEndpointTest.status,
+        };
+      } catch (error) {
+        results.checks.uploadEndpoint = {
+          status: "failed",
+          message: error.message,
+        };
+      }
+
+      // 4. Plan type detection
+      console.log("4. Checking plan type...");
+      const planStatus = this.getPlanStatus();
+      results.checks.planType = {
+        status: "info",
+        planType: planStatus.planType,
+        freePlanDetected: planStatus.freePlanDetected,
+        dedicatedGateway: !!planStatus.dedicatedGateway,
+      };
+
+      // 5. Gateway connectivity test
+      console.log("5. Testing gateway connectivity...");
+      try {
+        const gatewayTest = await fetch(this.PUBLIC_GATEWAY, {
+          method: "HEAD",
           timeout: 5000,
-        },
-        1 // Single attempt
+        });
+        results.checks.gatewayConnectivity = {
+          status: gatewayTest.ok ? "success" : "warning",
+          message: "Public gateway accessible",
+          gateway: this.PUBLIC_GATEWAY,
+        };
+      } catch (error) {
+        results.checks.gatewayConnectivity = {
+          status: "failed",
+          message: error.message,
+          gateway: this.PUBLIC_GATEWAY,
+        };
+      }
+
+      // Calculate overall status
+      const failedChecks = Object.values(results.checks).filter(
+        (check) => check.status === "failed"
+      );
+      const warningChecks = Object.values(results.checks).filter(
+        (check) => check.status === "warning"
       );
 
-      if (
-        privateResponse &&
-        privateResponse.data &&
-        privateResponse.data.length > 0
-      ) {
-        const fileInfo = privateResponse.data[0];
-        console.log("📋 File found in private network:", fileInfo);
-        return {
-          ...fileInfo,
-          network: "private",
-        };
+      if (failedChecks.length === 0) {
+        results.overall = warningChecks.length === 0 ? "healthy" : "warning";
+      } else {
+        results.overall = "unhealthy";
       }
-    } catch (error) {
-      console.log("File not found in private network either");
-    }
 
-    // Return null if not found in either network
-    return null;
+      console.log(
+        `🏥 Health check completed: ${results.overall.toUpperCase()}`
+      );
+      return results;
+    } catch (error) {
+      console.error("❌ Health check failed:", error);
+      results.overall = "error";
+      results.error = error.message;
+      return results;
+    }
   }
 
   /**
-   * Test file accessibility - 2025 METHOD
+   * Validate Pinata API key format and basic info
    */
-  async testFileAccess(url, timeout = 5000) {
+  validateApiKey() {
+    const issues = [];
+    const info = {};
+
+    if (!this.JWT) {
+      issues.push("PINATA_JWT environment variable is not set");
+      return { isValid: false, issues, info };
+    }
+
+    info.hasJWT = true;
+    info.jwtLength = this.JWT.length;
+
+    // Basic JWT format validation
+    if (typeof this.JWT !== "string") {
+      issues.push("PINATA_JWT must be a string");
+    } else if (this.JWT.length < 50) {
+      issues.push(
+        "PINATA_JWT appears to be too short (minimum ~100 characters expected)"
+      );
+    } else if (!this.JWT.startsWith("eyJ")) {
+      issues.push(
+        "PINATA_JWT does not appear to be a valid JWT token (should start with 'eyJ')"
+      );
+    }
+
+    // Try to decode JWT header to get basic info (without validation)
     try {
-      const response = await fetch(url, {
-        method: "HEAD",
-        timeout: timeout,
-      });
-
-      return {
-        accessible: response.ok,
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-      };
+      const headerB64 = this.JWT.split(".")[0];
+      const header = JSON.parse(atob(headerB64));
+      info.jwtHeader = header;
+      info.algorithm = header.alg;
+      info.tokenType = header.typ;
     } catch (error) {
-      return {
-        accessible: false,
-        error: error.message,
-      };
-    }
-  }
-
-  /**
-   * Get optimized video streaming URL using 2025 API standards
-   */
-  async getVideoStreamingUrl(cid) {
-    console.log("🎥 Getting optimized video streaming URL for CID:", cid);
-
-    // Gunakan method baru yang lebih smart
-    return await this.getOptimizedFileUrl(cid, {
-      forcePublic: false, // Jangan force public, biarkan auto-detect
-      preferredNetwork: null, // Auto detect network
-      useCache: true,
-    });
-  }
-
-  /**
-   * Get fastest streaming URL by prioritizing optimal access method - 2025 UPDATE
-   */
-  async getFasterStreamingUrl(cid) {
-    console.log("🚀 Getting fastest streaming URL for CID:", cid);
-
-    // Gunakan method baru yang sudah dioptimasi
-    return await this.getOptimizedFileUrl(cid, {
-      forcePublic: false,
-      preferredNetwork: null,
-      useCache: true,
-    });
-  }
-
-  /**
-   * Get file access URL untuk backward compatibility - 2025 UPDATE
-   */
-  async getFileAccessUrl(cid, options = {}) {
-    const { isPrivate = null, forcePublic = false } = options;
-
-    console.log(`🔗 Getting file access URL for CID: ${cid}`);
-
-    // Jika isPrivate diberikan secara eksplisit, gunakan itu
-    let preferredNetwork = null;
-    if (isPrivate === true) {
-      preferredNetwork = "private";
-    } else if (isPrivate === false) {
-      preferredNetwork = "public";
+      issues.push("PINATA_JWT format appears invalid (cannot decode header)");
     }
 
-    return await this.getOptimizedFileUrl(cid, {
-      forcePublic: forcePublic,
-      preferredNetwork: preferredNetwork,
-      useCache: true,
-    });
+    return {
+      isValid: issues.length === 0,
+      issues,
+      info,
+    };
   }
 
   /**
-   * Upload file sebagai PUBLIC secara eksplisit - 2025 METHOD
+   * Get service configuration summary
    */
-  async uploadFilePublic(file, options = {}) {
-    console.log("📤 Uploading file as PUBLIC for easy access...");
+  getConfiguration() {
+    const validation = this.validateApiKey();
+    const planStatus = this.getPlanStatus();
 
-    return await this.uploadFile(file, {
-      ...options,
-      network: "public", // Force public network
-    });
+    return {
+      version: "Pinata v3 API",
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        api: this.BASE_URL,
+        upload: this.UPLOAD_URL,
+        publicGateway: this.PUBLIC_GATEWAY,
+        dedicatedGateway: this.DEDICATED_GATEWAY,
+      },
+      authentication: {
+        hasJWT: validation.info.hasJWT,
+        jwtLength: validation.info.jwtLength,
+        isValid: validation.isValid,
+        issues: validation.issues,
+      },
+      plan: {
+        type: planStatus.planType,
+        freePlanDetected: planStatus.freePlanDetected,
+        detectionInProgress: planStatus.detectionInProgress,
+        dedicatedGatewayAvailable: !!planStatus.dedicatedGateway,
+      },
+      features: {
+        fileUpload: true,
+        jsonUpload: true,
+        fileListingPublic: true,
+        fileListingPrivate: true,
+        signedUrls: !planStatus.freePlanDetected,
+        groupManagement: true,
+        bulkOperations: true,
+        searchFiles: true,
+        storageStats: true,
+      },
+    };
   }
 
   /**
-   * Get public gateway URL - Simple method untuk akses langsung
-   */
-  getPublicGatewayUrl(cid) {
-    const url = `${this.PUBLIC_GATEWAY}/${cid}`;
-    console.log("🌐 Generated public gateway URL:", url);
-    return url;
-  }
-
-  /**
-   * Get current plan detection status - 2025 METHOD
+   * Get current plan detection status
    */
   getPlanStatus() {
     return {
@@ -1956,6 +1998,27 @@ Kemungkinan penyebab:
       dedicatedGateway: this.DEDICATED_GATEWAY,
       gatewayDetected: this._gatewayDetected,
     };
+  }
+
+  /**
+   * Get public gateway URL - Simple method untuk akses langsung
+   */
+  getPublicGatewayUrl(cid) {
+    const url = `${this.PUBLIC_GATEWAY}/${cid}`;
+    console.log("🌐 Generated public gateway URL:", url);
+    return url;
+  }
+
+  /**
+   * Upload file sebagai PUBLIC secara eksplisit
+   */
+  async uploadFilePublic(file, options = {}) {
+    console.log("📤 Uploading file as PUBLIC for easy access...");
+
+    return await this.uploadFile(file, {
+      ...options,
+      network: "public", // Force public network
+    });
   }
 }
 
