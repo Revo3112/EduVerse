@@ -339,7 +339,7 @@ export default function CreateCourseScreen({ navigation }) {
       const createCourseParams = {
         title: courseData.title.trim(),
         description: courseData.description.trim(),
-        thumbnailURI: thumbnailURI,
+        thumbnailURI: thumbnailResult.ipfsHash, // ✅ HANYA CID
         pricePerMonth: courseData.isPaid ? courseData.price.toString() : "0",
       };
 
@@ -618,7 +618,7 @@ export default function CreateCourseScreen({ navigation }) {
         // Use the working pattern from IPFSTestScreen
         const uploadResult = await pinataService.uploadFile(thumbnailFile, {
           name: thumbnailFile.name || `course_thumbnail_${Date.now()}.jpg`,
-          network: "public", // Use public network for easy access like in IPFSTestScreen
+          network: "public", // Use public network for easy access
           keyvalues: {
             category: "thumbnail",
             courseTitle: courseData.title.trim() || "untitled",
@@ -636,7 +636,11 @@ export default function CreateCourseScreen({ navigation }) {
             `✅ Thumbnail uploaded successfully on attempt ${attempt}:`,
             uploadResult.ipfsHash
           );
-          return uploadResult;
+          return {
+            success: true,
+            ipfsHash: uploadResult.ipfsHash,
+            publicUrl: uploadResult.publicUrl, // Untuk preview
+          };
         } else {
           throw new Error(
             uploadResult.error || "Upload failed without error info"

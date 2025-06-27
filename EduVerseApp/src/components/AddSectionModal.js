@@ -16,8 +16,9 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { Colors } from "../constants/Colors";
-import { VideoUploader } from "./VideoUploader";
+import { videoService } from "../services/VideoService";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -33,49 +34,43 @@ const AddSectionModal = ({
   const opacityValue = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-  // Modal height states - Start with higher default
-  const [modalHeight, setModalHeight] = useState(screenHeight * 0.85); // Start at 85% height
+  // Modal height states
+  const [modalHeight, setModalHeight] = useState(screenHeight * 0.85);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
   // Form state - isolated from parent to prevent interference
   const [formData, setFormData] = useState({
     title: "",
-    contentURI: "", // IPFS/Livepeer URI for video content
-    duration: "", // Duration in minutes (will be converted to seconds)
+    contentURI: "",
+    duration: "",
   });
 
   const [errors, setErrors] = useState({});
-  const [videoFile, setVideoFile] = useState(null);
-  const [uploadingVideo, setUploadingVideo] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadedVideoData, setUploadedVideoData] = useState(null);
+  const [selectedVideoFile, setSelectedVideoFile] = useState(null); // CHANGED: Just store file info, don't upload
+  const [isSelectingVideo, setIsSelectingVideo] = useState(false);
 
   // Initialize form data when modal opens
   useEffect(() => {
     if (visible) {
-      // Reset form when opening
       if (isEditing && initialData) {
         setFormData({
           title: initialData.title || "",
           contentURI: initialData.contentURI || "",
-          // Convert duration from seconds back to minutes for display when editing
           duration: initialData.duration
             ? Math.round(initialData.duration / 60).toString()
             : "",
         });
-        setVideoFile(initialData.videoFile || null);
-        setUploadedVideoData(initialData.uploadedVideoData || null);
+        setSelectedVideoFile(initialData.videoFile || null);
       } else {
         setFormData({
           title: "",
           contentURI: "",
           duration: "",
         });
-        setVideoFile(null);
-        setUploadedVideoData(null);
+        setSelectedVideoFile(null);
       }
       setErrors({});
-      setModalHeight(screenHeight * 0.85); // Reset to 85% height
+      setModalHeight(screenHeight * 0.85);
       setIsFullScreen(false);
       showModal();
     } else {
@@ -126,17 +121,16 @@ const AddSectionModal = ({
       // Clean up after animation
       setFormData({ title: "", contentURI: "", duration: "" });
       setErrors({});
-      setVideoFile(null);
-      setUploadedVideoData(null);
+      setSelectedVideoFile(null);
     });
   };
 
   const expandToFullScreen = () => {
     setIsFullScreen(true);
-    setModalHeight(screenHeight - 30); // Almost full screen
+    setModalHeight(screenHeight - 30);
 
     Animated.spring(slideValue, {
-      toValue: -30, // Move up slightly
+      toValue: -30,
       useNativeDriver: true,
       tension: 100,
       friction: 8,
@@ -153,6 +147,150 @@ const AddSectionModal = ({
       tension: 100,
       friction: 8,
     }).start();
+  };
+
+  // CHANGED: Video selection without upload
+  const handleVideoSelection = async () => {
+    if (isSelectingVideo) return;
+
+    try {
+      setIsSelectingVideo(true);
+
+      // Request permission
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert(
+          "Permission Required",
+          "We need access to your media library to select videos."
+        );
+        return;
+      }
+
+      // Launch video picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 1.0,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+
+        // Create file object WITHOUT uploading
+        const videoFile = {
+          uri: asset.uri,
+          type: asset.type || videoService.detectMimeType(asset.fileName || asset.uri),
+          name: asset.fileName || `video_${Date.now()}.mp4`,
+          size: asset.fileSize || 0,
+          duration: asset.duration || 0, // Video duration in milliseconds
+        };
+
+        console.log("✅ Video file selected (not uploaded yet):", videoFile.name);
+
+        // Validate video file
+        const validation = videoService.validateVideo(videoFile);
+
+        if (!validation.isValid) {
+          if (validation.compressionRequired) {
+            Alert.alert(
+              "Video Too Large",
+              `The selected video is too large (${validation.formattedSize || videoService.formatFileSize(videoFile.size)}).\n\n` +
+              "Maximum recommended: 100MB for free plan.\n\n" +
+              "Please compress the video first or select a smaller file.",
+              [
+                { text: "OK" },
+                {
+                  text: "Select Another",
+                  onPress: () => setTimeout(handleVideoSelection, 500),
+                },
+              ]
+            );
+          } else {
+            Alert.alert("Video Error", validation.error);
+          }
+          return;
+        }
+
+        // Check capacity (optional warning)
+        try {
+          const capacityCheck = await videoService.canUploadVideo(videoFile.size);
+          if (!capacityCheck.possible) {
+            Alert.alert(
+              "Upload Capacity Warning",
+              capacityCheck.warnings.join("\n") + "\n\nVideo will be uploaded when you create the course.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Continue Anyway",
+                  onPress: () => setSelectedVideoFile(videoFile),
+                },
+              ]
+            );
+            return;
+          }
+
+          // Show warnings if any
+          if (capacityCheck.warnings.length > 0 || validation.warnings.length > 0) {
+            const allWarnings = [...capacityCheck.warnings, ...validation.warnings];
+            Alert.alert(
+              "Video Selected with Warnings",
+              allWarnings.join("\n") + "\n\nVideo will be uploaded when you create the course.",
+              [
+                { text: "OK", onPress: () => setSelectedVideoFile(videoFile) },
+              ]
+            );
+          } else {
+            setSelectedVideoFile(videoFile);
+            Alert.alert(
+              "Video Selected! 📹",
+              `Video "${videoFile.name}" selected successfully.\n\n` +
+              `Size: ${videoService.formatFileSize(videoFile.size)}\n` +
+              `Type: ${videoFile.type}\n\n` +
+              "Video will be uploaded to IPFS when you create the course."
+            );
+          }
+        } catch (capacityError) {
+          console.warn("Could not check upload capacity:", capacityError);
+          // Continue anyway - just store the file
+          setSelectedVideoFile(videoFile);
+          Alert.alert("Video Selected", `Video "${videoFile.name}" selected. It will be uploaded when you create the course.`);
+        }
+
+        // Auto-estimate duration if not available
+        if (!formData.duration && asset.duration) {
+          const estimatedMinutes = Math.ceil(asset.duration / 60000); // Convert ms to minutes
+          setFormData(prev => ({
+            ...prev,
+            duration: estimatedMinutes.toString(),
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("Video selection error:", error);
+      Alert.alert("Selection Error", `Failed to select video: ${error.message}`);
+    } finally {
+      setIsSelectingVideo(false);
+    }
+  };
+
+  // Remove selected video
+  const removeSelectedVideo = () => {
+    Alert.alert(
+      "Remove Video",
+      "Are you sure you want to remove the selected video?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            setSelectedVideoFile(null);
+            setFormData(prev => ({ ...prev, contentURI: "" }));
+          },
+        },
+      ]
+    );
   };
 
   const validateForm = () => {
@@ -179,25 +317,19 @@ const AddSectionModal = ({
       }
     }
 
-    // Validate content URI (optional for now, but provide guidance)
+    // Validate content URI (optional)
     if (formData.contentURI.trim() && !isValidURI(formData.contentURI.trim())) {
-      newErrors.contentURI = "Please enter a valid IPFS or Livepeer URI";
+      newErrors.contentURI = "Please enter a valid IPFS or HTTP URI";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Helper function to validate URI format
   const isValidURI = (uri) => {
     const ipfsPattern = /^ipfs:\/\/[a-zA-Z0-9]+/;
-    const livepeerPattern = /^https:\/\/.*livepeer.*/;
     const httpPattern = /^https?:\/\/.+/;
-    return (
-      ipfsPattern.test(uri) ||
-      livepeerPattern.test(uri) ||
-      httpPattern.test(uri)
-    );
+    return ipfsPattern.test(uri) || httpPattern.test(uri);
   };
 
   const handleSave = () => {
@@ -205,17 +337,22 @@ const AddSectionModal = ({
       return;
     }
 
+    // CHANGED: Pass video file without uploading
     const sectionData = {
       title: formData.title.trim(),
-      contentURI:
-        formData.contentURI.trim() ||
-        (uploadedVideoData
-          ? `ipfs://${uploadedVideoData.ipfsHash}`
-          : "placeholder://video-content"),
-      duration: Math.round(parseFloat(formData.duration) * 60),
-      videoFile: videoFile,
-      uploadedVideoData: uploadedVideoData, // Include upload metadata
+      contentURI: formData.contentURI.trim() || "placeholder://video-content",
+      duration: Math.round(parseFloat(formData.duration) * 60), // Convert minutes to seconds
+      videoFile: selectedVideoFile, // Pass the video file for later upload
+      uploadStatus: selectedVideoFile ? 'pending' : 'no-video',
     };
+
+    console.log("✅ Section data prepared for save (video will upload later):", {
+      title: sectionData.title,
+      hasVideo: !!sectionData.videoFile,
+      videoFileName: sectionData.videoFile?.name,
+      durationSeconds: sectionData.duration,
+      uploadStatus: sectionData.uploadStatus,
+    });
 
     onSave(sectionData);
     onClose();
@@ -233,64 +370,12 @@ const AddSectionModal = ({
       [field]: value,
     }));
 
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({
         ...prev,
         [field]: null,
       }));
     }
-  };
-
-  // Handle video upload completion
-  const handleVideoUploadComplete = (uploadResult) => {
-    console.log("Video upload completed:", uploadResult);
-    setUploadedVideoData(uploadResult);
-    setVideoFile({
-      name: uploadResult.fileName || "uploaded_video.mp4",
-      type: uploadResult.mimeType || "video/mp4",
-      uri: uploadResult.ipfsUrl,
-      ipfsHash: uploadResult.ipfsHash,
-      size: uploadResult.fileSize,
-    });
-
-    // Auto-fill the content URI with IPFS URI
-    setFormData((prev) => ({
-      ...prev,
-      contentURI: `ipfs://${uploadResult.ipfsHash}`,
-    }));
-
-    setUploadingVideo(false);
-    setUploadProgress(0);
-  };
-
-  // Handle video upload start
-  const handleVideoUploadStart = () => {
-    console.log("Video upload started");
-    setUploadingVideo(true);
-    setUploadProgress(0);
-  };
-
-  // Handle video upload error
-  const handleVideoUploadError = (error) => {
-    console.error("Video upload error:", error);
-    setUploadingVideo(false);
-    setUploadProgress(0);
-    Alert.alert(
-      "Upload Error",
-      `Failed to upload video: ${error.message || "Unknown error"}`
-    );
-  };
-
-  // Handle video upload progress
-  const handleVideoUploadProgress = (progress) => {
-    setUploadProgress(progress);
-  };
-
-  const removeVideoFile = () => {
-    setVideoFile(null);
-    setUploadedVideoData(null);
-    setFormData((prev) => ({ ...prev, contentURI: "" }));
   };
 
   return (
@@ -310,9 +395,7 @@ const AddSectionModal = ({
           <Animated.View
             style={[
               styles.backdrop,
-              {
-                opacity: backdropOpacity,
-              },
+              { opacity: backdropOpacity },
             ]}
           />
         </TouchableWithoutFeedback>
@@ -337,12 +420,9 @@ const AddSectionModal = ({
                   {isEditing ? "Edit Section" : "Add New Section"}
                 </Text>
                 <View style={styles.headerButtons}>
-                  {/* Expand/Collapse Button */}
                   <TouchableOpacity
                     style={styles.expandButton}
-                    onPress={
-                      isFullScreen ? collapseToNormal : expandToFullScreen
-                    }
+                    onPress={isFullScreen ? collapseToNormal : expandToFullScreen}
                     activeOpacity={0.7}
                   >
                     <Ionicons
@@ -352,7 +432,6 @@ const AddSectionModal = ({
                     />
                   </TouchableOpacity>
 
-                  {/* Close Button */}
                   <TouchableOpacity
                     style={styles.closeButton}
                     onPress={onClose}
@@ -367,7 +446,6 @@ const AddSectionModal = ({
                 </View>
               </View>
 
-              {/* Gesture Hint */}
               <Text style={styles.gestureHint}>
                 Tap expand button to full screen • Tap close to exit
               </Text>
@@ -404,77 +482,67 @@ const AddSectionModal = ({
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Video Content</Text>
 
-                {/* Video Upload Component */}
-                <VideoUploader
-                  onUploadComplete={handleVideoUploadComplete}
-                  onUploadStart={handleVideoUploadStart}
-                  onUploadError={handleVideoUploadError}
-                  onUploadProgress={handleVideoUploadProgress}
-                  disabled={uploadingVideo}
-                  showUsageInfo={true}
-                  style={styles.videoUploader}
-                />
-
-                {/* Upload Progress */}
-                {uploadingVideo && (
-                  <View style={styles.uploadProgressContainer}>
-                    <Text style={styles.uploadProgressText}>
-                      Uploading video... {Math.round(uploadProgress)}%
-                    </Text>
-                    <View style={styles.progressBar}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          { width: `${uploadProgress}%` },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                )}
-
-                {/* Uploaded Video Info */}
-                {videoFile && !uploadingVideo && (
-                  <View style={styles.videoInfo}>
+                {/* Video Selection Area */}
+                <TouchableOpacity
+                  style={[
+                    styles.videoUploadArea,
+                    selectedVideoFile && styles.videoSelected,
+                  ]}
+                  onPress={handleVideoSelection}
+                  disabled={isSelectingVideo}
+                  activeOpacity={0.7}
+                >
+                  {selectedVideoFile ? (
                     <View style={styles.videoPreview}>
-                      <Ionicons
-                        name="videocam"
-                        size={24}
-                        color={Colors.primary}
-                      />
+                      <Ionicons name="videocam" size={48} color={Colors.primary} />
                       <Text style={styles.videoSelectedText}>
-                        {videoFile.name}
+                        {selectedVideoFile.name}
+                      </Text>
+                      <Text style={styles.videoDetailsText}>
+                        {videoService.formatFileSize(selectedVideoFile.size)} • {selectedVideoFile.type}
+                      </Text>
+                      <Text style={styles.videoChangeText}>
+                        Tap to change video
                       </Text>
                       <TouchableOpacity
                         style={styles.removeVideoButton}
-                        onPress={removeVideoFile}
+                        onPress={removeSelectedVideo}
                         activeOpacity={0.7}
                       >
                         <Ionicons
                           name="close-circle"
-                          size={20}
+                          size={24}
                           color={Colors.error}
                         />
                       </TouchableOpacity>
                     </View>
-                    {uploadedVideoData && (
-                      <Text style={styles.ipfsInfoText}>
-                        IPFS: {uploadedVideoData.ipfsHash}
+                  ) : (
+                    <View style={styles.videoPlaceholder}>
+                      <Ionicons name="videocam-outline" size={48} color={Colors.textMuted} />
+                      <Text style={styles.videoPlaceholderText}>
+                        {isSelectingVideo ? "Selecting video..." : "Tap to select video"}
                       </Text>
-                    )}
-                  </View>
-                )}
+                      <Text style={styles.videoRequirements}>
+                        Recommended: MP4, max 100MB for free plan
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <Text style={styles.helperText}>
+                  Select a video file that will be uploaded to IPFS when you create the course.
+                  Video will be stored temporarily until upload.
+                </Text>
               </View>
 
-              {/* Content URI Input */}
+              {/* Content URI Input (Optional) */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Content URI</Text>
+                <Text style={styles.label}>Content URI (Optional)</Text>
                 <TextInput
                   style={[styles.input, errors.contentURI && styles.inputError]}
                   value={formData.contentURI}
-                  onChangeText={(value) =>
-                    handleInputChange("contentURI", value)
-                  }
-                  placeholder="ipfs://... or https://livepeer..."
+                  onChangeText={(value) => handleInputChange("contentURI", value)}
+                  placeholder="ipfs://... or https://..."
                   placeholderTextColor={Colors.textMuted}
                   autoCorrect={false}
                   autoCapitalize="none"
@@ -486,7 +554,7 @@ const AddSectionModal = ({
                   <Text style={styles.errorText}>{errors.contentURI}</Text>
                 )}
                 <Text style={styles.helperText}>
-                  Enter IPFS hash (ipfs://...) or Livepeer playback URL
+                  Leave empty to auto-generate from uploaded video, or enter custom IPFS/HTTP URI
                 </Text>
               </View>
 
@@ -514,22 +582,16 @@ const AddSectionModal = ({
 
               {/* Info Box */}
               <View style={styles.infoBox}>
-                <Ionicons
-                  name="information-circle"
-                  size={20}
-                  color={Colors.info}
-                />
+                <Ionicons name="information-circle" size={20} color={Colors.info} />
                 <Text style={styles.infoText}>
-                  <Text style={styles.infoTextBold}>
-                    Smart Contract Requirements:
-                  </Text>
-                  {"\n"}• Title: Section name{"\n"}• Content URI: IPFS/Livepeer
-                  link for video{"\n"}• Duration: Video length in seconds
-                  (auto-converted)
+                  <Text style={styles.infoTextBold}>Upload Process:</Text>
+                  {"\n"}• Video file is stored temporarily until course creation
+                  {"\n"}• All videos upload to IPFS when you click "Create Course"
+                  {"\n"}• IPFS URIs are automatically generated and stored on blockchain
+                  {"\n"}• No manual upload required - everything happens automatically!
                 </Text>
               </View>
 
-              {/* Extra spacing for better scrolling */}
               <View style={{ height: 20 }} />
             </ScrollView>
 
@@ -574,7 +636,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.black,
   },
   modalContainer: {
-    // Height is now dynamic based on state
+    // Height is dynamic
   },
   modalContent: {
     backgroundColor: Colors.surface,
@@ -582,10 +644,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     flex: 1,
     shadowColor: Colors.black,
-    shadowOffset: {
-      width: 0,
-      height: -5,
-    },
+    shadowOffset: { width: 0, height: -5 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 10,
@@ -682,6 +741,72 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 16,
   },
+  
+  // Video selection styles
+  videoUploadArea: {
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    borderStyle: "dashed",
+    minHeight: 140,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  videoSelected: {
+    borderColor: Colors.primary,
+    borderStyle: "solid",
+    backgroundColor: Colors.surface,
+  },
+  videoPreview: {
+    alignItems: "center",
+    padding: 20,
+    position: "relative",
+    width: "100%",
+  },
+  videoSelectedText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: Colors.text,
+    marginTop: 12,
+    textAlign: "center",
+  },
+  videoDetailsText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  videoChangeText: {
+    fontSize: 12,
+    color: Colors.primary,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  removeVideoButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    padding: 4,
+  },
+  videoPlaceholder: {
+    alignItems: "center",
+    padding: 20,
+  },
+  videoPlaceholderText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: Colors.textSecondary,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  videoRequirements: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    textAlign: "center",
+  },
+
   infoBox: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -700,105 +825,6 @@ const styles = StyleSheet.create({
   infoTextBold: {
     fontWeight: "600",
     color: Colors.text,
-  },
-  // Video upload styles
-  videoUploadArea: {
-    backgroundColor: Colors.background,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: Colors.border,
-    borderStyle: "dashed",
-    minHeight: 120,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  videoSelected: {
-    borderColor: Colors.primary,
-    borderStyle: "solid",
-    backgroundColor: Colors.surface,
-  },
-  videoPreview: {
-    alignItems: "center",
-    padding: 20,
-    position: "relative",
-    width: "100%",
-  },
-  videoSelectedText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: Colors.text,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  videoChangeText: {
-    fontSize: 12,
-    color: Colors.primary,
-    marginTop: 4,
-  },
-  removeVideoButton: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    padding: 4,
-  },
-  videoPlaceholder: {
-    alignItems: "center",
-    padding: 20,
-  },
-  videoPlaceholderText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: Colors.textSecondary,
-    marginTop: 8,
-  },
-  videoRequirements: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 4,
-    textAlign: "center",
-  },
-  videoUploader: {
-    marginBottom: 8,
-  },
-  uploadProgressContainer: {
-    marginTop: 8,
-    padding: 12,
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  uploadProgressText: {
-    fontSize: 14,
-    color: Colors.text,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: Colors.border,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: Colors.primary,
-    borderRadius: 3,
-  },
-  videoInfo: {
-    marginTop: 8,
-    padding: 12,
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  ipfsInfoText: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 8,
-    fontFamily: "monospace",
   },
   actionButtons: {
     flexDirection: "row",

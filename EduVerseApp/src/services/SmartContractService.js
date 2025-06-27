@@ -203,19 +203,25 @@ class SmartContractService {
         try {
           const course = await this.contracts.courseFactory.getCourse(i);
           if (course.isActive) {
-            // Get sections count for each course
             const sectionsCount = await this.getCourseSectionsCount(i);
+            
+            // Generate accessible thumbnail URL
+            const thumbnailUrl = course.thumbnailURI 
+              ? await this.generateThumbnailUrl(course.thumbnailURI)
+              : null;
+            
             courses.push({
               id: course.id.toString(),
               title: course.title,
               description: course.description,
-              thumbnailURI: course.thumbnailURI,
+              thumbnailURI: course.thumbnailURI, // CID asli
+              thumbnailUrl: thumbnailUrl, // URL accessible
               creator: course.creator,
-              pricePerMonth: ethers.formatEther(course.pricePerMonth), // Convert wei to ETH for display
-              pricePerMonthWei: course.pricePerMonth.toString(), // Keep original wei value for calculations
+              pricePerMonth: ethers.formatEther(course.pricePerMonth),
+              pricePerMonthWei: course.pricePerMonth.toString(),
               isActive: course.isActive,
               createdAt: new Date(Number(course.createdAt) * 1000),
-              sectionsCount: sectionsCount, // NEW: Add sections count
+              sectionsCount: sectionsCount,
             });
           }
         } catch (error) {
@@ -226,6 +232,25 @@ class SmartContractService {
     } catch (error) {
       console.error("Error fetching all courses:", error);
       return [];
+    }
+  }
+
+  // Helper method untuk generate thumbnail URL
+  async generateThumbnailUrl(thumbnailCID) {
+    try {
+      if (!thumbnailCID) return null;
+      
+      // Import PinataService
+      const { pinataService } = await import('./PinataService');
+      
+      return await pinataService.getOptimizedFileUrl(thumbnailCID, {
+        forcePublic: true, // Thumbnail biasanya public
+        network: "public"
+      });
+    } catch (error) {
+      console.warn("Failed to generate thumbnail URL:", error);
+      // Fallback ke public gateway
+      return `https://gateway.pinata.cloud/ipfs/${thumbnailCID}`;
     }
   }
 
