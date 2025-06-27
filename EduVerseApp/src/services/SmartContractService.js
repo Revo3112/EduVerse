@@ -1,4 +1,4 @@
-// src/services/SmartContractService.js - Enhanced Smart Contract Integration with CID Parameters
+// Enhanced Smart Contract Service - Fully Aligned with Solidity Contracts
 import { ethers } from "ethers";
 import { BLOCKCHAIN_CONFIG } from "../constants/blockchain";
 
@@ -15,86 +15,204 @@ class SmartContractService {
     this.contracts = {};
     this.isInitialized = false;
     this.licenseCache = new Map();
+    this.progressCache = new Map();
     this.cacheExpiry = 30000; // 30 seconds cache
+    this.networkCache = null;
+    this.retryConfig = {
+      maxRetries: 3,
+      baseDelay: 1000,
+      maxDelay: 10000,
+    };
   }
 
-  // Initialize the service with providers (ethers v6)
+  // ✅ OPTIMIZED: Enhanced initialization with comprehensive error handling
   async initialize(provider, browserProvider) {
     try {
+      console.log("🚀 Starting SmartContractService initialization...");
+
       this.provider = provider;
+      this.browserProvider = browserProvider;
 
-      // Log network info untuk debugging - FIX untuk ethers v6
-      try {
-        const network = await provider.getNetwork();
-        console.log("Connected to network:", {
-          chainId: Number(network.chainId), // Konversi BigInt ke Number
-          name: network.name || "Unknown",
-        });
-      } catch (networkError) {
-        console.warn("Failed to get network info:", networkError.message);
+      // ✅ Enhanced network validation
+      await this._validateNetworkConnection();
+
+      // ✅ Enhanced signer initialization
+      await this._initializeSigner();
+
+      // ✅ Contract initialization with validation
+      await this._initializeContracts();
+
+      // ✅ Post-initialization validation
+      await this._validateInitialization();
+
+      this.isInitialized = true;
+      console.log("✅ SmartContractService initialized successfully!");
+    } catch (error) {
+      console.error("❌ Failed to initialize SmartContractService:", error);
+      this.isInitialized = false;
+      throw new Error(`Initialization failed: ${error.message}`);
+    }
+  }
+
+  // ✅ NEW: Network connection validation
+  async _validateNetworkConnection() {
+    try {
+      const network = await this.provider.getNetwork();
+      this.networkCache = {
+        chainId: Number(network.chainId),
+        name: network.name || "Unknown",
+        timestamp: Date.now(),
+      };
+
+      console.log("✅ Network validated:", this.networkCache);
+
+      // Validate contract addresses exist
+      const addresses = BLOCKCHAIN_CONFIG.CONTRACTS;
+      if (
+        !addresses.courseFactory ||
+        !addresses.courseLicense ||
+        !addresses.progressTracker ||
+        !addresses.certificateManager
+      ) {
+        throw new Error("Missing contract addresses in configuration");
       }
 
-      // Log contract addresses
-      console.log("Contract addresses:", {
-        courseFactory: BLOCKCHAIN_CONFIG.CONTRACTS.courseFactory,
-        courseLicense: BLOCKCHAIN_CONFIG.CONTRACTS.courseLicense,
-        progressTracker: BLOCKCHAIN_CONFIG.CONTRACTS.progressTracker,
-        certificateManager: BLOCKCHAIN_CONFIG.CONTRACTS.certificateManager,
-      });
+      console.log("✅ Contract addresses validated:", addresses);
+    } catch (error) {
+      throw new Error(`Network validation failed: ${error.message}`);
+    }
+  }
 
-      // Get signer dengan proper error handling - FIX untuk wagmi v2
-      try {
-        // Untuk wagmi v2 dan ethers v6, penggunaan signer yang benar
-        if (
-          browserProvider &&
-          typeof browserProvider.getSigner === "function"
-        ) {
-          this.signer = await browserProvider.getSigner();
-          const address = await this.signer.getAddress();
-          console.log("Signer address:", address);
-        } else {
-          // Fallback jika browserProvider bukan provider ethers v6 standar
-          throw new Error("Invalid browser provider format");
-        }
-      } catch (signerError) {
-        console.error("Failed to get signer:", signerError);
-        throw new Error("Failed to get wallet signer: " + signerError.message);
+  // ✅ NEW: Enhanced signer initialization
+  async _initializeSigner() {
+    try {
+      if (
+        !this.browserProvider ||
+        typeof this.browserProvider.getSigner !== "function"
+      ) {
+        throw new Error(
+          "Invalid browser provider - getSigner method not available"
+        );
       }
 
-      // Initialize contract instances with the signer
+      this.signer = await this.browserProvider.getSigner();
+      const signerAddress = await this.signer.getAddress();
+
+      console.log("✅ Signer initialized:", signerAddress);
+
+      // Validate signer can sign
+      const balance = await this.provider.getBalance(signerAddress);
+      console.log("💰 Signer balance:", ethers.formatEther(balance), "ETH");
+    } catch (error) {
+      throw new Error(`Signer initialization failed: ${error.message}`);
+    }
+  }
+
+  // ✅ NEW: Enhanced contract initialization
+  async _initializeContracts() {
+    try {
+      const addresses = BLOCKCHAIN_CONFIG.CONTRACTS;
+
       this.contracts = {
         courseFactory: new ethers.Contract(
-          BLOCKCHAIN_CONFIG.CONTRACTS.courseFactory,
+          addresses.courseFactory,
           CourseFactoryABI,
           this.signer
         ),
         courseLicense: new ethers.Contract(
-          BLOCKCHAIN_CONFIG.CONTRACTS.courseLicense,
+          addresses.courseLicense,
           CourseLicenseABI,
           this.signer
         ),
         progressTracker: new ethers.Contract(
-          BLOCKCHAIN_CONFIG.CONTRACTS.progressTracker,
+          addresses.progressTracker,
           ProgressTrackerABI,
           this.signer
         ),
         certificateManager: new ethers.Contract(
-          BLOCKCHAIN_CONFIG.CONTRACTS.certificateManager,
+          addresses.certificateManager,
           CertificateManagerABI,
           this.signer
         ),
       };
 
-      this.isInitialized = true;
-      console.log("SmartContractService initialized successfully");
+      console.log("✅ Contract instances created successfully");
     } catch (error) {
-      console.error("Failed to initialize SmartContractService:", error);
-      this.isInitialized = false;
-      throw error;
+      throw new Error(`Contract initialization failed: ${error.message}`);
     }
   }
 
-  // Check if service is initialized
+  // ✅ NEW: Post-initialization validation
+  async _validateInitialization() {
+    try {
+      // Test basic contract calls
+      const totalCourses = await this.contracts.courseFactory.getTotalCourses();
+      console.log(
+        "✅ Contract connectivity test passed. Total courses:",
+        Number(totalCourses)
+      );
+    } catch (error) {
+      throw new Error(`Initialization validation failed: ${error.message}`);
+    }
+  }
+
+  // ✅ OPTIMIZED: Enhanced retry mechanism
+  async _retryOperation(operation, context = "operation") {
+    let lastError;
+
+    for (let attempt = 1; attempt <= this.retryConfig.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+
+        if (attempt === this.retryConfig.maxRetries) {
+          throw error;
+        }
+
+        // Check if error is retryable
+        if (this._isNonRetryableError(error)) {
+          throw error;
+        }
+
+        const delay = Math.min(
+          this.retryConfig.baseDelay * Math.pow(2, attempt - 1),
+          this.retryConfig.maxDelay
+        );
+
+        console.warn(
+          `🔄 ${context} failed (attempt ${attempt}/${this.retryConfig.maxRetries}), retrying in ${delay}ms:`,
+          error.message
+        );
+        await this._delay(delay);
+      }
+    }
+
+    throw lastError;
+  }
+
+  // ✅ NEW: Check if error should not be retried
+  _isNonRetryableError(error) {
+    const nonRetryableMessages = [
+      "user rejected",
+      "insufficient funds",
+      "invalid address",
+      "contract not found",
+      "method not found",
+      "execution reverted",
+    ];
+
+    return nonRetryableMessages.some((msg) =>
+      error.message.toLowerCase().includes(msg)
+    );
+  }
+
+  // ✅ UTILITY: Delay helper
+  _delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  // ✅ ENHANCED: Service validation
   ensureInitialized() {
     if (!this.isInitialized) {
       throw new Error(
@@ -103,176 +221,331 @@ class SmartContractService {
     }
   }
 
-  // --- Course Factory Methods ---
+  // === COURSE FACTORY METHODS ===
 
-  // ✅ PERBAIKAN: Updated createCourse with CID parameter
+  // ✅ FIXED: Aligned with Solidity - uses thumbnailCID parameter
   async createCourse(courseData, options = {}) {
     this.ensureInitialized();
-    try {
-      const { title, description, thumbnailCID, pricePerMonth } = courseData; // ✅ Changed from thumbnailURI to thumbnailCID
+
+    return await this._retryOperation(async () => {
+      const { title, description, thumbnailCID, pricePerMonth } = courseData;
+
+      // Validate inputs according to Solidity constraints
+      if (!title?.trim()) throw new Error("Course title is required");
+      if (title.trim().length > 200)
+        throw new Error("Title too long (max 200 chars)");
+      if (!description?.trim())
+        throw new Error("Course description is required");
+      if (description.trim().length > 1000)
+        throw new Error("Description too long (max 1000 chars)");
+      if (!thumbnailCID?.trim()) throw new Error("Thumbnail CID is required");
+      if (thumbnailCID.trim().length > 100)
+        throw new Error("Thumbnail CID too long (max 100 chars)");
+
       const priceInWei = ethers.parseEther(pricePerMonth.toString());
 
-      // ✅ OPTIMASI: Simplified transaction options
-      const txOptions = {
-        gasLimit: options.gasLimit || "300000", // ✅ Reduced from 400000
-      };
+      // Check max price limit from contract
+      const maxPriceInETH = await this.getMaxPriceInETH();
+      if (Number(ethers.formatEther(priceInWei)) > Number(maxPriceInETH)) {
+        throw new Error(`Price exceeds maximum limit of ${maxPriceInETH} ETH`);
+      }
 
-      console.log("🔗 Sending createCourse transaction:", {
-        title,
-        thumbnailCID, // ✅ Log CID instead of URI
+      // Enhanced gas estimation
+      const gasEstimate =
+        await this.contracts.courseFactory.createCourse.estimateGas(
+          title.trim(),
+          description.trim(),
+          thumbnailCID.trim(),
+          priceInWei
+        );
+
+      const gasLimit = gasEstimate + (gasEstimate * 20n) / 100n; // 20% buffer
+
+      console.log("🔗 Creating course with optimized gas:", {
+        title: title.trim(),
+        thumbnailCID: thumbnailCID.trim(),
         priceInWei: priceInWei.toString(),
-        gasLimit: txOptions.gasLimit,
+        gasEstimate: gasEstimate.toString(),
+        gasLimit: gasLimit.toString(),
       });
 
-      // ✅ OPTIMASI: Direct transaction with CID parameter
       const tx = await this.contracts.courseFactory.createCourse(
-        title,
-        description,
-        thumbnailCID, // ✅ Pass CID instead of URI
+        title.trim(),
+        description.trim(),
+        thumbnailCID.trim(),
         priceInWei,
-        txOptions
+        { gasLimit }
       );
 
-      console.log("📤 Transaction sent, waiting for confirmation...");
-      console.log("Transaction hash:", tx.hash);
+      console.log("📤 Transaction sent:", tx.hash);
 
-      // ✅ OPTIMASI: Simple wait dengan timeout
+      // Enhanced receipt waiting with timeout
       const receipt = await Promise.race([
         tx.wait(),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error("Transaction timeout")),
-            options.timeout || 60000 // ✅ Reduced from 90000
+            options.timeout || 120000
           )
         ),
       ]);
 
-      console.log("✅ Transaction confirmed in block:", receipt.blockNumber);
+      console.log(
+        "✅ Course creation confirmed in block:",
+        receipt.blockNumber
+      );
 
-      // Find CourseCreated event
-      for (const log of receipt.logs) {
-        try {
-          const parsedLog =
-            this.contracts.courseFactory.interface.parseLog(log);
-          if (parsedLog && parsedLog.name === "CourseCreated") {
-            return {
-              success: true,
-              courseId: parsedLog.args.courseId.toString(), // ✅ Fixed event parameter name
-              transactionHash: receipt.hash,
-              blockNumber: receipt.blockNumber,
-              gasUsed: receipt.gasUsed?.toString(),
-            };
+      // Parse events more efficiently
+      const courseCreatedEvent = receipt.logs
+        .map((log) => {
+          try {
+            return this.contracts.courseFactory.interface.parseLog(log);
+          } catch {
+            return null;
           }
-        } catch (e) {
-          continue;
-        }
-      }
+        })
+        .find((parsed) => parsed?.name === "CourseCreated");
 
-      throw new Error("CourseCreated event not found");
-    } catch (error) {
-      console.error("❌ Error creating course:", error);
-
-      // Simplified error handling
-      let errorMessage = error.message;
-      if (error.message.includes("timeout")) {
-        errorMessage = "Transaction timeout. Please try again.";
-      } else if (error.code === "USER_REJECTED") {
-        errorMessage = "Transaction was rejected by user.";
-      } else if (error.code === "INSUFFICIENT_FUNDS") {
-        errorMessage = "Insufficient funds for gas fees.";
+      if (!courseCreatedEvent) {
+        throw new Error("CourseCreated event not found in transaction receipt");
       }
 
       return {
-        success: false,
-        error: errorMessage,
-        originalError: error.message,
+        success: true,
+        courseId: courseCreatedEvent.args.courseId.toString(),
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
       };
-    }
+    }, "createCourse");
   }
 
-  // ✅ PERBAIKAN: Updated addCourseSection with CID parameter
+  // ✅ FIXED: Aligned with Solidity - uses contentCID parameter and duration validation
   async addCourseSection(courseId, sectionData, options = {}) {
     this.ensureInitialized();
-    try {
-      const { title, contentCID, duration } = sectionData; // ✅ Changed from contentURI to contentCID
 
-      const txOptions = {
-        gasLimit: options.gasLimit || "200000", // ✅ Reduced gas limit
-      };
+    return await this._retryOperation(async () => {
+      const { title, contentCID, duration } = sectionData;
 
-      console.log(`📖 Adding section "${title}" to course ${courseId}`);
+      // Validate inputs according to Solidity constraints
+      if (!title?.trim()) throw new Error("Section title is required");
+      if (title.trim().length > 200)
+        throw new Error("Section title too long (max 200 chars)");
+      if (!contentCID?.trim()) throw new Error("Content CID is required");
+      if (contentCID.trim().length > 100)
+        throw new Error("Content CID too long (max 100 chars)");
+      if (!duration || duration <= 0)
+        throw new Error("Valid duration is required");
+      if (duration > 86400) throw new Error("Duration too long (max 24 hours)");
+
+      // Gas estimation
+      const gasEstimate =
+        await this.contracts.courseFactory.addCourseSection.estimateGas(
+          courseId,
+          title.trim(),
+          contentCID.trim(),
+          duration
+        );
+
+      const gasLimit = gasEstimate + (gasEstimate * 15n) / 100n; // 15% buffer
+
+      console.log(`📖 Adding section "${title.trim()}" to course ${courseId}`);
 
       const tx = await this.contracts.courseFactory.addCourseSection(
         courseId,
-        title,
-        contentCID, // ✅ Pass CID instead of URI
+        title.trim(),
+        contentCID.trim(),
         duration,
-        txOptions
+        { gasLimit }
       );
-
-      console.log("📤 Section transaction sent, hash:", tx.hash);
 
       const receipt = await Promise.race([
         tx.wait(),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error("Section transaction timeout")),
-            options.timeout || 45000 // ✅ Reduced from 120000
+            options.timeout || 90000
           )
         ),
       ]);
 
-      console.log(`✅ Section "${title}" added successfully`);
+      console.log(`✅ Section "${title.trim()}" added successfully`);
 
-      for (const log of receipt.logs) {
-        try {
-          const parsedLog =
-            this.contracts.courseFactory.interface.parseLog(log);
-          if (parsedLog && parsedLog.name === "SectionAdded") {
-            return {
-              success: true,
-              sectionId: parsedLog.args.sectionId.toString(),
-              transactionHash: receipt.hash,
-              gasUsed: receipt.gasUsed?.toString(),
-            };
+      // Parse section added event
+      const sectionAddedEvent = receipt.logs
+        .map((log) => {
+          try {
+            return this.contracts.courseFactory.interface.parseLog(log);
+          } catch {
+            return null;
           }
-        } catch (e) {
-          continue;
-        }
+        })
+        .find((parsed) => parsed?.name === "SectionAdded");
+
+      if (!sectionAddedEvent) {
+        throw new Error("SectionAdded event not found in transaction receipt");
       }
-      throw new Error("SectionAdded event not found.");
-    } catch (error) {
-      console.error(`❌ Error adding section "${sectionData.title}":`, error);
+
       return {
-        success: false,
-        error: error.message.includes("timeout")
-          ? "Section transaction timeout. Please try again."
-          : error.message,
+        success: true,
+        sectionId: sectionAddedEvent.args.sectionId.toString(),
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
       };
-    }
+    }, "addCourseSection");
   }
 
-  // ✅ PERBAIKAN: Enhanced getAllCourses with pagination support
-  async getAllCourses(offset = 0, limit = 50) {
+  // ✅ FIXED: Aligned with Solidity - uses updateCourse with correct parameters
+  async updateCourse(courseId, courseData, options = {}) {
     this.ensureInitialized();
-    try {
-      console.log(
-        `📚 Fetching courses with pagination: offset=${offset}, limit=${limit}`
+
+    return await this._retryOperation(async () => {
+      const { title, description, thumbnailCID, pricePerMonth, isActive } =
+        courseData;
+
+      // Validate inputs according to Solidity constraints
+      if (!title?.trim()) throw new Error("Course title is required");
+      if (title.trim().length > 200)
+        throw new Error("Title too long (max 200 chars)");
+      if (!description?.trim())
+        throw new Error("Course description is required");
+      if (description.trim().length > 1000)
+        throw new Error("Description too long (max 1000 chars)");
+      if (!thumbnailCID?.trim()) throw new Error("Thumbnail CID is required");
+      if (thumbnailCID.trim().length > 100)
+        throw new Error("Thumbnail CID too long (max 100 chars)");
+
+      const priceInWei = ethers.parseEther(pricePerMonth.toString());
+
+      // Check max price limit from contract
+      const maxPriceInETH = await this.getMaxPriceInETH();
+      if (Number(ethers.formatEther(priceInWei)) > Number(maxPriceInETH)) {
+        throw new Error(`Price exceeds maximum limit of ${maxPriceInETH} ETH`);
+      }
+
+      // Gas estimation
+      const gasEstimate =
+        await this.contracts.courseFactory.updateCourse.estimateGas(
+          courseId,
+          title.trim(),
+          description.trim(),
+          thumbnailCID.trim(),
+          priceInWei,
+          isActive
+        );
+
+      const gasLimit = gasEstimate + (gasEstimate * 15n) / 100n;
+
+      const tx = await this.contracts.courseFactory.updateCourse(
+        courseId,
+        title.trim(),
+        description.trim(),
+        thumbnailCID.trim(),
+        priceInWei,
+        isActive,
+        { gasLimit }
       );
 
-      // ✅ Try using paginated version first
+      const receipt = await Promise.race([
+        tx.wait(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Update course timeout")),
+            options.timeout || 90000
+          )
+        ),
+      ]);
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
+      };
+    }, "updateCourse");
+  }
+
+  // ✅ FIXED: Aligned with Solidity - uses updateCourseSection with correct parameters
+  async updateCourseSection(courseId, sectionId, sectionData, options = {}) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const { title, contentCID, duration } = sectionData;
+
+      // Validate inputs according to Solidity constraints
+      if (!title?.trim()) throw new Error("Section title is required");
+      if (title.trim().length > 200)
+        throw new Error("Section title too long (max 200 chars)");
+      if (!contentCID?.trim()) throw new Error("Content CID is required");
+      if (contentCID.trim().length > 100)
+        throw new Error("Content CID too long (max 100 chars)");
+      if (!duration || duration <= 0)
+        throw new Error("Valid duration is required");
+      if (duration > 86400) throw new Error("Duration too long (max 24 hours)");
+
+      // Gas estimation
+      const gasEstimate =
+        await this.contracts.courseFactory.updateCourseSection.estimateGas(
+          courseId,
+          sectionId,
+          title.trim(),
+          contentCID.trim(),
+          duration
+        );
+
+      const gasLimit = gasEstimate + (gasEstimate * 15n) / 100n;
+
+      const tx = await this.contracts.courseFactory.updateCourseSection(
+        courseId,
+        sectionId,
+        title.trim(),
+        contentCID.trim(),
+        duration,
+        { gasLimit }
+      );
+
+      const receipt = await Promise.race([
+        tx.wait(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Update section timeout")),
+            options.timeout || 90000
+          )
+        ),
+      ]);
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
+      };
+    }, "updateCourseSection");
+  }
+
+  // ✅ OPTIMIZED: Enhanced getAllCourses with pagination
+  async getAllCourses(offset = 0, limit = 20) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      console.log(`📚 Fetching courses: offset=${offset}, limit=${limit}`);
+
       let coursesData;
+
       try {
+        // Try paginated version first
         coursesData = await this.contracts.courseFactory.getAllCourses(
           offset,
           limit
         );
         console.log(
-          `✅ Used paginated getAllCourses, got ${coursesData.length} courses`
+          `✅ Fetched ${coursesData.length} courses using pagination`
         );
       } catch (paginationError) {
-        console.log("Pagination not supported, using fallback method");
-        // Fallback to old method
+        console.log("⚠️ Pagination not supported, using fallback method");
+
+        // Fallback to manual pagination
         const totalCourses =
           await this.contracts.courseFactory.getTotalCourses();
         const courses = [];
@@ -280,125 +553,196 @@ class SmartContractService {
         const start = Math.max(1, offset + 1);
         const end = Math.min(Number(totalCourses), offset + limit);
 
-        for (let i = start; i <= end; i++) {
-          try {
-            const course = await this.contracts.courseFactory.getCourse(i);
-            if (course.isActive) {
-              courses.push(course);
-            }
-          } catch (error) {
-            console.warn(`Failed to fetch course ${i}:`, error);
+        // Batch fetch courses to avoid timeout
+        const batchSize = 5;
+        for (let i = start; i <= end; i += batchSize) {
+          const batchEnd = Math.min(i + batchSize - 1, end);
+          const batchPromises = [];
+
+          for (let j = i; j <= batchEnd; j++) {
+            batchPromises.push(
+              this.contracts.courseFactory.getCourse(j).catch((error) => {
+                console.warn(`Failed to fetch course ${j}:`, error.message);
+                return null;
+              })
+            );
           }
+
+          const batchResults = await Promise.all(batchPromises);
+          courses.push(
+            ...batchResults.filter((course) => course && course.isActive)
+          );
         }
+
         coursesData = courses;
       }
 
-      // ✅ Process courses with CID and URL generation
+      // Process courses with enhanced data
       const processedCourses = await Promise.all(
         coursesData
           .filter((course) => course.isActive)
           .map(async (course) => {
-            const sectionsCount = await this.getCourseSectionsCount(course.id);
-
-            // ✅ Generate accessible thumbnail URL from CID
-            const thumbnailUrl = course.thumbnailCID
-              ? await this.generateThumbnailUrl(course.thumbnailCID)
-              : null;
+            const sectionsCount = await this._getCourseSectionsCountCached(
+              course.id
+            );
+            const thumbnailUrl = await this._generateThumbnailUrlCached(
+              course.thumbnailCID
+            );
 
             return {
               id: course.id.toString(),
               title: course.title,
               description: course.description,
-              thumbnailCID: course.thumbnailCID, // ✅ Return CID from smart contract
-              thumbnailUrl: thumbnailUrl, // ✅ Generated accessible URL
+              thumbnailCID: course.thumbnailCID,
+              thumbnailUrl,
               creator: course.creator,
               pricePerMonth: ethers.formatEther(course.pricePerMonth),
               pricePerMonthWei: course.pricePerMonth.toString(),
               isActive: course.isActive,
               createdAt: new Date(Number(course.createdAt) * 1000),
-              sectionsCount: sectionsCount,
+              sectionsCount,
             };
           })
       );
 
       return processedCourses;
+    }, "getAllCourses");
+  }
+
+  // ✅ CACHED: Sections count with caching
+  async _getCourseSectionsCountCached(courseId) {
+    const cacheKey = `sections_count_${courseId}`;
+    const cached = this.progressCache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
+      return cached.count;
+    }
+
+    try {
+      const sections = await this.contracts.courseFactory.getCourseSections(
+        courseId
+      );
+      const count = sections.length;
+
+      this.progressCache.set(cacheKey, {
+        count,
+        timestamp: Date.now(),
+      });
+
+      return count;
     } catch (error) {
-      console.error("Error fetching all courses:", error);
-      return [];
+      console.warn(
+        `Failed to get sections count for course ${courseId}:`,
+        error.message
+      );
+      return 0;
     }
   }
 
-  // ✅ PERBAIKAN: Enhanced getCourse with CID handling
+  // ✅ CACHED: Thumbnail URL generation with caching
+  async _generateThumbnailUrlCached(thumbnailCID) {
+    if (!thumbnailCID) return null;
+
+    const cacheKey = `thumbnail_${thumbnailCID}`;
+    const cached = this.progressCache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
+      return cached.url;
+    }
+
+    try {
+      const { pinataService } = await import("./PinataService");
+      const url = await pinataService.getOptimizedFileUrl(thumbnailCID, {
+        forcePublic: true,
+        network: "public",
+      });
+
+      this.progressCache.set(cacheKey, {
+        url,
+        timestamp: Date.now(),
+      });
+
+      return url;
+    } catch (error) {
+      console.warn("Failed to generate thumbnail URL:", error.message);
+      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${thumbnailCID}`;
+
+      this.progressCache.set(cacheKey, {
+        url: fallbackUrl,
+        timestamp: Date.now(),
+      });
+
+      return fallbackUrl;
+    }
+  }
+
+  // ✅ OPTIMIZED: Enhanced getCourse
   async getCourse(courseId) {
     this.ensureInitialized();
-    try {
-      const course = await this.contracts.courseFactory.getCourse(courseId);
-      const sectionsCount = await this.getCourseSectionsCount(courseId);
 
-      // ✅ Generate accessible thumbnail URL from CID
-      const thumbnailUrl = course.thumbnailCID
-        ? await this.generateThumbnailUrl(course.thumbnailCID)
-        : null;
+    return await this._retryOperation(async () => {
+      const course = await this.contracts.courseFactory.getCourse(courseId);
+      const sectionsCount = await this._getCourseSectionsCountCached(courseId);
+      const thumbnailUrl = await this._generateThumbnailUrlCached(
+        course.thumbnailCID
+      );
 
       return {
         id: course.id.toString(),
         title: course.title,
         description: course.description,
-        thumbnailCID: course.thumbnailCID, // ✅ CID from smart contract
-        thumbnailUrl: thumbnailUrl, // ✅ Generated accessible URL
+        thumbnailCID: course.thumbnailCID,
+        thumbnailUrl,
         creator: course.creator,
         pricePerMonth: ethers.formatEther(course.pricePerMonth),
         pricePerMonthWei: course.pricePerMonth.toString(),
         isActive: course.isActive,
         createdAt: new Date(Number(course.createdAt) * 1000),
-        sectionsCount: sectionsCount,
+        sectionsCount,
       };
-    } catch (error) {
-      console.error(`Error fetching course ${courseId}:`, error);
-      return null;
-    }
+    }, "getCourse");
   }
 
-  // ✅ PERBAIKAN: Enhanced getCourseSections with CID and URL generation
+  // ✅ OPTIMIZED: Enhanced getCourseSections
   async getCourseSections(courseId) {
     this.ensureInitialized();
-    try {
+
+    return await this._retryOperation(async () => {
       const sections = await this.contracts.courseFactory.getCourseSections(
         courseId
       );
 
-      // ✅ Process sections with URL generation from CID
       const sectionsWithUrls = await Promise.all(
         sections.map(async (section) => {
-          let videoUrl = null;
+          let contentUrl = null;
+
           if (
             section.contentCID &&
             section.contentCID !== "placeholder-video-content"
           ) {
             try {
-              // ✅ Generate video streaming URL from CID
               const { videoService } = await import("./VideoService");
               const streamingResult = await videoService.getVideoStreamingUrl(
                 section.contentCID,
-                "public" // Assume public for course videos
+                "public"
               );
-              videoUrl = streamingResult.success
+              contentUrl = streamingResult.success
                 ? streamingResult.streamingUrl
                 : null;
             } catch (urlError) {
               console.warn(
                 `Failed to generate URL for section ${section.id}:`,
-                urlError
+                urlError.message
               );
             }
           }
 
           return {
             id: section.id.toString(),
-            courseId: section.courseId.toString(), // ✅ Fixed field name consistency
+            courseId: section.courseId.toString(),
             title: section.title,
-            contentCID: section.contentCID, // ✅ Return CID from smart contract
-            contentUrl: videoUrl, // ✅ Generated accessible URL
+            contentCID: section.contentCID,
+            contentUrl,
             duration: Number(section.duration),
             orderId: Number(section.orderId),
           };
@@ -406,17 +750,34 @@ class SmartContractService {
       );
 
       return sectionsWithUrls;
-    } catch (error) {
-      console.error(`Error fetching sections for course ${courseId}:`, error);
-      return [];
-    }
+    }, "getCourseSections");
   }
 
-  // ✅ PERBAIKAN: Enhanced getCourseMetadata method
+  // ✅ FIXED: Aligned with Solidity getCourseSection function
+  async getCourseSection(courseId, orderIndex) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const section = await this.contracts.courseFactory.getCourseSection(
+        courseId,
+        orderIndex
+      );
+
+      return {
+        id: section.id.toString(),
+        courseId: section.courseId_ret.toString(), // Note: Solidity returns courseId_ret
+        title: section.title,
+        contentCID: section.contentCID,
+        duration: Number(section.duration),
+      };
+    }, "getCourseSection");
+  }
+
+  // ✅ OPTIMIZED: Enhanced getCourseMetadata
   async getCourseMetadata(courseId) {
     this.ensureInitialized();
-    try {
-      // ✅ Use smart contract's getCourseMetadata method if available
+
+    return await this._retryOperation(async () => {
       try {
         const metadata = await this.contracts.courseFactory.getCourseMetadata(
           courseId
@@ -424,13 +785,13 @@ class SmartContractService {
         return {
           title: metadata.title,
           description: metadata.description,
-          thumbnailCID: metadata.thumbnailCID, // ✅ CID from smart contract
+          thumbnailCID: metadata.thumbnailCID,
           sectionsCount: Number(metadata.sectionsCount),
         };
       } catch (metadataError) {
-        // Fallback to getCourse method
         console.log("Using fallback getCourse method for metadata");
         const course = await this.getCourse(courseId);
+
         if (course) {
           return {
             title: course.title,
@@ -441,178 +802,193 @@ class SmartContractService {
         }
         return null;
       }
-    } catch (error) {
-      console.error(`Error fetching course metadata ${courseId}:`, error);
-      return null;
-    }
+    }, "getCourseMetadata");
   }
 
-  // ✅ PERBAIKAN: Enhanced getCourseSection with CID
-  async getCourseSection(courseId, orderIndex) {
-    this.ensureInitialized();
-    try {
-      const section = await this.contracts.courseFactory.getCourseSection(
-        courseId,
-        orderIndex
-      );
-      return {
-        id: section.id.toString(),
-        courseId: section.courseId_ret.toString(), // ✅ Fixed return parameter name
-        title: section.title,
-        contentCID: section.contentCID, // ✅ Changed from contentURI
-        duration: Number(section.duration),
-      };
-    } catch (error) {
-      console.error(
-        `Error fetching section ${orderIndex} for course ${courseId}:`,
-        error
-      );
-      return null;
-    }
-  }
-
-  // NEW METHOD: Get course sections count
-  async getCourseSectionsCount(courseId) {
-    this.ensureInitialized();
-    try {
-      const sections = await this.contracts.courseFactory.getCourseSections(
-        courseId
-      );
-      return sections.length;
-    } catch (error) {
-      console.error(
-        `Error fetching sections count for course ${courseId}:`,
-        error
-      );
-      return 0;
-    }
-  }
-
-  // ✅ PERBAIKAN: Enhanced generateThumbnailUrl method
-  async generateThumbnailUrl(thumbnailCID) {
-    try {
-      if (!thumbnailCID) return null;
-
-      // ✅ Import PinataService dinamis untuk avoid circular dependency
-      const { pinataService } = await import("./PinataService");
-
-      return await pinataService.getOptimizedFileUrl(thumbnailCID, {
-        forcePublic: true, // Thumbnail biasanya public
-        network: "public",
-      });
-    } catch (error) {
-      console.warn("Failed to generate thumbnail URL:", error);
-      // ✅ Fallback ke public gateway
-      return `https://gateway.pinata.cloud/ipfs/${thumbnailCID}`;
-    }
-  }
-
-  // ✅ PERBAIKAN: Enhanced getCreatorCourses
+  // ✅ OPTIMIZED: Enhanced getCreatorCourses
   async getCreatorCourses(creatorAddress) {
     this.ensureInitialized();
-    try {
+
+    return await this._retryOperation(async () => {
       const courseIds = await this.contracts.courseFactory.getCreatorCourses(
         creatorAddress
       );
 
-      // Fetch details for each course ID dengan enhanced processing
       const courses = await Promise.all(
         courseIds.map(async (id) => {
-          const course = await this.getCourse(id.toString());
-          if (course) {
-            // Add additional metadata untuk created courses UI
-            return {
-              ...course,
-              students: 0, // TODO: Implement student count tracking
-              revenue: "0.00", // TODO: Implement revenue tracking
-              status: course.isActive ? "Published" : "Draft",
-              created: course.createdAt.toISOString().split("T")[0],
-              thumbnail: course.thumbnailUrl, // ✅ Use generated URL
-              category: "Blockchain", // Default category
-            };
+          try {
+            const course = await this.getCourse(id.toString());
+            if (course) {
+              return {
+                ...course,
+                students: 0, // TODO: Implement actual student count
+                revenue: "0.00", // TODO: Implement actual revenue tracking
+                status: course.isActive ? "Published" : "Draft",
+                created: course.createdAt.toISOString().split("T")[0],
+                thumbnail: course.thumbnailUrl,
+                category: "Blockchain",
+              };
+            }
+            return null;
+          } catch (error) {
+            console.warn(
+              `Failed to fetch course details for ID ${id}:`,
+              error.message
+            );
+            return null;
           }
-          return null;
         })
       );
 
       return courses.filter((course) => course !== null);
-    } catch (error) {
-      console.error("Error fetching creator courses:", error);
-      return [];
-    }
+    }, "getCreatorCourses");
   }
 
-  // ✅ PERBAIKAN: Updated updateCourse with CID parameter
-  async updateCourse(courseId, courseData) {
-    this.ensureInitialized();
-    try {
-      const { title, description, thumbnailCID, pricePerMonth, isActive } =
-        courseData; // ✅ Changed from thumbnailURI
-      const priceInWei = ethers.parseEther(pricePerMonth.toString());
+  // === COURSE LICENSE METHODS ===
 
-      const tx = await this.contracts.courseFactory.updateCourse(
-        courseId,
-        title,
-        description,
-        thumbnailCID, // ✅ Pass CID instead of URI
-        priceInWei,
-        isActive
-      );
-      const receipt = await tx.wait();
-      return { success: true, transactionHash: receipt.hash };
-    } catch (error) {
-      console.error("Error updating course:", error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // ✅ PERBAIKAN: Updated updateCourseSection with CID parameter
-  async updateCourseSection(courseId, sectionId, sectionData) {
-    this.ensureInitialized();
-    try {
-      const { title, contentCID, duration } = sectionData; // ✅ Changed from contentURI
-      const tx = await this.contracts.courseFactory.updateCourseSection(
-        courseId,
-        sectionId,
-        title,
-        contentCID, // ✅ Pass CID instead of URI
-        duration
-      );
-      const receipt = await tx.wait();
-      return { success: true, transactionHash: receipt.hash };
-    } catch (error) {
-      console.error("Error updating course section:", error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  // --- Course License Methods ---
+  // ✅ FIXED: Aligned with Solidity - duration validation (max 12 months)
   async mintLicense(courseId, duration = 1) {
     this.ensureInitialized();
-    try {
+
+    return await this._retryOperation(async () => {
+      // Validate duration according to Solidity constraints
+      if (duration <= 0) throw new Error("Duration must be positive");
+      if (duration > 12) throw new Error("Maximum 12 months per transaction");
+
       const course = await this.getCourse(courseId);
       if (!course) throw new Error("Course not found");
+      if (!course.isActive) throw new Error("Course is not active");
 
-      // Use the wei value for calculations
       const pricePerMonthInWei = BigInt(course.pricePerMonthWei);
       const totalPrice = pricePerMonthInWei * BigInt(duration);
+
+      // Gas estimation
+      const gasEstimate =
+        await this.contracts.courseLicense.mintLicense.estimateGas(
+          courseId,
+          duration,
+          { value: totalPrice }
+        );
+
+      const gasLimit = gasEstimate + (gasEstimate * 20n) / 100n;
+
+      console.log(
+        `🎫 Minting license for course ${courseId}, duration: ${duration} month(s)`
+      );
+      console.log(`💰 Total price: ${ethers.formatEther(totalPrice)} ETH`);
 
       const tx = await this.contracts.courseLicense.mintLicense(
         courseId,
         duration,
-        { value: totalPrice }
+        { value: totalPrice, gasLimit }
       );
-      const receipt = await tx.wait();
-      return { success: true, transactionHash: receipt.hash };
-    } catch (error) {
-      console.error("Error minting license:", error);
-      return { success: false, error: error.message };
-    }
+
+      const receipt = await Promise.race([
+        tx.wait(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("License mint timeout")), 150000)
+        ),
+      ]);
+
+      console.log("✅ License minted successfully");
+
+      // Clear license cache for this user
+      this._clearLicenseCache(await this.signer.getAddress(), courseId);
+
+      // Parse license minted event
+      const licenseMintedEvent = receipt.logs
+        .map((log) => {
+          try {
+            return this.contracts.courseLicense.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .find((parsed) => parsed?.name === "LincenseMinted"); // Note: Typo in Solidity event name
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
+        tokenId: licenseMintedEvent?.args?.tokenId?.toString() || null,
+        expiryTimestamp:
+          licenseMintedEvent?.args?.expiryTimestamp?.toString() || null,
+      };
+    }, "mintLicense");
   }
 
+  // ✅ FIXED: Added renewLicense function aligned with Solidity
+  async renewLicense(courseId, duration = 1) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      // Validate duration according to Solidity constraints
+      if (duration <= 0) throw new Error("Duration must be positive");
+      if (duration > 12) throw new Error("Maximum 12 months per transaction");
+
+      const course = await this.getCourse(courseId);
+      if (!course) throw new Error("Course not found");
+      if (!course.isActive) throw new Error("Course is not active");
+
+      // Check if license exists
+      const userAddress = await this.signer.getAddress();
+      const tokenId = await this.contracts.courseLicense.getTokenId(
+        userAddress,
+        courseId
+      );
+      if (Number(tokenId) === 0) throw new Error("License does not exist");
+
+      const pricePerMonthInWei = BigInt(course.pricePerMonthWei);
+      const totalPrice = pricePerMonthInWei * BigInt(duration);
+
+      // Gas estimation
+      const gasEstimate =
+        await this.contracts.courseLicense.renewLicense.estimateGas(
+          courseId,
+          duration,
+          { value: totalPrice }
+        );
+
+      const gasLimit = gasEstimate + (gasEstimate * 20n) / 100n;
+
+      console.log(
+        `🔄 Renewing license for course ${courseId}, duration: ${duration} month(s)`
+      );
+      console.log(`💰 Total price: ${ethers.formatEther(totalPrice)} ETH`);
+
+      const tx = await this.contracts.courseLicense.renewLicense(
+        courseId,
+        duration,
+        { value: totalPrice, gasLimit }
+      );
+
+      const receipt = await Promise.race([
+        tx.wait(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("License renewal timeout")), 150000)
+        ),
+      ]);
+
+      console.log("✅ License renewed successfully");
+
+      // Clear license cache for this user
+      this._clearLicenseCache(userAddress, courseId);
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
+      };
+    }, "renewLicense");
+  }
+
+  // ✅ FIXED: Enhanced getUserLicenses with proper batch processing
   async getUserLicenses(userAddress) {
     this.ensureInitialized();
-    try {
+
+    return await this._retryOperation(async () => {
       const totalCourses = await this.contracts.courseFactory.getTotalCourses();
       const courseIds = Array.from(
         { length: Number(totalCourses) },
@@ -620,58 +996,87 @@ class SmartContractService {
       );
 
       const licenses = [];
-      for (const courseId of courseIds) {
-        // Check if the user has a license for this course
-        const balance = await this.contracts.courseLicense.balanceOf(
-          userAddress,
-          courseId
-        );
-        if (Number(balance) > 0) {
-          const licenseData = await this.contracts.courseLicense.getLicense(
-            userAddress,
-            courseId
-          );
-          if (licenseData.isActive) {
-            licenses.push({
-              courseId: licenseData.courseId.toString(),
-              student: licenseData.student,
-              durationLicense: licenseData.durationLicense.toString(),
-              expiryTimestamp: new Date(
-                Number(licenseData.expiryTimestamp) * 1000
-              ),
-              isActive: licenseData.isActive,
-            });
+
+      // Process in batches to avoid timeout
+      const batchSize = 10;
+      for (let i = 0; i < courseIds.length; i += batchSize) {
+        const batch = courseIds.slice(i, i + batchSize);
+
+        const batchPromises = batch.map(async (courseId) => {
+          try {
+            const balance = await this.contracts.courseLicense.balanceOf(
+              userAddress,
+              courseId
+            );
+
+            if (Number(balance) > 0) {
+              const licenseData = await this.contracts.courseLicense.getLicense(
+                userAddress,
+                courseId
+              );
+
+              if (licenseData.isActive) {
+                const tokenId = await this.contracts.courseLicense.getTokenId(
+                  userAddress,
+                  courseId
+                );
+
+                return {
+                  courseId: licenseData.courseId.toString(),
+                  student: licenseData.student,
+                  durationLicense: licenseData.durationLicense.toString(),
+                  expiryTimestamp: new Date(
+                    Number(licenseData.expiryTimestamp) * 1000
+                  ),
+                  isActive: licenseData.isActive,
+                  tokenId: tokenId.toString(),
+                };
+              }
+            }
+            return null;
+          } catch (error) {
+            console.warn(
+              `Failed to check license for course ${courseId}:`,
+              error.message
+            );
+            return null;
           }
-        }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        licenses.push(...batchResults.filter(Boolean));
       }
+
       return licenses;
-    } catch (error) {
-      console.error("Error fetching user licenses:", error);
-      return [];
-    }
+    }, "getUserLicenses");
   }
 
-  // ✅ Enhanced hasValidLicense with better caching
+  // ✅ FIXED: Added getStudentCourses function aligned with Solidity
+  async getStudentCourses(userAddress, courseIds) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const results = await this.contracts.courseLicense.getStudentCourses(
+        userAddress,
+        courseIds
+      );
+      return results;
+    }, "getStudentCourses");
+  }
+
+  // ✅ OPTIMIZED: Enhanced hasValidLicense with improved caching
   async hasValidLicense(userAddress, courseId) {
     this.ensureInitialized();
 
-    // Check cache first untuk improve performance
     const cacheKey = `${userAddress}-${courseId}`;
     const cached = this.licenseCache.get(cacheKey);
+
     if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
-      console.log("License check from cache:", cached.result);
       return cached.result;
     }
 
-    try {
-      console.log("Checking license for:", { userAddress, courseId });
-
-      // Validate input parameters
+    return await this._retryOperation(async () => {
       if (!userAddress || !courseId) {
-        console.error("Invalid parameters for license check:", {
-          userAddress,
-          courseId,
-        });
         this.licenseCache.set(cacheKey, {
           result: false,
           timestamp: Date.now(),
@@ -679,16 +1084,14 @@ class SmartContractService {
         return false;
       }
 
-      // Ensure courseId is string for consistency
       const courseIdStr = courseId.toString();
 
-      // ✅ Use the hasValidLicense method from CourseLicense contract
       try {
+        // Use direct contract method first
         const isValid = await this.contracts.courseLicense.hasValidLicense(
           userAddress,
           courseIdStr
         );
-        console.log(`✅ Smart contract hasValidLicense result: ${isValid}`);
 
         this.licenseCache.set(cacheKey, {
           result: isValid,
@@ -697,76 +1100,63 @@ class SmartContractService {
         return isValid;
       } catch (directMethodError) {
         console.log(
-          "Direct hasValidLicense failed, using balance check method:",
+          "Direct hasValidLicense failed, using fallback method:",
           directMethodError.message
         );
 
-        // Fallback to balance check method
-        const balance = await this.contracts.courseLicense.balanceOf(
-          userAddress,
-          courseIdStr
-        );
-        console.log("License balance:", balance.toString());
+        // Fallback to balance check
+        try {
+          const balance = await this.contracts.courseLicense.balanceOf(
+            userAddress,
+            courseIdStr
+          );
 
-        if (Number(balance) > 0) {
-          // If has balance, check if license is still active
-          try {
+          if (Number(balance) > 0) {
             const licenseData = await this.contracts.courseLicense.getLicense(
               userAddress,
               courseIdStr
             );
-
-            console.log("License data:", {
-              isActive: licenseData.isActive,
-              expiryTimestamp: licenseData.expiryTimestamp.toString(),
-              currentTime: Math.floor(Date.now() / 1000),
-            });
-
-            // Check if license is active and not expired
             const now = Math.floor(Date.now() / 1000);
             const isActive =
               licenseData.isActive && Number(licenseData.expiryTimestamp) > now;
 
-            console.log("License validity result:", isActive);
             this.licenseCache.set(cacheKey, {
               result: isActive,
               timestamp: Date.now(),
             });
             return isActive;
-          } catch (licenseDataError) {
-            console.error("Error fetching license data:", licenseDataError);
-            // If error in getting license data but balance > 0, assume valid
-            console.log("Assuming valid license due to positive balance");
-            this.licenseCache.set(cacheKey, {
-              result: true,
-              timestamp: Date.now(),
-            });
-            return true;
           }
-        }
 
-        console.log("No license balance found");
-        this.licenseCache.set(cacheKey, {
-          result: false,
-          timestamp: Date.now(),
-        });
-        return false;
+          this.licenseCache.set(cacheKey, {
+            result: false,
+            timestamp: Date.now(),
+          });
+          return false;
+        } catch (fallbackError) {
+          console.error(
+            "All license check methods failed:",
+            fallbackError.message
+          );
+          this.licenseCache.set(cacheKey, {
+            result: false,
+            timestamp: Date.now(),
+          });
+          return false;
+        }
       }
-    } catch (error) {
-      console.error("Error checking license validity:", error);
-      this.licenseCache.set(cacheKey, { result: false, timestamp: Date.now() });
-      return false;
-    }
+    }, "hasValidLicense");
   }
 
-  // ✅ NEW: Get license details
+  // ✅ OPTIMIZED: Enhanced getLicense
   async getLicense(userAddress, courseId) {
     this.ensureInitialized();
-    try {
+
+    return await this._retryOperation(async () => {
       const licenseData = await this.contracts.courseLicense.getLicense(
         userAddress,
         courseId
       );
+
       return {
         courseId: licenseData.courseId.toString(),
         student: licenseData.student,
@@ -774,123 +1164,352 @@ class SmartContractService {
         expiryTimestamp: new Date(Number(licenseData.expiryTimestamp) * 1000),
         isActive: licenseData.isActive,
       };
-    } catch (error) {
-      console.error("Error fetching license details:", error);
-      return null;
-    }
+    }, "getLicense");
   }
 
-  // --- Progress Tracker Methods ---
+  // === PROGRESS TRACKER METHODS ===
 
+  // ✅ OPTIMIZED: Enhanced completeSection
   async completeSection(courseId, sectionId) {
     this.ensureInitialized();
-    try {
+
+    return await this._retryOperation(async () => {
+      // Gas estimation
+      const gasEstimate =
+        await this.contracts.progressTracker.completeSection.estimateGas(
+          courseId,
+          sectionId
+        );
+
+      const gasLimit = gasEstimate + (gasEstimate * 15n) / 100n;
+
       const tx = await this.contracts.progressTracker.completeSection(
         courseId,
-        sectionId
+        sectionId,
+        { gasLimit }
       );
-      const receipt = await tx.wait();
-      return { success: true, transactionHash: receipt.hash };
-    } catch (error) {
-      console.error("Error completing section:", error);
-      return { success: false, error: error.message };
-    }
+
+      const receipt = await Promise.race([
+        tx.wait(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Progress update timeout")), 90000)
+        ),
+      ]);
+
+      // Clear progress cache
+      const userAddress = await this.signer.getAddress();
+      this._clearProgressCache(userAddress, courseId);
+
+      // Parse events
+      const sectionCompletedEvent = receipt.logs
+        .map((log) => {
+          try {
+            return this.contracts.progressTracker.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .find((parsed) => parsed?.name === "SectionCompleted");
+
+      const courseCompletedEvent = receipt.logs
+        .map((log) => {
+          try {
+            return this.contracts.progressTracker.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .find((parsed) => parsed?.name === "CourseCompleted");
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
+        sectionCompleted: !!sectionCompletedEvent,
+        courseCompleted: !!courseCompletedEvent,
+      };
+    }, "completeSection");
   }
 
-  // ✅ Alias for useBlockchain compatibility
+  // ✅ FIXED: Added isSectionCompleted function aligned with Solidity
+  async isSectionCompleted(userAddress, courseId, sectionId) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const isCompleted =
+        await this.contracts.progressTracker.isSectionCompleted(
+          userAddress,
+          courseId,
+          sectionId
+        );
+      return isCompleted;
+    }, "isSectionCompleted");
+  }
+
+  // ✅ FIXED: Added isCourseCompleted function aligned with Solidity
+  async isCourseCompleted(userAddress, courseId) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const isCompleted =
+        await this.contracts.progressTracker.isCourseCompleted(
+          userAddress,
+          courseId
+        );
+      return isCompleted;
+    }, "isCourseCompleted");
+  }
+
+  // ✅ ALIAS: Progress update compatibility
   async updateProgress(courseId, sectionId, completed = true) {
     if (completed) {
       return await this.completeSection(courseId, sectionId);
     } else {
-      // TODO: Implement uncomplete section if needed
       return { success: false, error: "Uncomplete section not implemented" };
     }
   }
 
+  // ✅ OPTIMIZED: Enhanced getUserProgress
   async getUserProgress(userAddress, courseId) {
     this.ensureInitialized();
-    try {
-      // ✅ Use the correct method names from ProgressTracker ABI
-      const sectionsProgress =
-        await this.contracts.progressTracker.getCourseSectionsProgress(
-          userAddress,
-          courseId
-        );
 
-      // Count completed sections
-      const completedSections = sectionsProgress.filter((p) => p).length;
+    const cacheKey = `progress_${userAddress}_${courseId}`;
+    const cached = this.progressCache.get(cacheKey);
 
-      // ✅ Use the correct method name
-      const progressPercentage =
-        await this.contracts.progressTracker.getCourseProgressPercentage(
-          userAddress,
-          courseId
-        );
-
-      return {
-        courseId: courseId.toString(),
-        completedSections: completedSections,
-        totalSections: sectionsProgress.length,
-        progressPercentage: Number(progressPercentage),
-        sectionsProgress: sectionsProgress, // ✅ Add detailed section progress
-      };
-    } catch (error) {
-      console.error(
-        `Error fetching user progress for course ${courseId}:`,
-        error
-      );
-      return {
-        courseId: courseId.toString(),
-        completedSections: 0,
-        totalSections: 0,
-        progressPercentage: 0,
-        sectionsProgress: [],
-      };
+    if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
+      return cached.progress;
     }
+
+    return await this._retryOperation(async () => {
+      try {
+        const sectionsProgress =
+          await this.contracts.progressTracker.getCourseSectionsProgress(
+            userAddress,
+            courseId
+          );
+
+        const completedSections = sectionsProgress.filter((p) => p).length;
+        const progressPercentage =
+          await this.contracts.progressTracker.getCourseProgressPercentage(
+            userAddress,
+            courseId
+          );
+
+        const progress = {
+          courseId: courseId.toString(),
+          completedSections,
+          totalSections: sectionsProgress.length,
+          progressPercentage: Number(progressPercentage),
+          sectionsProgress,
+        };
+
+        this.progressCache.set(cacheKey, {
+          progress,
+          timestamp: Date.now(),
+        });
+
+        return progress;
+      } catch (error) {
+        console.error(
+          `Error fetching user progress for course ${courseId}:`,
+          error.message
+        );
+
+        const defaultProgress = {
+          courseId: courseId.toString(),
+          completedSections: 0,
+          totalSections: 0,
+          progressPercentage: 0,
+          sectionsProgress: [],
+        };
+
+        this.progressCache.set(cacheKey, {
+          progress: defaultProgress,
+          timestamp: Date.now(),
+        });
+
+        return defaultProgress;
+      }
+    }, "getUserProgress");
   }
 
-  // Alias method for compatibility
+  // ✅ ALIAS: Compatibility method
   async getUserCourseProgress(userAddress, courseId) {
     return this.getUserProgress(userAddress, courseId);
   }
 
-  // --- Certificate Manager Methods ---
+  // === CERTIFICATE MANAGER METHODS ===
 
+  // ✅ FIXED: Enhanced issueCertificate with student name validation
   async issueCertificate(courseId, studentName) {
     this.ensureInitialized();
-    try {
-      const fee = await this.contracts.certificateManager.certificateFee();
-      const tx = await this.contracts.certificateManager.issueCertificate(
-        courseId,
-        studentName,
-        { value: fee }
-      );
-      const receipt = await tx.wait();
-      return { success: true, transactionHash: receipt.hash };
-    } catch (error) {
-      console.error("Error issuing certificate:", error);
-      return { success: false, error: error.message };
-    }
-  }
 
-  async getCertificateForCourse(userAddress, courseId) {
-    this.ensureInitialized();
-    try {
-      const certificateId =
+    return await this._retryOperation(async () => {
+      // Validate input according to Solidity constraints
+      if (!studentName?.trim()) {
+        throw new Error("Student name is required");
+      }
+      if (studentName.trim().length > 100) {
+        throw new Error("Student name too long (max 100 chars)");
+      }
+
+      // Check if course is completed
+      const userAddress = await this.signer.getAddress();
+      const isCompleted = await this.isCourseCompleted(userAddress, courseId);
+      if (!isCompleted) {
+        throw new Error("Course not completed");
+      }
+
+      // Check if certificate already exists
+      const existingCertificate =
         await this.contracts.certificateManager.getStudentCertificate(
           userAddress,
           courseId
         );
-      if (Number(certificateId) === 0) {
-        return null;
+      if (Number(existingCertificate) !== 0) {
+        throw new Error("Certificate already issued");
       }
 
+      const fee = await this.contracts.certificateManager.certificateFee();
+
+      // Gas estimation
+      const gasEstimate =
+        await this.contracts.certificateManager.issueCertificate.estimateGas(
+          courseId,
+          studentName.trim(),
+          { value: fee }
+        );
+
+      const gasLimit = gasEstimate + (gasEstimate * 20n) / 100n;
+
+      console.log(`🏆 Issuing certificate for course ${courseId}`);
+      console.log(`👤 Student: ${studentName.trim()}`);
+      console.log(`💰 Certificate fee: ${ethers.formatEther(fee)} ETH`);
+
+      const tx = await this.contracts.certificateManager.issueCertificate(
+        courseId,
+        studentName.trim(),
+        { value: fee, gasLimit }
+      );
+
+      const receipt = await Promise.race([
+        tx.wait(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Certificate issue timeout")),
+            120000
+          )
+        ),
+      ]);
+
+      console.log("✅ Certificate issued successfully");
+
+      // Parse certificate issued event
+      const certificateIssuedEvent = receipt.logs
+        .map((log) => {
+          try {
+            return this.contracts.certificateManager.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .find((parsed) => parsed?.name === "CertificateIssued");
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
+        certificateId:
+          certificateIssuedEvent?.args?.certificateId?.toString() || null,
+        issuedAt: certificateIssuedEvent?.args?.issuedAt?.toString() || null,
+      };
+    }, "issueCertificate");
+  }
+
+  // ✅ FIXED: Added revokeCertificate function (admin only)
+  async revokeCertificate(certificateId) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const tx = await this.contracts.certificateManager.revokeCertificate(
+        certificateId
+      );
+
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed?.toString(),
+      };
+    }, "revokeCertificate");
+  }
+
+  // ✅ FIXED: Added verifyCertificate function aligned with Solidity
+  async verifyCertificate(certificateId) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const isValid = await this.contracts.certificateManager.verifyCertificate(
+        certificateId
+      );
+      return isValid;
+    }, "verifyCertificate");
+  }
+
+  // ✅ OPTIMIZED: Enhanced getCertificateForCourse
+  async getCertificateForCourse(userAddress, courseId) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      try {
+        const certificateId =
+          await this.contracts.certificateManager.getStudentCertificate(
+            userAddress,
+            courseId
+          );
+
+        if (Number(certificateId) === 0) {
+          return null;
+        }
+
+        const cert = await this.contracts.certificateManager.getCertificate(
+          certificateId
+        );
+
+        if (!cert.isValid) {
+          return null;
+        }
+
+        return {
+          id: cert.certificateId.toString(),
+          courseId: cert.courseId.toString(),
+          student: cert.student,
+          studentName: cert.studentName,
+          issuedAt: new Date(Number(cert.issuedAt) * 1000),
+          isValid: cert.isValid,
+        };
+      } catch (error) {
+        console.error(
+          `Error fetching certificate for course ${courseId}:`,
+          error.message
+        );
+        return null;
+      }
+    }, "getCertificateForCourse");
+  }
+
+  // ✅ FIXED: Added getCertificate function aligned with Solidity
+  async getCertificate(certificateId) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
       const cert = await this.contracts.certificateManager.getCertificate(
         certificateId
       );
-      if (!cert.isValid) {
-        return null;
-      }
 
       return {
         id: cert.certificateId.toString(),
@@ -900,197 +1519,253 @@ class SmartContractService {
         issuedAt: new Date(Number(cert.issuedAt) * 1000),
         isValid: cert.isValid,
       };
-    } catch (error) {
-      console.error(
-        `Error fetching certificate for course ${courseId}:`,
-        error
-      );
-      return null;
-    }
+    }, "getCertificate");
   }
 
+  // ✅ FIXED: Added getCertificateMetadata function aligned with Solidity
+  async getCertificateMetadata(certificateId) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const metadata =
+        await this.contracts.certificateManager.getCertificateMetadata(
+          certificateId
+        );
+      return JSON.parse(metadata);
+    }, "getCertificateMetadata");
+  }
+
+  // ✅ FIXED: Added getVerificationData function aligned with Solidity
+  async getVerificationData(certificateId) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const verificationData =
+        await this.contracts.certificateManager.getVerificationData(
+          certificateId
+        );
+      return verificationData;
+    }, "getVerificationData");
+  }
+
+  // ✅ OPTIMIZED: Enhanced getUserCertificates
   async getUserCertificates(userAddress) {
     this.ensureInitialized();
-    try {
-      // ✅ Since there's no direct method to get all user certificates,
-      // we need to check certificates for courses the user has licenses for
-      const licenses = await this.getUserLicenses(userAddress);
-      const certificates = [];
 
-      for (const license of licenses) {
-        try {
-          const cert = await this.getCertificateForCourse(
+    return await this._retryOperation(async () => {
+      try {
+        const licenses = await this.getUserLicenses(userAddress);
+        const certificates = [];
+
+        // Process in batches
+        const batchSize = 5;
+        for (let i = 0; i < licenses.length; i += batchSize) {
+          const batch = licenses.slice(i, i + batchSize);
+
+          const batchPromises = batch.map(async (license) => {
+            try {
+              const cert = await this.getCertificateForCourse(
+                userAddress,
+                license.courseId
+              );
+              return cert;
+            } catch (certError) {
+              console.warn(
+                `Failed to get certificate for course ${license.courseId}:`,
+                certError.message
+              );
+              return null;
+            }
+          });
+
+          const batchResults = await Promise.all(batchPromises);
+          certificates.push(...batchResults.filter(Boolean));
+        }
+
+        return certificates;
+      } catch (error) {
+        console.error("Error fetching user certificates:", error.message);
+        return [];
+      }
+    }, "getUserCertificates");
+  }
+
+  // ✅ FIXED: Added certificate management functions
+  async setCertificateFee(newFee) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const tx = await this.contracts.certificateManager.setCertificateFee(
+        ethers.parseEther(newFee.toString())
+      );
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+      };
+    }, "setCertificateFee");
+  }
+
+  async setPlatformFee(newFeePercentage) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const tx = await this.contracts.certificateManager.setPlatformFee(
+        newFeePercentage
+      );
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+      };
+    }, "setPlatformFee");
+  }
+
+  async setPlatformWallet(newWallet) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const tx = await this.contracts.certificateManager.setPlatformWallet(
+        newWallet
+      );
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+      };
+    }, "setPlatformWallet");
+  }
+
+  // === UTILITY METHODS ===
+
+  // ✅ OPTIMIZED: Enhanced getETHPrice
+  async getETHPrice() {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const price = await this.contracts.courseFactory.getETHPrice();
+      return ethers.formatUnits(price, 8);
+    }, "getETHPrice");
+  }
+
+  // ✅ OPTIMIZED: Enhanced getMaxPriceInETH
+  async getMaxPriceInETH() {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const maxPrice = await this.contracts.courseFactory.getMaxPriceInETH();
+      return ethers.formatEther(maxPrice);
+    }, "getMaxPriceInETH");
+  }
+
+  // ✅ OPTIMIZED: Enhanced getTotalCourses
+  async getTotalCourses() {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const total = await this.contracts.courseFactory.getTotalCourses();
+      return Number(total);
+    }, "getTotalCourses");
+  }
+
+  // ✅ FIXED: Added getCertificateFee function
+  async getCertificateFee() {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const fee = await this.contracts.certificateManager.certificateFee();
+      return ethers.formatEther(fee);
+    }, "getCertificateFee");
+  }
+
+  // ✅ FIXED: Added SECONDS_PER_MONTH constant getter
+  async getSecondsPerMonth() {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      const seconds = await this.contracts.courseLicense.SECONDS_PER_MONTH();
+      return Number(seconds);
+    }, "getSecondsPerMonth");
+  }
+
+  // === CACHE MANAGEMENT ===
+
+  // ✅ NEW: Clear license cache
+  _clearLicenseCache(userAddress, courseId) {
+    const cacheKey = `${userAddress}-${courseId}`;
+    this.licenseCache.delete(cacheKey);
+  }
+
+  // ✅ NEW: Clear progress cache
+  _clearProgressCache(userAddress, courseId) {
+    const cacheKey = `progress_${userAddress}_${courseId}`;
+    this.progressCache.delete(cacheKey);
+  }
+
+  // ✅ NEW: Clear all caches
+  clearAllCaches() {
+    this.licenseCache.clear();
+    this.progressCache.clear();
+    console.log("✅ All caches cleared");
+  }
+
+  // === BACKWARD COMPATIBILITY METHODS ===
+
+  // ✅ COMPATIBILITY: For existing code
+  async getCourseSectionsCount(courseId) {
+    return await this._getCourseSectionsCountCached(courseId);
+  }
+
+  async generateThumbnailUrl(thumbnailCID) {
+    return await this._generateThumbnailUrlCached(thumbnailCID);
+  }
+
+  async getMaxPriceInWei() {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      return await this.contracts.courseFactory.getMaxPriceInETH();
+    }, "getMaxPriceInWei");
+  }
+
+  async getUserEnrolledCourses(userAddress) {
+    const licenses = await this.getUserLicenses(userAddress);
+    const enrolledCourses = [];
+
+    for (const license of licenses) {
+      try {
+        const course = await this.getCourse(license.courseId);
+        if (course) {
+          const progress = await this.getUserProgress(
             userAddress,
             license.courseId
           );
-          if (cert) {
-            certificates.push(cert);
-          }
-        } catch (certError) {
-          console.warn(
-            `Failed to get certificate for course ${license.courseId}:`,
-            certError
-          );
+
+          enrolledCourses.push({
+            ...course,
+            progress: progress.progressPercentage || 0,
+            totalLessons: course.sectionsCount || 0,
+            completedLessons: progress.completedSections || 0,
+            instructor: `${course.creator.slice(0, 6)}...${course.creator.slice(
+              -4
+            )}`,
+            thumbnail: course.thumbnailUrl,
+            category: "Blockchain",
+            enrolled: new Date().toISOString().split("T")[0],
+          });
         }
-      }
-
-      return certificates;
-    } catch (error) {
-      console.error("Error fetching user certificates:", error);
-      return [];
-    }
-  }
-
-  async getCertificateForCourse(userAddress, courseId) {
-    this.ensureInitialized();
-    try {
-      // ✅ Use the correct method from CertificateManager
-      const certificateId =
-        await this.contracts.certificateManager.getStudentCertificate(
-          userAddress,
-          courseId
+      } catch (error) {
+        console.warn(
+          `Failed to process enrolled course ${license.courseId}:`,
+          error.message
         );
-
-      if (Number(certificateId) === 0) {
-        return null; // No certificate found
       }
-
-      const cert = await this.contracts.certificateManager.getCertificate(
-        certificateId
-      );
-
-      if (!cert.isValid) {
-        return null; // Certificate is revoked
-      }
-
-      return {
-        id: cert.certificateId.toString(),
-        courseId: cert.courseId.toString(),
-        student: cert.student,
-        studentName: cert.studentName,
-        issuedAt: new Date(Number(cert.issuedAt) * 1000),
-        isValid: cert.isValid,
-      };
-    } catch (error) {
-      console.error(
-        `Error fetching certificate for course ${courseId}:`,
-        error
-      );
-      return null;
     }
-  }
 
-  // --- Utility Methods ---
-
-  async getETHPrice() {
-    this.ensureInitialized();
-    try {
-      const price = await this.contracts.courseFactory.getETHPrice();
-      return ethers.formatUnits(price, 8);
-    } catch (error) {
-      console.error("Error fetching ETH price:", error);
-      return "0";
-    }
-  }
-
-  // Get maximum price in wei (as returned by smart contract)
-  async getMaxPriceInWei() {
-    this.ensureInitialized();
-    try {
-      const maxPriceInWei =
-        await this.contracts.courseFactory.getMaxPriceInETH();
-      return maxPriceInWei; // Returns BigNumber in wei
-    } catch (error) {
-      console.error("Error fetching max price in wei:", error);
-      return ethers.parseEther("0");
-    }
-  }
-
-  // Get maximum price formatted as ETH string (for UI display)
-  async getMaxPriceInETH() {
-    this.ensureInitialized();
-    try {
-      const maxPrice = await this.contracts.courseFactory.getMaxPriceInETH();
-      return ethers.formatEther(maxPrice);
-    } catch (error) {
-      console.error("Error fetching max price in ETH:", error);
-      return "0";
-    }
-  }
-
-  async getTotalCourses() {
-    this.ensureInitialized();
-    try {
-      const total = await this.contracts.courseFactory.getTotalCourses();
-      return Number(total);
-    } catch (error) {
-      console.error("Error fetching total courses:", error);
-      return 0;
-    }
-  }
-
-  // ✅ PERBAIKAN: Enhanced getUserEnrolledCourses
-  async getUserEnrolledCourses(userAddress) {
-    this.ensureInitialized();
-    try {
-      const totalCourses = await this.contracts.courseFactory.getTotalCourses();
-      const courseIds = Array.from(
-        { length: Number(totalCourses) },
-        (_, i) => i + 1
-      );
-
-      const enrolledCourses = [];
-      for (const courseId of courseIds) {
-        // Check if user has valid license for this course
-        const hasLicense = await this.hasValidLicense(userAddress, courseId);
-
-        if (hasLicense) {
-          // Get course details with enhanced data
-          const course = await this.getCourse(courseId);
-          if (course) {
-            // Get user's progress for this course
-            try {
-              const progress = await this.getUserCourseProgress(
-                userAddress,
-                courseId
-              );
-              enrolledCourses.push({
-                ...course,
-                progress: progress.progressPercentage || 0,
-                totalLessons: course.sectionsCount || 0,
-                completedLessons: progress.completedSections || 0,
-                instructor: `${course.creator.slice(
-                  0,
-                  6
-                )}...${course.creator.slice(-4)}`,
-                thumbnail: course.thumbnailUrl, // ✅ Use generated URL
-                category: "Blockchain",
-                enrolled: new Date().toISOString().split("T")[0],
-              });
-            } catch (progressError) {
-              // If progress tracking fails, still include the course with default progress
-              enrolledCourses.push({
-                ...course,
-                progress: 0,
-                totalLessons: course.sectionsCount || 0,
-                completedLessons: 0,
-                instructor: `${course.creator.slice(
-                  0,
-                  6
-                )}...${course.creator.slice(-4)}`,
-                thumbnail: course.thumbnailUrl, // ✅ Use generated URL
-                category: "Blockchain",
-                enrolled: new Date().toISOString().split("T")[0],
-              });
-            }
-          }
-        }
-      }
-      return enrolledCourses;
-    } catch (error) {
-      console.error("Error fetching user enrolled courses:", error);
-      return [];
-    }
+    return enrolledCourses;
   }
 }
 

@@ -3,7 +3,7 @@ import { usePublicClient, useWalletClient, useAccount } from "wagmi";
 import { ethers } from "ethers";
 import SmartContractService from "../services/SmartContractService";
 
-// Helper function to convert Viem client to ethers provider (ethers v6)
+// ✅ Helper function to convert Viem client to ethers provider (ethers v6)
 function publicClientToProvider(publicClient) {
   const { chain, transport } = publicClient;
 
@@ -25,10 +25,8 @@ function publicClientToProvider(publicClient) {
   });
 }
 
-// Helper function to convert Viem wallet client to ethers signer (ethers v6)
+// ✅ Helper function to convert Viem wallet client to ethers signer (ethers v6)
 function walletClientToSigner(walletClient, publicClient) {
-  const provider = publicClientToProvider(publicClient);
-
   // In ethers v6, we create a BrowserProvider for wallet interactions
   return new ethers.BrowserProvider(walletClient.transport, {
     chainId: walletClient.chain.id,
@@ -36,77 +34,109 @@ function walletClientToSigner(walletClient, publicClient) {
   });
 }
 
-// ✅ Enhanced useSmartContract hook dengan optimasi
+// ✅ Enhanced useSmartContract hook with optimized initialization
 export const useSmartContract = () => {
   const { isConnected, status } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState(null);
+  const [initializationAttempts, setInitializationAttempts] = useState(0);
 
-  // Tambahkan debugging info
+  // Enhanced debugging info
   useEffect(() => {
-    console.log("Status wallet:", status);
-    console.log("Public client:", !!publicClient);
-    console.log("Wallet client:", !!walletClient);
-  }, [status, publicClient, walletClient]);
+    console.log("🔗 Wallet connection status:", {
+      status,
+      isConnected,
+      publicClient: !!publicClient,
+      walletClient: !!walletClient,
+      attempts: initializationAttempts,
+    });
+  }, [status, publicClient, walletClient, isConnected, initializationAttempts]);
 
   useEffect(() => {
     const initializeService = async () => {
-      if (!publicClient || !walletClient) {
-        console.log("Client tidak tersedia:", {
+      if (!publicClient || !walletClient || !isConnected) {
+        console.log("❌ Missing required clients:", {
           publicClient: !!publicClient,
           walletClient: !!walletClient,
+          isConnected,
         });
         return;
       }
 
       try {
-        console.log("Mencoba initialize SmartContractService...");
+        console.log("🚀 Initializing SmartContractService...");
+        setInitializationAttempts((prev) => prev + 1);
+
         const provider = publicClientToProvider(publicClient);
         const browserProvider = walletClientToSigner(
           walletClient,
           publicClient
         );
 
+        // ✅ Test provider connection first
+        const network = await provider.getNetwork();
+        console.log("✅ Provider connected to network:", {
+          chainId: Number(network.chainId),
+          name: network.name || "Unknown",
+        });
+
         await SmartContractService.initialize(provider, browserProvider);
-        console.log("SmartContractService berhasil diinisialisasi!");
+
+        console.log("✅ SmartContractService initialized successfully!");
         setIsInitialized(true);
         setError(null);
+        setInitializationAttempts(0);
       } catch (err) {
-        console.error("ERROR inisialisasi SmartContractService:", err);
+        console.error("❌ SmartContractService initialization failed:", err);
         setError(err.message);
         setIsInitialized(false);
+
+        // ✅ Auto-retry with exponential backoff (max 3 attempts)
+        if (initializationAttempts < 3) {
+          const retryDelay = Math.min(
+            2000 * Math.pow(2, initializationAttempts),
+            8000
+          );
+          console.log(`🔄 Retrying initialization in ${retryDelay}ms...`);
+          setTimeout(() => {
+            initializeService();
+          }, retryDelay);
+        }
       }
     };
 
     let initTimer;
-    if (status === "connected" && publicClient && walletClient) {
-      console.log("Wallet connected, menginisialisasi SmartContractService...");
-      // Tambahkan delay lebih lama untuk memastikan provider stabil
-      initTimer = setTimeout(initializeService, 1200); // ✅ Reduced delay
+    if (status === "connected" && isConnected && publicClient && walletClient) {
+      console.log("🔗 Wallet connected, initializing SmartContractService...");
+      // ✅ Optimized delay for stable provider
+      initTimer = setTimeout(initializeService, 800);
     } else {
       setIsInitialized(false);
+      setError(null);
     }
 
     return () => {
       if (initTimer) clearTimeout(initTimer);
     };
-  }, [status, publicClient, walletClient]);
+  }, [status, isConnected, publicClient, walletClient, initializationAttempts]);
 
   return {
     smartContractService: isInitialized ? SmartContractService : null,
     isInitialized,
     error,
+    initializationAttempts,
   };
 };
 
-// ✅ Enhanced useCourses hook dengan pagination support
-export const useCourses = (offset = 0, limit = 50) => {
+// ✅ Enhanced useCourses hook with pagination and caching
+export const useCourses = (offset = 0, limit = 20) => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(true);
+  const [totalCourses, setTotalCourses] = useState(0);
   const { isInitialized } = useSmartContract();
 
   const fetchCourses = useCallback(
@@ -122,11 +152,18 @@ export const useCourses = (offset = 0, limit = 50) => {
           `📚 Fetching courses: offset=${currentOffset}, limit=${limit}`
         );
 
-        // ✅ Use enhanced getAllCourses with pagination
-        const coursesData = await SmartContractService.getAllCourses(
-          currentOffset,
-          limit
+        // ✅ Use timeout for fetch operation
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Request timeout")), 30000)
         );
+
+        const [coursesData, total] = await Promise.race([
+          Promise.all([
+            SmartContractService.getAllCourses(currentOffset, limit),
+            SmartContractService.getTotalCourses(),
+          ]),
+          timeoutPromise,
+        ]);
 
         if (reset) {
           setCourses(coursesData);
@@ -134,13 +171,17 @@ export const useCourses = (offset = 0, limit = 50) => {
           setCourses((prev) => [...prev, ...coursesData]);
         }
 
-        // Check if there are more courses
-        setHasMore(coursesData.length === limit);
+        setTotalCourses(total);
+        setHasMore(currentOffset + coursesData.length < total);
 
-        console.log(`✅ Fetched ${coursesData.length} courses`);
+        console.log(
+          `✅ Fetched ${coursesData.length} courses (${
+            currentOffset + coursesData.length
+          }/${total})`
+        );
       } catch (err) {
-        console.error("Error fetching courses:", err);
-        setError(err.message);
+        console.error("❌ Error fetching courses:", err);
+        setError(err.message || "Failed to fetch courses");
       } finally {
         setLoading(false);
       }
@@ -149,7 +190,9 @@ export const useCourses = (offset = 0, limit = 50) => {
   );
 
   useEffect(() => {
-    fetchCourses(true); // Reset on first load
+    if (isInitialized) {
+      fetchCourses(true);
+    }
   }, [isInitialized]);
 
   return {
@@ -157,12 +200,13 @@ export const useCourses = (offset = 0, limit = 50) => {
     loading,
     error,
     hasMore,
+    totalCourses,
     refetch: () => fetchCourses(true),
     loadMore: () => fetchCourses(false),
   };
 };
 
-// ✅ Enhanced useUserCourses hook
+// ✅ Enhanced useUserCourses hook with better error handling
 export const useUserCourses = () => {
   const { address } = useAccount();
   const [enrolledCourses, setEnrolledCourses] = useState([]);
@@ -172,64 +216,88 @@ export const useUserCourses = () => {
 
   const fetchUserCourses = useCallback(async () => {
     if (!isInitialized || !address) return;
+
     setLoading(true);
     setError(null);
 
     try {
       console.log(`👤 Fetching enrolled courses for: ${address}`);
 
-      const licenses = await SmartContractService.getUserLicenses(address);
+      // ✅ Add timeout protection
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request timeout")), 45000)
+      );
+
+      const licenses = await Promise.race([
+        SmartContractService.getUserLicenses(address),
+        timeoutPromise,
+      ]);
+
       const coursesWithProgress = [];
 
-      for (const license of licenses) {
-        try {
-          // ✅ Use enhanced getCourse method
-          const course = await SmartContractService.getCourse(license.courseId);
+      // ✅ Process licenses in batches to avoid timeout
+      const batchSize = 3;
+      for (let i = 0; i < licenses.length; i += batchSize) {
+        const batch = licenses.slice(i, i + batchSize);
 
-          if (course) {
-            // ✅ Use enhanced progress tracking if available
-            let progress = null;
+        const batchResults = await Promise.all(
+          batch.map(async (license) => {
             try {
-              progress = await SmartContractService.getUserProgress(
-                address,
+              const course = await SmartContractService.getCourse(
                 license.courseId
               );
-            } catch (progressError) {
-              console.warn(
-                `Progress not available for course ${license.courseId}:`,
-                progressError
-              );
-            }
 
-            coursesWithProgress.push({
-              ...course,
-              license,
-              progress: progress?.progressPercentage || 0,
-              completedSections: progress?.completedSections?.length || 0,
-              totalSections:
-                progress?.totalSections || course.sectionsCount || 0,
-            });
-          }
-        } catch (err) {
-          console.warn(
-            `Failed to fetch course details for license ${license.tokenId}:`,
-            err
-          );
-        }
+              if (course) {
+                let progress = null;
+                try {
+                  progress = await SmartContractService.getUserProgress(
+                    address,
+                    license.courseId
+                  );
+                } catch (progressError) {
+                  console.warn(
+                    `Progress not available for course ${license.courseId}:`,
+                    progressError
+                  );
+                }
+
+                return {
+                  ...course,
+                  license,
+                  progress: progress?.progressPercentage || 0,
+                  completedSections: progress?.completedSections?.length || 0,
+                  totalSections:
+                    progress?.totalSections || course.sectionsCount || 0,
+                };
+              }
+              return null;
+            } catch (err) {
+              console.warn(
+                `Failed to fetch course details for license ${license.tokenId}:`,
+                err
+              );
+              return null;
+            }
+          })
+        );
+
+        coursesWithProgress.push(...batchResults.filter(Boolean));
       }
 
       setEnrolledCourses(coursesWithProgress);
       console.log(`✅ Fetched ${coursesWithProgress.length} enrolled courses`);
     } catch (err) {
-      console.error("Error fetching user courses:", err);
-      setError(err.message);
+      console.error("❌ Error fetching user courses:", err);
+      setError(err.message || "Failed to fetch enrolled courses");
     } finally {
       setLoading(false);
     }
   }, [isInitialized, address]);
 
   useEffect(() => {
-    fetchUserCourses();
+    if (isInitialized && address) {
+      fetchUserCourses();
+    }
   }, [fetchUserCourses]);
 
   return {
@@ -257,21 +325,29 @@ export const useCreatorCourses = () => {
     try {
       console.log(`👨‍🏫 Fetching created courses for: ${address}`);
 
-      // ✅ Use enhanced getCreatorCourses method
-      const courses = await SmartContractService.getCreatorCourses(address);
-      setCreatedCourses(courses);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request timeout")), 30000)
+      );
 
+      const courses = await Promise.race([
+        SmartContractService.getCreatorCourses(address),
+        timeoutPromise,
+      ]);
+
+      setCreatedCourses(courses);
       console.log(`✅ Fetched ${courses.length} created courses`);
     } catch (err) {
-      console.error("Error fetching creator courses:", err);
-      setError(err.message);
+      console.error("❌ Error fetching creator courses:", err);
+      setError(err.message || "Failed to fetch created courses");
     } finally {
       setLoading(false);
     }
   }, [isInitialized, address]);
 
   useEffect(() => {
-    fetchCreatorCourses();
+    if (isInitialized && address) {
+      fetchCreatorCourses();
+    }
   }, [fetchCreatorCourses]);
 
   return {
@@ -282,10 +358,11 @@ export const useCreatorCourses = () => {
   };
 };
 
-// ✅ Enhanced useCreateCourse hook dengan CID parameter
+// ✅ Enhanced useCreateCourse hook with robust transaction handling
 export const useCreateCourse = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [progress, setProgress] = useState(0);
   const { isInitialized } = useSmartContract();
 
   const createCourse = useCallback(
@@ -296,42 +373,63 @@ export const useCreateCourse = () => {
 
       setLoading(true);
       setError(null);
+      setProgress(0);
 
       try {
         console.log("🚀 Creating course with data:", {
           title: courseData.title,
-          thumbnailCID: courseData.thumbnailCID, // ✅ Use CID parameter
+          thumbnailCID: courseData.thumbnailCID,
           sectionsCount: sections.length,
         });
 
-        // ✅ Create course with CID parameter
-        const courseResult = await SmartContractService.createCourse({
-          title: courseData.title,
-          description: courseData.description,
-          thumbnailCID: courseData.thumbnailCID, // ✅ Changed from thumbnailURI
-          pricePerMonth: courseData.pricePerMonth || "0",
-        });
+        setProgress(10);
+
+        // ✅ Create course with optimized gas settings
+        const courseResult = await SmartContractService.createCourse(
+          {
+            title: courseData.title,
+            description: courseData.description,
+            thumbnailCID: courseData.thumbnailCID,
+            pricePerMonth: courseData.pricePerMonth || "0",
+          },
+          {
+            gasLimit: "350000", // ✅ Optimized gas limit
+            timeout: 90000, // ✅ 90 second timeout
+          }
+        );
 
         if (!courseResult.success) {
-          throw new Error(courseResult.error);
+          throw new Error(courseResult.error || "Failed to create course");
         }
 
         const courseId = courseResult.courseId;
         console.log(`✅ Course created with ID: ${courseId}`);
+        setProgress(40);
 
-        // ✅ Add sections with CID parameter
+        // ✅ Add sections sequentially with delay between transactions
         const sectionResults = [];
         for (let i = 0; i < sections.length; i++) {
           const section = sections[i];
           try {
-            console.log(`📖 Adding section ${i + 1}: ${section.title}`);
+            console.log(
+              `📖 Adding section ${i + 1}/${sections.length}: ${section.title}`
+            );
+
+            // ✅ Add delay between transactions to avoid nonce conflicts
+            if (i > 0) {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
 
             const sectionResult = await SmartContractService.addCourseSection(
               courseId,
               {
                 title: section.title,
-                contentCID: section.contentCID, // ✅ Changed from contentURI
+                contentCID: section.contentCID,
                 duration: section.duration,
+              },
+              {
+                gasLimit: "250000", // ✅ Optimized gas limit for sections
+                timeout: 60000, // ✅ 60 second timeout per section
               }
             );
 
@@ -344,10 +442,15 @@ export const useCreateCourse = () => {
                 sectionResult.error
               );
             }
+
+            // ✅ Update progress
+            setProgress(40 + ((i + 1) / sections.length) * 50);
           } catch (err) {
             console.warn(`Failed to add section "${section.title}":`, err);
           }
         }
+
+        setProgress(100);
 
         const successMessage = {
           success: true,
@@ -362,14 +465,15 @@ export const useCreateCourse = () => {
         console.log("🎉 Course creation completed:", successMessage);
         return successMessage;
       } catch (err) {
-        console.error("Error creating course:", err);
-        setError(err.message);
+        console.error("❌ Error creating course:", err);
+        setError(err.message || "Failed to create course");
         return {
           success: false,
-          error: err.message,
+          error: err.message || "Failed to create course",
         };
       } finally {
         setLoading(false);
+        setTimeout(() => setProgress(0), 2000); // Reset progress after delay
       }
     },
     [isInitialized]
@@ -379,10 +483,11 @@ export const useCreateCourse = () => {
     createCourse,
     loading,
     error,
+    progress,
   };
 };
 
-// ✅ Enhanced useMintLicense hook
+// ✅ Enhanced useMintLicense hook with gas optimization
 export const useMintLicense = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -402,23 +507,28 @@ export const useMintLicense = () => {
           `🎫 Minting license for course ${courseId}, duration: ${duration} month(s)`
         );
 
-        const result = await SmartContractService.mintLicense(
-          courseId,
-          duration
+        // ✅ Add timeout protection
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Transaction timeout")), 120000)
         );
 
+        const result = await Promise.race([
+          SmartContractService.mintLicense(courseId, duration),
+          timeoutPromise,
+        ]);
+
         if (!result.success) {
-          throw new Error(result.error);
+          throw new Error(result.error || "Failed to mint license");
         }
 
         console.log("✅ License minted successfully:", result);
         return result;
       } catch (err) {
-        console.error("Error minting license:", err);
-        setError(err.message);
+        console.error("❌ Error minting license:", err);
+        setError(err.message || "Failed to mint license");
         return {
           success: false,
-          error: err.message,
+          error: err.message || "Failed to mint license",
         };
       } finally {
         setLoading(false);
@@ -454,24 +564,27 @@ export const useUpdateProgress = () => {
           `📈 Updating progress: course ${courseId}, section ${sectionId}, completed: ${completed}`
         );
 
-        const result = await SmartContractService.updateProgress(
-          courseId,
-          sectionId,
-          completed
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Transaction timeout")), 60000)
         );
 
+        const result = await Promise.race([
+          SmartContractService.updateProgress(courseId, sectionId, completed),
+          timeoutPromise,
+        ]);
+
         if (!result.success) {
-          throw new Error(result.error);
+          throw new Error(result.error || "Failed to update progress");
         }
 
         console.log("✅ Progress updated successfully");
         return result;
       } catch (err) {
-        console.error("Error updating progress:", err);
-        setError(err.message);
+        console.error("❌ Error updating progress:", err);
+        setError(err.message || "Failed to update progress");
         return {
           success: false,
-          error: err.message,
+          error: err.message || "Failed to update progress",
         };
       } finally {
         setLoading(false);
@@ -504,20 +617,29 @@ export const useUserCertificates = () => {
     try {
       console.log(`🏆 Fetching certificates for: ${address}`);
 
-      const certs = await SmartContractService.getUserCertificates(address);
-      setCertificates(certs);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Request timeout")), 30000)
+      );
 
+      const certs = await Promise.race([
+        SmartContractService.getUserCertificates(address),
+        timeoutPromise,
+      ]);
+
+      setCertificates(certs);
       console.log(`✅ Fetched ${certs.length} certificates`);
     } catch (err) {
-      console.error("Error fetching certificates:", err);
-      setError(err.message);
+      console.error("❌ Error fetching certificates:", err);
+      setError(err.message || "Failed to fetch certificates");
     } finally {
       setLoading(false);
     }
   }, [isInitialized, address]);
 
   useEffect(() => {
-    fetchCertificates();
+    if (isInitialized && address) {
+      fetchCertificates();
+    }
   }, [fetchCertificates]);
 
   return {
@@ -528,62 +650,78 @@ export const useUserCertificates = () => {
   };
 };
 
-// ✅ Enhanced useETHPrice hook
+// ✅ Enhanced useETHPrice hook with caching
 export const useETHPrice = () => {
   const [price, setPrice] = useState("0");
   const [maxPriceETH, setMaxPriceETH] = useState("0");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [lastFetch, setLastFetch] = useState(0);
   const { isInitialized } = useSmartContract();
 
-  const fetchPriceData = useCallback(async () => {
-    if (!isInitialized) return;
+  const fetchPriceData = useCallback(
+    async (force = false) => {
+      if (!isInitialized) return;
 
-    setLoading(true);
-    setError(null);
+      // ✅ Cache for 30 seconds to avoid excessive calls
+      const now = Date.now();
+      if (!force && now - lastFetch < 30000) {
+        return;
+      }
 
-    try {
-      console.log("💰 Fetching ETH price data...");
+      setLoading(true);
+      setError(null);
 
-      // ✅ Fetch both current price and max allowed price
-      const [ethPrice, maxPrice] = await Promise.all([
-        SmartContractService.getETHPrice(),
-        SmartContractService.getMaxPriceInETH
-          ? SmartContractService.getMaxPriceInETH()
-          : Promise.resolve("0"),
-      ]);
+      try {
+        console.log("💰 Fetching ETH price data...");
 
-      setPrice(ethPrice);
-      setMaxPriceETH(maxPrice);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Price fetch timeout")), 15000)
+        );
 
-      console.log(`✅ ETH Price: ${ethPrice}, Max Price: ${maxPrice} ETH`);
-    } catch (err) {
-      console.error("Error fetching ETH price:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [isInitialized]);
+        const [ethPrice, maxPrice] = await Promise.race([
+          Promise.all([
+            SmartContractService.getETHPrice(),
+            SmartContractService.getMaxPriceInETH(),
+          ]),
+          timeoutPromise,
+        ]);
+
+        setPrice(ethPrice);
+        setMaxPriceETH(maxPrice);
+        setLastFetch(now);
+
+        console.log(`✅ ETH Price: ${ethPrice}, Max Price: ${maxPrice} ETH`);
+      } catch (err) {
+        console.error("❌ Error fetching ETH price:", err);
+        setError(err.message || "Failed to fetch ETH price");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isInitialized, lastFetch]
+  );
 
   useEffect(() => {
-    fetchPriceData();
+    if (isInitialized) {
+      fetchPriceData();
 
-    // Refresh price every 5 minutes
-    const interval = setInterval(fetchPriceData, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, [fetchPriceData]);
+      // ✅ Refresh price every 2 minutes
+      const interval = setInterval(() => fetchPriceData(), 2 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isInitialized, fetchPriceData]);
 
   return {
     price,
-    maxPriceETH, // ✅ Add max price in ETH
+    maxPriceETH,
     loading,
     error,
-    refetch: fetchPriceData,
+    refetch: () => fetchPriceData(true),
   };
 };
 
-// ✅ Enhanced useHasActiveLicense hook
+// ✅ Enhanced useHasActiveLicense hook with caching
 export const useHasActiveLicense = (courseId) => {
   const { address } = useAccount();
   const [hasLicense, setHasLicense] = useState(false);
@@ -605,15 +743,17 @@ export const useHasActiveLicense = (courseId) => {
     try {
       console.log(`🎫 Checking license for course ${courseId}`);
 
-      // ✅ Use hasValidLicense method for efficient checking
-      const isValid = await SmartContractService.hasValidLicense(
-        address,
-        courseId
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("License check timeout")), 20000)
       );
+
+      const isValid = await Promise.race([
+        SmartContractService.hasValidLicense(address, courseId),
+        timeoutPromise,
+      ]);
 
       setHasLicense(isValid);
 
-      // ✅ If valid, get detailed license data
       if (isValid) {
         try {
           const licenseDetails = await SmartContractService.getLicense(
@@ -633,8 +773,8 @@ export const useHasActiveLicense = (courseId) => {
         `✅ License check completed: ${isValid ? "Valid" : "Invalid"}`
       );
     } catch (err) {
-      console.error("Error checking license:", err);
-      setError(err.message);
+      console.error("❌ Error checking license:", err);
+      setError(err.message || "Failed to check license");
       setHasLicense(false);
       setLicenseData(null);
     } finally {
@@ -643,12 +783,14 @@ export const useHasActiveLicense = (courseId) => {
   }, [isInitialized, address, courseId]);
 
   useEffect(() => {
-    checkLicense();
+    if (isInitialized && address && courseId) {
+      checkLicense();
+    }
   }, [checkLicense]);
 
   return {
     hasLicense,
-    licenseData, // ✅ Return detailed license information
+    licenseData,
     loading,
     error,
     refetch: checkLicense,
@@ -671,23 +813,29 @@ export const useCourseMetadata = (courseId) => {
     try {
       console.log(`📋 Fetching metadata for course ${courseId}`);
 
-      // ✅ Use efficient getCourseMetadata method
-      const metadataResult = await SmartContractService.getCourseMetadata(
-        courseId
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Metadata fetch timeout")), 15000)
       );
-      setMetadata(metadataResult);
 
+      const metadataResult = await Promise.race([
+        SmartContractService.getCourseMetadata(courseId),
+        timeoutPromise,
+      ]);
+
+      setMetadata(metadataResult);
       console.log(`✅ Metadata fetched for course ${courseId}`);
     } catch (err) {
-      console.error("Error fetching course metadata:", err);
-      setError(err.message);
+      console.error("❌ Error fetching course metadata:", err);
+      setError(err.message || "Failed to fetch metadata");
     } finally {
       setLoading(false);
     }
   }, [isInitialized, courseId]);
 
   useEffect(() => {
-    fetchMetadata();
+    if (isInitialized && courseId) {
+      fetchMetadata();
+    }
   }, [fetchMetadata]);
 
   return {
@@ -714,25 +862,31 @@ export const useCourseSections = (courseId) => {
     try {
       console.log(`📖 Fetching sections for course ${courseId}`);
 
-      // ✅ Use enhanced getCourseSections with URL generation
-      const sectionsData = await SmartContractService.getCourseSections(
-        courseId
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Sections fetch timeout")), 25000)
       );
-      setSections(sectionsData);
 
+      const sectionsData = await Promise.race([
+        SmartContractService.getCourseSections(courseId),
+        timeoutPromise,
+      ]);
+
+      setSections(sectionsData);
       console.log(
         `✅ Fetched ${sectionsData.length} sections for course ${courseId}`
       );
     } catch (err) {
-      console.error("Error fetching course sections:", err);
-      setError(err.message);
+      console.error("❌ Error fetching course sections:", err);
+      setError(err.message || "Failed to fetch sections");
     } finally {
       setLoading(false);
     }
   }, [isInitialized, courseId]);
 
   useEffect(() => {
-    fetchSections();
+    if (isInitialized && courseId) {
+      fetchSections();
+    }
   }, [fetchSections]);
 
   return {
@@ -751,6 +905,7 @@ export const useBlockchain = () => {
     smartContractService: smartContractData.smartContractService,
     isInitialized: smartContractData.isInitialized,
     error: smartContractData.error,
+    initializationAttempts: smartContractData.initializationAttempts,
   };
 };
 
@@ -771,24 +926,32 @@ export const useCourseCompletion = (courseId) => {
     try {
       console.log(`🏁 Checking completion for course ${courseId}`);
 
-      const completed =
-        await SmartContractService.contracts.progressTracker.isCourseCompleted(
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Completion check timeout")), 15000)
+      );
+
+      const completed = await Promise.race([
+        SmartContractService.contracts.progressTracker.isCourseCompleted(
           address,
           courseId
-        );
+        ),
+        timeoutPromise,
+      ]);
 
       setIsCompleted(completed);
       console.log(`✅ Course ${courseId} completion status: ${completed}`);
     } catch (err) {
-      console.error("Error checking course completion:", err);
-      setError(err.message);
+      console.error("❌ Error checking course completion:", err);
+      setError(err.message || "Failed to check completion");
     } finally {
       setLoading(false);
     }
   }, [isInitialized, address, courseId]);
 
   useEffect(() => {
-    checkCompletion();
+    if (isInitialized && address && courseId) {
+      checkCompletion();
+    }
   }, [checkCompletion]);
 
   return {
@@ -816,23 +979,29 @@ export const useUserProgress = (courseId) => {
     try {
       console.log(`📊 Fetching progress for course ${courseId}`);
 
-      const progressData = await SmartContractService.getUserProgress(
-        address,
-        courseId
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Progress fetch timeout")), 20000)
       );
+
+      const progressData = await Promise.race([
+        SmartContractService.getUserProgress(address, courseId),
+        timeoutPromise,
+      ]);
 
       setProgress(progressData);
       console.log(`✅ Progress fetched for course ${courseId}:`, progressData);
     } catch (err) {
-      console.error("Error fetching user progress:", err);
-      setError(err.message);
+      console.error("❌ Error fetching user progress:", err);
+      setError(err.message || "Failed to fetch progress");
     } finally {
       setLoading(false);
     }
   }, [isInitialized, address, courseId]);
 
   useEffect(() => {
-    fetchProgress();
+    if (isInitialized && address && courseId) {
+      fetchProgress();
+    }
   }, [fetchProgress]);
 
   return {
@@ -841,4 +1010,80 @@ export const useUserProgress = (courseId) => {
     error,
     refetch: fetchProgress,
   };
+};
+
+// ✅ NEW: Hook for issuing certificates
+export const useIssueCertificate = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const { isInitialized } = useSmartContract();
+
+  const issueCertificate = useCallback(
+    async (courseId, studentName) => {
+      if (!isInitialized) {
+        throw new Error("Smart contract service not initialized");
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        console.log(`🏆 Issuing certificate for course ${courseId}`);
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Certificate issue timeout")),
+            90000
+          )
+        );
+
+        const result = await Promise.race([
+          SmartContractService.issueCertificate(courseId, studentName),
+          timeoutPromise,
+        ]);
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to issue certificate");
+        }
+
+        console.log("✅ Certificate issued successfully:", result);
+        return result;
+      } catch (err) {
+        console.error("❌ Error issuing certificate:", err);
+        setError(err.message || "Failed to issue certificate");
+        return {
+          success: false,
+          error: err.message || "Failed to issue certificate",
+        };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isInitialized]
+  );
+
+  return {
+    issueCertificate,
+    loading,
+    error,
+  };
+};
+
+export default {
+  useSmartContract,
+  useCourses,
+  useUserCourses,
+  useCreatorCourses,
+  useCreateCourse,
+  useMintLicense,
+  useUpdateProgress,
+  useUserCertificates,
+  useETHPrice,
+  useHasActiveLicense,
+  useCourseMetadata,
+  useCourseSections,
+  useBlockchain,
+  useCourseCompletion,
+  useUserProgress,
+  useIssueCertificate,
 };

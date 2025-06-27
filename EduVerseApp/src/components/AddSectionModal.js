@@ -1,3 +1,4 @@
+// AddSectionModal.js - FULLY OPTIMIZED for Smart Contract Integration
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -38,33 +39,31 @@ const AddSectionModal = ({
   const [modalHeight, setModalHeight] = useState(screenHeight * 0.85);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  // Form state - isolated from parent to prevent interference
+  // ✅ FIXED: Form state aligned with smart contract requirements
   const [formData, setFormData] = useState({
-    title: "",
-    contentURI: "",
-    duration: "",
+    title: "", // Smart contract: max 200 chars
+    duration: "", // Smart contract: in seconds, max 86400 (24 hours)
   });
 
   const [errors, setErrors] = useState({});
-  const [selectedVideoFile, setSelectedVideoFile] = useState(null); // CHANGED: Just store file info, don't upload
+  const [selectedVideoFile, setSelectedVideoFile] = useState(null); // Store file for later upload
   const [isSelectingVideo, setIsSelectingVideo] = useState(false);
 
-  // Initialize form data when modal opens
+  // ✅ ENHANCED: Initialize form data when modal opens
   useEffect(() => {
     if (visible) {
       if (isEditing && initialData) {
         setFormData({
           title: initialData.title || "",
-          contentURI: initialData.contentURI || "",
           duration: initialData.duration
-            ? Math.round(initialData.duration / 60).toString()
+            ? Math.round(initialData.duration / 60).toString() // Convert seconds to minutes for display
             : "",
         });
         setSelectedVideoFile(initialData.videoFile || null);
       } else {
+        // Reset for new section
         setFormData({
           title: "",
-          contentURI: "",
           duration: "",
         });
         setSelectedVideoFile(null);
@@ -119,7 +118,7 @@ const AddSectionModal = ({
       }),
     ]).start(() => {
       // Clean up after animation
-      setFormData({ title: "", contentURI: "", duration: "" });
+      setFormData({ title: "", duration: "" });
       setErrors({});
       setSelectedVideoFile(null);
     });
@@ -149,7 +148,7 @@ const AddSectionModal = ({
     }).start();
   };
 
-  // CHANGED: Video selection without upload
+  // ✅ ENHANCED: Video selection with comprehensive validation
   const handleVideoSelection = async () => {
     if (isSelectingVideo) return;
 
@@ -157,7 +156,8 @@ const AddSectionModal = ({
       setIsSelectingVideo(true);
 
       // Request permission
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (permissionResult.granted === false) {
         Alert.alert(
@@ -172,106 +172,187 @@ const AddSectionModal = ({
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: false,
         quality: 1.0,
+        videoMaxDuration: 3600, // 1 hour max selection
       });
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
 
-        // Create file object WITHOUT uploading
+        // ✅ FIXED: Create file object compatible with upload services
         const videoFile = {
           uri: asset.uri,
-          type: asset.type || videoService.detectMimeType(asset.fileName || asset.uri),
-          name: asset.fileName || `video_${Date.now()}.mp4`,
+          type:
+            asset.type ||
+            videoService.detectMimeType(asset.fileName || asset.uri) ||
+            "video/mp4",
+          name: asset.fileName || `section_video_${Date.now()}.mp4`,
           size: asset.fileSize || 0,
-          duration: asset.duration || 0, // Video duration in milliseconds
+          duration: asset.duration || 0, // Duration in milliseconds
         };
 
-        console.log("✅ Video file selected (not uploaded yet):", videoFile.name);
+        console.log("✅ Video file selected for section:", {
+          name: videoFile.name,
+          size: videoFile.size,
+          duration: videoFile.duration,
+          type: videoFile.type,
+        });
 
-        // Validate video file
-        const validation = videoService.validateVideo(videoFile);
+        // ✅ ENHANCED: Comprehensive validation
+        const validationResult = await validateVideoFile(videoFile);
 
-        if (!validation.isValid) {
-          if (validation.compressionRequired) {
-            Alert.alert(
-              "Video Too Large",
-              `The selected video is too large (${validation.formattedSize || videoService.formatFileSize(videoFile.size)}).\n\n` +
-              "Maximum recommended: 100MB for free plan.\n\n" +
-              "Please compress the video first or select a smaller file.",
-              [
-                { text: "OK" },
-                {
-                  text: "Select Another",
-                  onPress: () => setTimeout(handleVideoSelection, 500),
-                },
-              ]
-            );
-          } else {
-            Alert.alert("Video Error", validation.error);
-          }
+        if (!validationResult.isValid) {
+          Alert.alert("Video Validation Error", validationResult.error);
           return;
         }
 
-        // Check capacity (optional warning)
-        try {
-          const capacityCheck = await videoService.canUploadVideo(videoFile.size);
-          if (!capacityCheck.possible) {
-            Alert.alert(
-              "Upload Capacity Warning",
-              capacityCheck.warnings.join("\n") + "\n\nVideo will be uploaded when you create the course.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Continue Anyway",
-                  onPress: () => setSelectedVideoFile(videoFile),
-                },
-              ]
-            );
-            return;
-          }
-
-          // Show warnings if any
-          if (capacityCheck.warnings.length > 0 || validation.warnings.length > 0) {
-            const allWarnings = [...capacityCheck.warnings, ...validation.warnings];
-            Alert.alert(
-              "Video Selected with Warnings",
-              allWarnings.join("\n") + "\n\nVideo will be uploaded when you create the course.",
-              [
-                { text: "OK", onPress: () => setSelectedVideoFile(videoFile) },
-              ]
-            );
-          } else {
-            setSelectedVideoFile(videoFile);
-            Alert.alert(
-              "Video Selected! 📹",
-              `Video "${videoFile.name}" selected successfully.\n\n` +
-              `Size: ${videoService.formatFileSize(videoFile.size)}\n` +
-              `Type: ${videoFile.type}\n\n` +
-              "Video will be uploaded to IPFS when you create the course."
-            );
-          }
-        } catch (capacityError) {
-          console.warn("Could not check upload capacity:", capacityError);
-          // Continue anyway - just store the file
-          setSelectedVideoFile(videoFile);
-          Alert.alert("Video Selected", `Video "${videoFile.name}" selected. It will be uploaded when you create the course.`);
-        }
-
-        // Auto-estimate duration if not available
-        if (!formData.duration && asset.duration) {
-          const estimatedMinutes = Math.ceil(asset.duration / 60000); // Convert ms to minutes
-          setFormData(prev => ({
-            ...prev,
-            duration: estimatedMinutes.toString(),
-          }));
+        // Show warnings if any
+        if (validationResult.warnings.length > 0) {
+          Alert.alert(
+            "Video Selected with Warnings",
+            validationResult.warnings.join("\n") +
+              "\n\nVideo will be uploaded when you create the course.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Continue",
+                onPress: () => processVideoSelection(videoFile, asset),
+              },
+            ]
+          );
+        } else {
+          processVideoSelection(videoFile, asset);
         }
       }
     } catch (error) {
       console.error("Video selection error:", error);
-      Alert.alert("Selection Error", `Failed to select video: ${error.message}`);
+      Alert.alert(
+        "Selection Error",
+        `Failed to select video: ${error.message}`
+      );
     } finally {
       setIsSelectingVideo(false);
     }
+  };
+
+  // ✅ NEW: Process video selection after validation
+  const processVideoSelection = (videoFile, asset) => {
+    setSelectedVideoFile(videoFile);
+
+    // Auto-estimate duration if available and form duration is empty
+    if (!formData.duration && asset.duration && asset.duration > 0) {
+      const estimatedMinutes = Math.ceil(asset.duration / 60000); // Convert ms to minutes, round up
+      setFormData((prev) => ({
+        ...prev,
+        duration: estimatedMinutes.toString(),
+      }));
+    }
+
+    Alert.alert(
+      "Video Selected! 📹",
+      `Video "${videoFile.name}" selected successfully.\n\n` +
+        `Size: ${
+          videoService.formatFileSize
+            ? videoService.formatFileSize(videoFile.size)
+            : `${(videoFile.size / 1024 / 1024).toFixed(1)} MB`
+        }\n` +
+        `Type: ${videoFile.type}\n` +
+        `Duration: ${
+          asset.duration
+            ? `${Math.round(asset.duration / 60000)} minutes`
+            : "Unknown"
+        }\n\n` +
+        "Video will be uploaded to IPFS when you create the course."
+    );
+  };
+
+  // ✅ NEW: Comprehensive video validation
+  const validateVideoFile = async (videoFile) => {
+    const warnings = [];
+    let isValid = true;
+    let error = "";
+
+    // File size validation
+    const maxSize = 100 * 1024 * 1024; // 100MB
+    if (videoFile.size > maxSize) {
+      isValid = false;
+      error = `Video file is too large (${
+        videoService.formatFileSize
+          ? videoService.formatFileSize(videoFile.size)
+          : `${(videoFile.size / 1024 / 1024).toFixed(1)} MB`
+      }). Maximum allowed: 100MB.`;
+      return { isValid, error, warnings };
+    }
+
+    // File type validation
+    const allowedTypes = [
+      "video/mp4",
+      "video/mov",
+      "video/avi",
+      "video/mkv",
+      "video/webm",
+    ];
+    if (!allowedTypes.includes(videoFile.type)) {
+      warnings.push(
+        `Video type ${videoFile.type} may not be fully supported. Recommended: MP4.`
+      );
+    }
+
+    // Duration validation (if available)
+    if (videoFile.duration > 0) {
+      const durationMinutes = videoFile.duration / 60000;
+      if (durationMinutes > 600) {
+        // 10 hours
+        isValid = false;
+        error = `Video duration is too long (${Math.round(
+          durationMinutes
+        )} minutes). Maximum allowed: 600 minutes (10 hours).`;
+        return { isValid, error, warnings };
+      }
+
+      if (durationMinutes > 120) {
+        // 2 hours warning
+        warnings.push(
+          `Video is quite long (${Math.round(
+            durationMinutes
+          )} minutes). Consider splitting into smaller sections for better user experience.`
+        );
+      }
+    }
+
+    // Size warnings
+    if (videoFile.size > 50 * 1024 * 1024) {
+      // 50MB warning
+      warnings.push(
+        `Video file is large (${
+          videoService.formatFileSize
+            ? videoService.formatFileSize(videoFile.size)
+            : `${(videoFile.size / 1024 / 1024).toFixed(1)} MB`
+        }). Upload may take longer.`
+      );
+    }
+
+    // Check upload capacity if videoService supports it
+    try {
+      if (videoService.canUploadVideo) {
+        const capacityCheck = await videoService.canUploadVideo(videoFile.size);
+        if (!capacityCheck.possible) {
+          isValid = false;
+          error =
+            capacityCheck.error ||
+            "Video upload not possible due to capacity limits.";
+          return { isValid, error, warnings };
+        }
+
+        if (capacityCheck.warnings && capacityCheck.warnings.length > 0) {
+          warnings.push(...capacityCheck.warnings);
+        }
+      }
+    } catch (capacityError) {
+      console.warn("Could not check upload capacity:", capacityError);
+      // Continue without capacity check
+    }
+
+    return { isValid, error, warnings };
   };
 
   // Remove selected video
@@ -286,73 +367,99 @@ const AddSectionModal = ({
           style: "destructive",
           onPress: () => {
             setSelectedVideoFile(null);
-            setFormData(prev => ({ ...prev, contentURI: "" }));
           },
         },
       ]
     );
   };
 
+  // ✅ ENHANCED: Form validation aligned with smart contract limits
   const validateForm = () => {
     const newErrors = {};
 
-    // Validate title
+    // ✅ Title validation (smart contract: max 200 chars)
     if (!formData.title.trim()) {
       newErrors.title = "Section title is required";
     } else if (formData.title.trim().length < 3) {
       newErrors.title = "Title must be at least 3 characters";
-    } else if (formData.title.trim().length > 100) {
-      newErrors.title = "Title must be less than 100 characters";
+    } else if (formData.title.trim().length > 200) {
+      newErrors.title =
+        "Title cannot exceed 200 characters (smart contract limit)";
     }
 
-    // Validate duration
+    // ✅ Duration validation (smart contract: max 86400 seconds = 24 hours)
     if (!formData.duration.trim()) {
       newErrors.duration = "Duration is required";
     } else {
-      const durationNum = parseFloat(formData.duration);
-      if (isNaN(durationNum) || durationNum <= 0) {
+      const durationMinutes = parseFloat(formData.duration);
+      if (isNaN(durationMinutes) || durationMinutes <= 0) {
         newErrors.duration = "Duration must be a positive number";
-      } else if (durationNum > 600) {
-        newErrors.duration = "Duration cannot exceed 600 minutes (10 hours)";
+      } else if (durationMinutes > 1440) {
+        // 1440 minutes = 24 hours
+        newErrors.duration =
+          "Duration cannot exceed 1440 minutes (24 hours, smart contract limit)";
+      } else if (durationMinutes < 0.5) {
+        // 30 seconds minimum
+        newErrors.duration =
+          "Duration must be at least 0.5 minutes (30 seconds)";
       }
-    }
-
-    // Validate content URI (optional)
-    if (formData.contentURI.trim() && !isValidURI(formData.contentURI.trim())) {
-      newErrors.contentURI = "Please enter a valid IPFS or HTTP URI";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const isValidURI = (uri) => {
-    const ipfsPattern = /^ipfs:\/\/[a-zA-Z0-9]+/;
-    const httpPattern = /^https?:\/\/.+/;
-    return ipfsPattern.test(uri) || httpPattern.test(uri);
-  };
-
+  // ✅ FIXED: Handle save with proper data structure for CreateCourseScreen
   const handleSave = () => {
     if (!validateForm()) {
       return;
     }
 
-    // CHANGED: Pass video file without uploading
+    // ✅ FIXED: Create section data compatible with smart contract and CreateCourseScreen
+    const durationInSeconds = Math.round(parseFloat(formData.duration) * 60); // Convert minutes to seconds
+
     const sectionData = {
-      title: formData.title.trim(),
-      contentURI: formData.contentURI.trim() || "placeholder://video-content",
-      duration: Math.round(parseFloat(formData.duration) * 60), // Convert minutes to seconds
-      videoFile: selectedVideoFile, // Pass the video file for later upload
-      uploadStatus: selectedVideoFile ? 'pending' : 'no-video',
+      title: formData.title.trim(), // Smart contract parameter: string title
+      duration: durationInSeconds, // Smart contract parameter: uint256 duration (in seconds)
+      videoFile: selectedVideoFile, // For upload to IPFS -> contentCID
+      // Additional metadata for UI
+      id: Date.now() + Math.random(), // Temporary ID for UI
+      orderId: 0, // Will be set by parent component
+      createdAt: new Date().toISOString(),
+      uploadStatus: selectedVideoFile ? "pending" : "no-video",
     };
 
-    console.log("✅ Section data prepared for save (video will upload later):", {
+    console.log("✅ Section data prepared for CreateCourseScreen:", {
       title: sectionData.title,
+      durationSeconds: sectionData.duration,
+      durationMinutes: parseFloat(formData.duration),
       hasVideo: !!sectionData.videoFile,
       videoFileName: sectionData.videoFile?.name,
-      durationSeconds: sectionData.duration,
+      videoSize: sectionData.videoFile?.size,
       uploadStatus: sectionData.uploadStatus,
     });
+
+    // Validate final data
+    if (sectionData.title.length > 200) {
+      Alert.alert(
+        "Error",
+        "Title exceeds smart contract limit of 200 characters"
+      );
+      return;
+    }
+
+    if (sectionData.duration > 86400) {
+      Alert.alert(
+        "Error",
+        "Duration exceeds smart contract limit of 86400 seconds (24 hours)"
+      );
+      return;
+    }
+
+    if (sectionData.duration <= 0) {
+      Alert.alert("Error", "Duration must be greater than 0 seconds");
+      return;
+    }
 
     onSave(sectionData);
     onClose();
@@ -370,11 +477,30 @@ const AddSectionModal = ({
       [field]: value,
     }));
 
+    // Clear error when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({
         ...prev,
         [field]: null,
       }));
+    }
+  };
+
+  // ✅ Helper: Format duration display
+  const formatDurationDisplay = () => {
+    if (!formData.duration) return "";
+
+    const minutes = parseFloat(formData.duration);
+    const seconds = Math.round(minutes * 60);
+
+    if (seconds < 60) {
+      return `${seconds} seconds`;
+    } else if (seconds < 3600) {
+      return `${Math.floor(seconds / 60)} minutes ${seconds % 60} seconds`;
+    } else {
+      const hours = Math.floor(seconds / 3600);
+      const remainingMinutes = Math.floor((seconds % 3600) / 60);
+      return `${hours} hours ${remainingMinutes} minutes`;
     }
   };
 
@@ -393,10 +519,7 @@ const AddSectionModal = ({
         {/* Backdrop */}
         <TouchableWithoutFeedback onPress={handleBackdropPress}>
           <Animated.View
-            style={[
-              styles.backdrop,
-              { opacity: backdropOpacity },
-            ]}
+            style={[styles.backdrop, { opacity: backdropOpacity }]}
           />
         </TouchableWithoutFeedback>
 
@@ -422,7 +545,9 @@ const AddSectionModal = ({
                 <View style={styles.headerButtons}>
                   <TouchableOpacity
                     style={styles.expandButton}
-                    onPress={isFullScreen ? collapseToNormal : expandToFullScreen}
+                    onPress={
+                      isFullScreen ? collapseToNormal : expandToFullScreen
+                    }
                     activeOpacity={0.7}
                   >
                     <Ionicons
@@ -447,7 +572,8 @@ const AddSectionModal = ({
               </View>
 
               <Text style={styles.gestureHint}>
-                Tap expand button to full screen • Tap close to exit
+                Tap expand button for full screen • All data validated for smart
+                contract
               </Text>
             </View>
 
@@ -467,15 +593,48 @@ const AddSectionModal = ({
                   style={[styles.input, errors.title && styles.inputError]}
                   value={formData.title}
                   onChangeText={(value) => handleInputChange("title", value)}
-                  placeholder="Enter section title"
+                  placeholder="Enter section title (max 200 characters)"
                   placeholderTextColor={Colors.textMuted}
-                  maxLength={100}
+                  maxLength={200}
                   autoCorrect={true}
                   autoCapitalize="words"
                 />
                 {errors.title && (
                   <Text style={styles.errorText}>{errors.title}</Text>
                 )}
+                <Text style={styles.helperText}>
+                  {formData.title.length}/200 characters (Smart contract limit:
+                  200)
+                </Text>
+              </View>
+
+              {/* Duration Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>
+                  Duration (minutes) <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput
+                  style={[styles.input, errors.duration && styles.inputError]}
+                  value={formData.duration}
+                  onChangeText={(value) => handleInputChange("duration", value)}
+                  placeholder="Enter duration in minutes (max 1440 = 24 hours)"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="decimal-pad"
+                  maxLength={10}
+                />
+                {errors.duration && (
+                  <Text style={styles.errorText}>{errors.duration}</Text>
+                )}
+                <Text style={styles.helperText}>
+                  {formData.duration ? (
+                    <>
+                      Duration: {formatDurationDisplay()} • Smart contract
+                      stores in seconds (max 86400)
+                    </>
+                  ) : (
+                    "Smart contract limit: 1440 minutes (24 hours). Will be converted to seconds."
+                  )}
+                </Text>
               </View>
 
               {/* Video Content Section */}
@@ -494,13 +653,29 @@ const AddSectionModal = ({
                 >
                   {selectedVideoFile ? (
                     <View style={styles.videoPreview}>
-                      <Ionicons name="videocam" size={48} color={Colors.primary} />
+                      <Ionicons
+                        name="videocam"
+                        size={48}
+                        color={Colors.primary}
+                      />
                       <Text style={styles.videoSelectedText}>
                         {selectedVideoFile.name}
                       </Text>
                       <Text style={styles.videoDetailsText}>
-                        {videoService.formatFileSize(selectedVideoFile.size)} • {selectedVideoFile.type}
+                        {videoService.formatFileSize
+                          ? videoService.formatFileSize(selectedVideoFile.size)
+                          : `${(selectedVideoFile.size / 1024 / 1024).toFixed(
+                              1
+                            )} MB`}{" "}
+                        • {selectedVideoFile.type}
                       </Text>
+                      {selectedVideoFile.duration > 0 && (
+                        <Text style={styles.videoDetailsText}>
+                          Video duration:{" "}
+                          {Math.round(selectedVideoFile.duration / 60000)}{" "}
+                          minutes
+                        </Text>
+                      )}
                       <Text style={styles.videoChangeText}>
                         Tap to change video
                       </Text>
@@ -518,77 +693,62 @@ const AddSectionModal = ({
                     </View>
                   ) : (
                     <View style={styles.videoPlaceholder}>
-                      <Ionicons name="videocam-outline" size={48} color={Colors.textMuted} />
+                      <Ionicons
+                        name="videocam-outline"
+                        size={48}
+                        color={Colors.textMuted}
+                      />
                       <Text style={styles.videoPlaceholderText}>
-                        {isSelectingVideo ? "Selecting video..." : "Tap to select video"}
+                        {isSelectingVideo
+                          ? "Selecting video..."
+                          : "Tap to select video"}
                       </Text>
                       <Text style={styles.videoRequirements}>
-                        Recommended: MP4, max 100MB for free plan
+                        Max: 100MB, 600 minutes • Recommended: MP4 format
                       </Text>
                     </View>
                   )}
                 </TouchableOpacity>
 
                 <Text style={styles.helperText}>
-                  Select a video file that will be uploaded to IPFS when you create the course.
-                  Video will be stored temporarily until upload.
+                  Video will be uploaded to IPFS when you create the course. The
+                  IPFS CID will be stored as contentCID in the smart contract.
                 </Text>
               </View>
 
-              {/* Content URI Input (Optional) */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Content URI (Optional)</Text>
-                <TextInput
-                  style={[styles.input, errors.contentURI && styles.inputError]}
-                  value={formData.contentURI}
-                  onChangeText={(value) => handleInputChange("contentURI", value)}
-                  placeholder="ipfs://... or https://..."
-                  placeholderTextColor={Colors.textMuted}
-                  autoCorrect={false}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                  multiline={true}
-                  numberOfLines={2}
+              {/* Smart Contract Info Box */}
+              <View style={styles.smartContractInfoBox}>
+                <Ionicons
+                  name="shield-checkmark"
+                  size={20}
+                  color={Colors.success}
                 />
-                {errors.contentURI && (
-                  <Text style={styles.errorText}>{errors.contentURI}</Text>
-                )}
-                <Text style={styles.helperText}>
-                  Leave empty to auto-generate from uploaded video, or enter custom IPFS/HTTP URI
+                <Text style={styles.smartContractInfoText}>
+                  <Text style={styles.infoTextBold}>
+                    Smart Contract Integration:
+                  </Text>
+                  {"\n"}• Title: Stored as string (max 200 chars)
+                  {"\n"}• Duration: Stored as uint256 in seconds (max 86400)
+                  {"\n"}• Content: Video → IPFS → CID stored as string
+                  {"\n"}• All validation ensures blockchain compatibility
                 </Text>
               </View>
 
-              {/* Duration Input */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>
-                  Duration (minutes) <Text style={styles.required}>*</Text>
-                </Text>
-                <TextInput
-                  style={[styles.input, errors.duration && styles.inputError]}
-                  value={formData.duration}
-                  onChangeText={(value) => handleInputChange("duration", value)}
-                  placeholder="Enter duration in minutes"
-                  placeholderTextColor={Colors.textMuted}
-                  keyboardType="numeric"
-                  maxLength={10}
-                />
-                {errors.duration && (
-                  <Text style={styles.errorText}>{errors.duration}</Text>
-                )}
-                <Text style={styles.helperText}>
-                  Duration will be converted to seconds for blockchain storage
-                </Text>
-              </View>
-
-              {/* Info Box */}
+              {/* Upload Process Info Box */}
               <View style={styles.infoBox}>
-                <Ionicons name="information-circle" size={20} color={Colors.info} />
+                <Ionicons
+                  name="information-circle"
+                  size={20}
+                  color={Colors.info}
+                />
                 <Text style={styles.infoText}>
                   <Text style={styles.infoTextBold}>Upload Process:</Text>
-                  {"\n"}• Video file is stored temporarily until course creation
-                  {"\n"}• All videos upload to IPFS when you click "Create Course"
-                  {"\n"}• IPFS URIs are automatically generated and stored on blockchain
-                  {"\n"}• No manual upload required - everything happens automatically!
+                  {"\n"}• Video stored temporarily until course creation
+                  {"\n"}• All videos upload to IPFS when you click "Create
+                  Course"
+                  {"\n"}• IPFS CIDs automatically stored on blockchain
+                  {"\n"}• Smart contract function: addCourseSection(courseId,
+                  title, contentCID, duration)
                 </Text>
               </View>
 
@@ -741,7 +901,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 16,
   },
-  
+
   // Video selection styles
   videoUploadArea: {
     backgroundColor: Colors.background,
@@ -805,6 +965,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     textAlign: "center",
+  },
+
+  // ✅ NEW: Smart contract specific info box
+  smartContractInfoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#f0f9ff",
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.success,
+  },
+  smartContractInfoText: {
+    fontSize: 14,
+    color: "#0369a1",
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 20,
   },
 
   infoBox: {
