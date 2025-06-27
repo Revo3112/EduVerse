@@ -24,54 +24,161 @@ class SmartContractService {
       maxDelay: 10000,
     };
 
-    // ✅ ENHANCED: Better initialization control
+    // ✅ PERSISTENT: Never reset these unless explicitly required
+    this.isPersistentlyInitialized = false;
+    this.lastProviderSignature = null;
     this.initializationLock = false;
-    this.initializationPromise = null;
-    this.lastInitAttempt = 0;
-    this.minInitInterval = 1000; // Minimum 1 second between init attempts
   }
 
-  // ✅ OPTIMIZED: Enhanced initialization with better control
+  // ✅ ENHANCED: Smart initialization that persists
   async initialize(provider, browserProvider) {
-    const now = Date.now();
+    // ✅ Generate provider signature for comparison
+    const network = await provider.getNetwork();
+    const signerAddress = await browserProvider
+      .getSigner()
+      .then((s) => s.getAddress())
+      .catch(() => null);
+    const currentSignature = `${network.chainId}-${signerAddress}`;
 
-    // ✅ Prevent rapid re-initialization
-    if (now - this.lastInitAttempt < this.minInitInterval) {
-      console.log("⏸️ Too soon for re-initialization, skipping...");
-      return this.initializationPromise || Promise.resolve();
-    }
-
-    // ✅ Return existing promise if initialization is in progress
-    if (this.initializationLock && this.initializationPromise) {
-      console.log("⏳ Returning existing initialization promise...");
-      return this.initializationPromise;
-    }
-
-    // ✅ Quick return if already initialized with same providers
+    // ✅ SKIP if already initialized with same providers
     if (
+      this.isPersistentlyInitialized &&
       this.isInitialized &&
-      this.provider === provider &&
-      this.browserProvider === browserProvider
+      this.lastProviderSignature === currentSignature
     ) {
-      console.log("✅ Service already initialized with same providers");
+      console.log(
+        "✅ Service already initialized with same providers, skipping re-initialization"
+      );
       return Promise.resolve();
     }
 
-    this.lastInitAttempt = now;
+    // ✅ Prevent concurrent initializations
+    if (this.initializationLock) {
+      console.log("⏳ Initialization already in progress, waiting...");
+      while (this.initializationLock) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return;
+    }
+
     this.initializationLock = true;
 
-    // ✅ Create and store the initialization promise
-    this.initializationPromise = this._performInitialization(
-      provider,
-      browserProvider
-    );
-
     try {
-      await this.initializationPromise;
+      console.log(
+        "🚀 Starting persistent SmartContractService initialization..."
+      );
+
+      this.provider = provider;
+      this.browserProvider = browserProvider;
+      this.lastProviderSignature = currentSignature;
+
+      // ✅ Network validation with caching
+      await this._validateNetworkConnection();
+
+      // ✅ Signer initialization
+      await this._initializeSigner();
+
+      // ✅ Contract initialization
+      await this._initializeContracts();
+
+      // ✅ Validation
+      await this._validateInitialization();
+
+      // ✅ Mark as persistently initialized
+      this.isInitialized = true;
+      this.isPersistentlyInitialized = true;
+
+      console.log(
+        "✅ SmartContractService initialized successfully! (Persistent mode active)"
+      );
+    } catch (error) {
+      console.error("❌ Failed to initialize SmartContractService:", error);
+      this.isInitialized = false;
+      throw new Error(`Initialization failed: ${error.message}`);
     } finally {
       this.initializationLock = false;
-      this.initializationPromise = null;
     }
+  }
+
+  // ✅ ENHANCED: Better validation
+  ensureInitialized() {
+    if (!this.isPersistentlyInitialized || !this.isInitialized) {
+      throw new Error(
+        "SmartContractService not initialized. Please connect wallet first."
+      );
+    }
+
+    if (!this.contracts || !this.contracts.courseFactory) {
+      throw new Error(
+        "SmartContractService contracts not properly initialized"
+      );
+    }
+  }
+
+  // ✅ NEW: Soft reset for provider changes (without full re-initialization)
+  async updateProviders(provider, browserProvider) {
+    if (!this.isPersistentlyInitialized) {
+      return this.initialize(provider, browserProvider);
+    }
+
+    console.log("🔄 Updating providers for existing service...");
+
+    try {
+      this.provider = provider;
+      this.browserProvider = browserProvider;
+      this.signer = await browserProvider.getSigner();
+
+      // ✅ Update contracts with new signer
+      const addresses = BLOCKCHAIN_CONFIG.CONTRACTS;
+
+      this.contracts.courseFactory = new ethers.Contract(
+        addresses.courseFactory,
+        CourseFactoryABI,
+        this.signer
+      );
+      this.contracts.courseLicense = new ethers.Contract(
+        addresses.courseLicense,
+        CourseLicenseABI,
+        this.signer
+      );
+      this.contracts.progressTracker = new ethers.Contract(
+        addresses.progressTracker,
+        ProgressTrackerABI,
+        this.signer
+      );
+      this.contracts.certificateManager = new ethers.Contract(
+        addresses.certificateManager,
+        CertificateManagerABI,
+        this.signer
+      );
+
+      console.log("✅ Providers updated successfully");
+    } catch (error) {
+      console.error("❌ Failed to update providers:", error);
+      throw error;
+    }
+  }
+
+  // ✅ ENHANCED: Only reset when absolutely necessary
+  reset(forceReset = false) {
+    if (!forceReset && this.isPersistentlyInitialized) {
+      console.log(
+        "⚠️ Skipping reset - service is in persistent mode. Use forceReset=true if needed."
+      );
+      return;
+    }
+
+    console.log("🔄 Resetting SmartContractService...");
+    this.isInitialized = false;
+    this.isPersistentlyInitialized = false;
+    this.lastProviderSignature = null;
+    this.initializationLock = false;
+    this.provider = null;
+    this.browserProvider = null;
+    this.signer = null;
+    this.contracts = {};
+    this.clearAllCaches();
+    console.log("✅ SmartContractService reset completed");
   }
 
   // ✅ SEPARATED: Main initialization logic

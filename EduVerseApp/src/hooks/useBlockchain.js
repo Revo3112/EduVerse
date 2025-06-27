@@ -3,7 +3,7 @@ import { usePublicClient, useWalletClient, useAccount } from "wagmi";
 import { ethers } from "ethers";
 import SmartContractService from "../services/SmartContractService";
 
-// ✅ Helper functions (sama seperti sebelumnya)
+// ✅ Helper functions
 function publicClientToProvider(publicClient) {
   const { chain, transport } = publicClient;
 
@@ -31,7 +31,7 @@ function walletClientToSigner(walletClient, publicClient) {
   });
 }
 
-// ✅ OPTIMIZED: useSmartContract hook dengan better control
+// ✅ FIXED: Persistent SmartContract Hook - Initialize Once, Use Forever
 export const useSmartContract = () => {
   const { isConnected, status } = useAccount();
   const publicClient = usePublicClient();
@@ -40,121 +40,160 @@ export const useSmartContract = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState(null);
 
-  // ✅ ENHANCED: Better refs management
-  const initializationAttemptsRef = useRef(0);
-  const initializationInProgressRef = useRef(false);
-  const initTimerRef = useRef(null);
-  const lastStatusRef = useRef(null);
+  // ✅ FIXED: Persistent refs - never reset unless explicitly needed
+  const hasEverInitialized = useRef(false);
+  const initializationInProgress = useRef(false);
+  const lastSuccessfulProvider = useRef(null);
+  const initTimer = useRef(null);
 
-  // ✅ OPTIMIZED: Memoized initialization with dependency tracking
-  const initializeService = useCallback(async () => {
-    const currentStatus = `${status}-${isConnected}-${!!publicClient}-${!!walletClient}`;
-
-    // ✅ Skip if same status as last attempt
-    if (currentStatus === lastStatusRef.current && isInitialized) {
-      console.log("✅ Status unchanged, skipping initialization");
+  // ✅ FIXED: Smart initialization - only when really needed
+  const initializeServiceOnce = useCallback(async () => {
+    // ✅ SKIP if already initialized and providers haven't changed
+    if (hasEverInitialized.current && isInitialized) {
+      console.log("✅ SmartContractService already initialized, skipping...");
       return;
     }
 
-    lastStatusRef.current = currentStatus;
-
-    if (initializationInProgressRef.current) {
-      console.log("⏸️ Initialization already in progress, skipping...");
+    // ✅ SKIP if initialization in progress
+    if (initializationInProgress.current) {
+      console.log("⏳ Initialization already in progress, skipping...");
       return;
     }
 
+    // ✅ SKIP if requirements not met
     if (!publicClient || !walletClient || !isConnected) {
-      console.log("❌ Missing required clients for initialization");
+      console.log("❌ Requirements not met for initialization:", {
+        publicClient: !!publicClient,
+        walletClient: !!walletClient,
+        isConnected,
+      });
       return;
     }
 
-    initializationInProgressRef.current = true;
-    initializationAttemptsRef.current += 1;
+    // ✅ CHECK if providers actually changed
+    const currentProviderKey = `${publicClient.chain.id}-${walletClient.account.address}`;
+    if (
+      hasEverInitialized.current &&
+      lastSuccessfulProvider.current === currentProviderKey
+    ) {
+      console.log("✅ Same providers, using existing initialization");
+      setIsInitialized(true);
+      setError(null);
+      return;
+    }
+
+    initializationInProgress.current = true;
 
     try {
-      console.log(
-        `🚀 Initializing SmartContractService (attempt ${initializationAttemptsRef.current})...`
-      );
+      console.log("🚀 Initializing SmartContractService (one-time setup)...");
 
       const provider = publicClientToProvider(publicClient);
       const browserProvider = walletClientToSigner(walletClient, publicClient);
 
+      // ✅ Test provider connection first
+      const network = await provider.getNetwork();
+      console.log("✅ Provider connected to network:", {
+        chainId: Number(network.chainId),
+        name: network.name || "Unknown",
+      });
+
       await SmartContractService.initialize(provider, browserProvider);
 
-      console.log("✅ SmartContractService initialized successfully!");
+      // ✅ Mark as successfully initialized
+      hasEverInitialized.current = true;
+      lastSuccessfulProvider.current = currentProviderKey;
       setIsInitialized(true);
       setError(null);
-      initializationAttemptsRef.current = 0;
+
+      console.log(
+        "✅ SmartContractService initialized successfully! (Will persist until app restart)"
+      );
     } catch (err) {
       console.error("❌ SmartContractService initialization failed:", err);
       setError(err.message);
       setIsInitialized(false);
 
-      // ✅ CONTROLLED: Limited retry with exponential backoff
-      if (initializationAttemptsRef.current < 2) {
-        // Reduced from 3 to 2
-        const retryDelay =
-          3000 * Math.pow(2, initializationAttemptsRef.current - 1);
-        console.log(
-          `🔄 Retrying in ${retryDelay}ms... (attempt ${initializationAttemptsRef.current}/2)`
-        );
-
+      // ✅ Only retry if never successfully initialized
+      if (!hasEverInitialized.current) {
+        console.log("🔄 Will retry initialization in 3 seconds...");
         setTimeout(() => {
-          initializationInProgressRef.current = false;
-          initializeService();
-        }, retryDelay);
-      } else {
-        console.error("❌ Max initialization attempts reached");
-        initializationInProgressRef.current = false;
+          initializationInProgress.current = false;
+          initializeServiceOnce();
+        }, 3000);
+        return;
       }
     } finally {
-      if (initializationAttemptsRef.current >= 2 || isInitialized) {
-        initializationInProgressRef.current = false;
-      }
+      initializationInProgress.current = false;
     }
-  }, [status, isConnected, publicClient, walletClient, isInitialized]);
+  }, [publicClient, walletClient, isConnected, isInitialized]);
 
-  // ✅ OPTIMIZED: Single useEffect with better logic
+  // ✅ FIXED: Minimal useEffect - only trigger when absolutely necessary
   useEffect(() => {
     // Clear any existing timer
-    if (initTimerRef.current) {
-      clearTimeout(initTimerRef.current);
-      initTimerRef.current = null;
+    if (initTimer.current) {
+      clearTimeout(initTimer.current);
+      initTimer.current = null;
     }
 
-    if (status === "connected" && isConnected && publicClient && walletClient) {
+    // ✅ Only initialize if connected and not already initialized
+    if (status === "connected" && isConnected && !hasEverInitialized.current) {
       console.log(
-        "🔗 Wallet connected, scheduling SmartContractService initialization..."
+        "🔗 Wallet connected for first time, initializing SmartContractService..."
       );
 
-      // ✅ OPTIMIZED: Shorter delay for better UX
-      initTimerRef.current = setTimeout(() => {
-        initializeService();
-      }, 500); // Reduced from 800ms to 500ms
-    } else if (status === "disconnected" || !isConnected) {
-      // ✅ ENHANCED: Proper cleanup on disconnect
-      console.log("🔌 Wallet disconnected, resetting service...");
-      setIsInitialized(false);
+      // ✅ Small delay for wallet stability
+      initTimer.current = setTimeout(() => {
+        initializeServiceOnce();
+      }, 500);
+    }
+    // ✅ Re-activate if previously initialized but currently not active
+    else if (
+      status === "connected" &&
+      isConnected &&
+      hasEverInitialized.current &&
+      !isInitialized
+    ) {
+      console.log("🔄 Re-activating existing SmartContractService...");
+      setIsInitialized(true);
       setError(null);
-      initializationAttemptsRef.current = 0;
-      initializationInProgressRef.current = false;
-      lastStatusRef.current = null;
-      SmartContractService.reset(); // ✅ Use new reset method
+    }
+    // ✅ Handle disconnection gracefully - don't reset, just mark as inactive
+    else if (status === "disconnected" || !isConnected) {
+      if (isInitialized) {
+        console.log(
+          "🔌 Wallet disconnected, deactivating service (keeping initialization)"
+        );
+        setIsInitialized(false);
+        // ✅ Don't reset hasEverInitialized - keep the service ready for reconnection
+      }
     }
 
     return () => {
-      if (initTimerRef.current) {
-        clearTimeout(initTimerRef.current);
-        initTimerRef.current = null;
+      if (initTimer.current) {
+        clearTimeout(initTimer.current);
+        initTimer.current = null;
       }
     };
-  }, [status, isConnected, publicClient, walletClient, initializeService]);
+  }, [status, isConnected, initializeServiceOnce]);
+
+  // ✅ FIXED: Enhanced debugging
+  useEffect(() => {
+    console.log("🔗 SmartContract Hook Status:", {
+      status,
+      isConnected,
+      publicClient: !!publicClient,
+      walletClient: !!walletClient,
+      isInitialized,
+      hasEverInitialized: hasEverInitialized.current,
+      error: !!error,
+    });
+  }, [status, publicClient, walletClient, isConnected, isInitialized, error]);
 
   return {
     smartContractService: isInitialized ? SmartContractService : null,
     isInitialized,
     error,
-    initializationAttempts: initializationAttemptsRef.current,
+    hasEverInitialized: hasEverInitialized.current,
   };
 };
 
