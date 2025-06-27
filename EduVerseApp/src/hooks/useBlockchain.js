@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { usePublicClient, useWalletClient, useAccount } from "wagmi";
 import { ethers } from "ethers";
 import SmartContractService from "../services/SmartContractService";
 
-// ✅ Helper function to convert Viem client to ethers provider (ethers v6)
+// ✅ Helper functions (sama seperti sebelumnya)
 function publicClientToProvider(publicClient) {
   const { chain, transport } = publicClient;
 
   if (transport.type === "fallback") {
-    // For fallback transport, use the first URL
     const firstTransport = transport.transports[0];
     return new ethers.JsonRpcProvider(
       firstTransport.value?.url || firstTransport.value,
@@ -25,108 +24,137 @@ function publicClientToProvider(publicClient) {
   });
 }
 
-// ✅ Helper function to convert Viem wallet client to ethers signer (ethers v6)
 function walletClientToSigner(walletClient, publicClient) {
-  // In ethers v6, we create a BrowserProvider for wallet interactions
   return new ethers.BrowserProvider(walletClient.transport, {
     chainId: walletClient.chain.id,
     name: walletClient.chain.name,
   });
 }
 
-// ✅ Enhanced useSmartContract hook with optimized initialization
+// ✅ OPTIMIZED: useSmartContract hook dengan better control
 export const useSmartContract = () => {
   const { isConnected, status } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
+
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState(null);
-  const [initializationAttempts, setInitializationAttempts] = useState(0);
 
-  // Enhanced debugging info
-  useEffect(() => {
-    console.log("🔗 Wallet connection status:", {
-      status,
-      isConnected,
-      publicClient: !!publicClient,
-      walletClient: !!walletClient,
-      attempts: initializationAttempts,
-    });
-  }, [status, publicClient, walletClient, isConnected, initializationAttempts]);
+  // ✅ ENHANCED: Better refs management
+  const initializationAttemptsRef = useRef(0);
+  const initializationInProgressRef = useRef(false);
+  const initTimerRef = useRef(null);
+  const lastStatusRef = useRef(null);
 
-  useEffect(() => {
-    const initializeService = async () => {
-      if (!publicClient || !walletClient || !isConnected) {
-        console.log("❌ Missing required clients:", {
-          publicClient: !!publicClient,
-          walletClient: !!walletClient,
-          isConnected,
-        });
-        return;
-      }
+  // ✅ OPTIMIZED: Memoized initialization with dependency tracking
+  const initializeService = useCallback(async () => {
+    const currentStatus = `${status}-${isConnected}-${!!publicClient}-${!!walletClient}`;
 
-      try {
-        console.log("🚀 Initializing SmartContractService...");
-        setInitializationAttempts((prev) => prev + 1);
+    // ✅ Skip if same status as last attempt
+    if (currentStatus === lastStatusRef.current && isInitialized) {
+      console.log("✅ Status unchanged, skipping initialization");
+      return;
+    }
 
-        const provider = publicClientToProvider(publicClient);
-        const browserProvider = walletClientToSigner(
-          walletClient,
-          publicClient
+    lastStatusRef.current = currentStatus;
+
+    if (initializationInProgressRef.current) {
+      console.log("⏸️ Initialization already in progress, skipping...");
+      return;
+    }
+
+    if (!publicClient || !walletClient || !isConnected) {
+      console.log("❌ Missing required clients for initialization");
+      return;
+    }
+
+    initializationInProgressRef.current = true;
+    initializationAttemptsRef.current += 1;
+
+    try {
+      console.log(
+        `🚀 Initializing SmartContractService (attempt ${initializationAttemptsRef.current})...`
+      );
+
+      const provider = publicClientToProvider(publicClient);
+      const browserProvider = walletClientToSigner(walletClient, publicClient);
+
+      await SmartContractService.initialize(provider, browserProvider);
+
+      console.log("✅ SmartContractService initialized successfully!");
+      setIsInitialized(true);
+      setError(null);
+      initializationAttemptsRef.current = 0;
+    } catch (err) {
+      console.error("❌ SmartContractService initialization failed:", err);
+      setError(err.message);
+      setIsInitialized(false);
+
+      // ✅ CONTROLLED: Limited retry with exponential backoff
+      if (initializationAttemptsRef.current < 2) {
+        // Reduced from 3 to 2
+        const retryDelay =
+          3000 * Math.pow(2, initializationAttemptsRef.current - 1);
+        console.log(
+          `🔄 Retrying in ${retryDelay}ms... (attempt ${initializationAttemptsRef.current}/2)`
         );
 
-        // ✅ Test provider connection first
-        const network = await provider.getNetwork();
-        console.log("✅ Provider connected to network:", {
-          chainId: Number(network.chainId),
-          name: network.name || "Unknown",
-        });
-
-        await SmartContractService.initialize(provider, browserProvider);
-
-        console.log("✅ SmartContractService initialized successfully!");
-        setIsInitialized(true);
-        setError(null);
-        setInitializationAttempts(0);
-      } catch (err) {
-        console.error("❌ SmartContractService initialization failed:", err);
-        setError(err.message);
-        setIsInitialized(false);
-
-        // ✅ Auto-retry with exponential backoff (max 3 attempts)
-        if (initializationAttempts < 3) {
-          const retryDelay = Math.min(
-            2000 * Math.pow(2, initializationAttempts),
-            8000
-          );
-          console.log(`🔄 Retrying initialization in ${retryDelay}ms...`);
-          setTimeout(() => {
-            initializeService();
-          }, retryDelay);
-        }
+        setTimeout(() => {
+          initializationInProgressRef.current = false;
+          initializeService();
+        }, retryDelay);
+      } else {
+        console.error("❌ Max initialization attempts reached");
+        initializationInProgressRef.current = false;
       }
-    };
+    } finally {
+      if (initializationAttemptsRef.current >= 2 || isInitialized) {
+        initializationInProgressRef.current = false;
+      }
+    }
+  }, [status, isConnected, publicClient, walletClient, isInitialized]);
 
-    let initTimer;
+  // ✅ OPTIMIZED: Single useEffect with better logic
+  useEffect(() => {
+    // Clear any existing timer
+    if (initTimerRef.current) {
+      clearTimeout(initTimerRef.current);
+      initTimerRef.current = null;
+    }
+
     if (status === "connected" && isConnected && publicClient && walletClient) {
-      console.log("🔗 Wallet connected, initializing SmartContractService...");
-      // ✅ Optimized delay for stable provider
-      initTimer = setTimeout(initializeService, 800);
-    } else {
+      console.log(
+        "🔗 Wallet connected, scheduling SmartContractService initialization..."
+      );
+
+      // ✅ OPTIMIZED: Shorter delay for better UX
+      initTimerRef.current = setTimeout(() => {
+        initializeService();
+      }, 500); // Reduced from 800ms to 500ms
+    } else if (status === "disconnected" || !isConnected) {
+      // ✅ ENHANCED: Proper cleanup on disconnect
+      console.log("🔌 Wallet disconnected, resetting service...");
       setIsInitialized(false);
       setError(null);
+      initializationAttemptsRef.current = 0;
+      initializationInProgressRef.current = false;
+      lastStatusRef.current = null;
+      SmartContractService.reset(); // ✅ Use new reset method
     }
 
     return () => {
-      if (initTimer) clearTimeout(initTimer);
+      if (initTimerRef.current) {
+        clearTimeout(initTimerRef.current);
+        initTimerRef.current = null;
+      }
     };
-  }, [status, isConnected, publicClient, walletClient, initializationAttempts]);
+  }, [status, isConnected, publicClient, walletClient, initializeService]);
 
   return {
     smartContractService: isInitialized ? SmartContractService : null,
     isInitialized,
     error,
-    initializationAttempts,
+    initializationAttempts: initializationAttemptsRef.current,
   };
 };
 

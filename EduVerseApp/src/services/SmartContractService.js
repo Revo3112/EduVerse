@@ -16,25 +16,78 @@ class SmartContractService {
     this.isInitialized = false;
     this.licenseCache = new Map();
     this.progressCache = new Map();
-    this.cacheExpiry = 30000; // 30 seconds cache
+    this.cacheExpiry = 30000;
     this.networkCache = null;
     this.retryConfig = {
       maxRetries: 3,
       baseDelay: 1000,
       maxDelay: 10000,
     };
+
+    // ✅ ENHANCED: Better initialization control
+    this.initializationLock = false;
+    this.initializationPromise = null;
+    this.lastInitAttempt = 0;
+    this.minInitInterval = 1000; // Minimum 1 second between init attempts
   }
 
-  // ✅ OPTIMIZED: Enhanced initialization with comprehensive error handling
+  // ✅ OPTIMIZED: Enhanced initialization with better control
   async initialize(provider, browserProvider) {
+    const now = Date.now();
+
+    // ✅ Prevent rapid re-initialization
+    if (now - this.lastInitAttempt < this.minInitInterval) {
+      console.log("⏸️ Too soon for re-initialization, skipping...");
+      return this.initializationPromise || Promise.resolve();
+    }
+
+    // ✅ Return existing promise if initialization is in progress
+    if (this.initializationLock && this.initializationPromise) {
+      console.log("⏳ Returning existing initialization promise...");
+      return this.initializationPromise;
+    }
+
+    // ✅ Quick return if already initialized with same providers
+    if (
+      this.isInitialized &&
+      this.provider === provider &&
+      this.browserProvider === browserProvider
+    ) {
+      console.log("✅ Service already initialized with same providers");
+      return Promise.resolve();
+    }
+
+    this.lastInitAttempt = now;
+    this.initializationLock = true;
+
+    // ✅ Create and store the initialization promise
+    this.initializationPromise = this._performInitialization(
+      provider,
+      browserProvider
+    );
+
+    try {
+      await this.initializationPromise;
+    } finally {
+      this.initializationLock = false;
+      this.initializationPromise = null;
+    }
+  }
+
+  // ✅ SEPARATED: Main initialization logic
+  async _performInitialization(provider, browserProvider) {
     try {
       console.log("🚀 Starting SmartContractService initialization...");
 
       this.provider = provider;
       this.browserProvider = browserProvider;
 
-      // ✅ Enhanced network validation
-      await this._validateNetworkConnection();
+      // ✅ OPTIMIZED: Skip network validation if same network
+      if (!this.networkCache || this.networkCache.provider !== provider) {
+        await this._validateNetworkConnection();
+      } else {
+        console.log("✅ Using cached network validation");
+      }
 
       // ✅ Enhanced signer initialization
       await this._initializeSigner();
@@ -42,7 +95,7 @@ class SmartContractService {
       // ✅ Contract initialization with validation
       await this._initializeContracts();
 
-      // ✅ Post-initialization validation
+      // ✅ OPTIMIZED: Lighter validation check
       await this._validateInitialization();
 
       this.isInitialized = true;
@@ -54,36 +107,52 @@ class SmartContractService {
     }
   }
 
-  // ✅ NEW: Network connection validation
+  // ✅ OPTIMIZED: Enhanced network validation with caching
   async _validateNetworkConnection() {
     try {
       const network = await this.provider.getNetwork();
-      this.networkCache = {
-        chainId: Number(network.chainId),
-        name: network.name || "Unknown",
-        timestamp: Date.now(),
-      };
+      const chainId = Number(network.chainId);
 
-      console.log("✅ Network validated:", this.networkCache);
-
-      // Validate contract addresses exist
-      const addresses = BLOCKCHAIN_CONFIG.CONTRACTS;
-      if (
-        !addresses.courseFactory ||
-        !addresses.courseLicense ||
-        !addresses.progressTracker ||
-        !addresses.certificateManager
-      ) {
-        throw new Error("Missing contract addresses in configuration");
+      // ✅ Check if network changed
+      if (this.networkCache && this.networkCache.chainId === chainId) {
+        console.log("✅ Network unchanged, using cache");
+        return;
       }
 
-      console.log("✅ Contract addresses validated:", addresses);
+      this.networkCache = {
+        chainId,
+        name: network.name || "Unknown",
+        timestamp: Date.now(),
+        provider: this.provider, // ✅ Track provider reference
+      };
+
+      console.log("✅ Network validated:", {
+        chainId: this.networkCache.chainId,
+        name: this.networkCache.name,
+      });
+
+      // ✅ OPTIMIZED: Single validation of contract addresses
+      const addresses = BLOCKCHAIN_CONFIG.CONTRACTS;
+      const requiredContracts = [
+        "courseFactory",
+        "courseLicense",
+        "progressTracker",
+        "certificateManager",
+      ];
+
+      for (const contract of requiredContracts) {
+        if (!addresses[contract]) {
+          throw new Error(`Missing ${contract} address in configuration`);
+        }
+      }
+
+      console.log("✅ Contract addresses validated");
     } catch (error) {
       throw new Error(`Network validation failed: ${error.message}`);
     }
   }
 
-  // ✅ NEW: Enhanced signer initialization
+  // ✅ OPTIMIZED: Enhanced signer initialization
   async _initializeSigner() {
     try {
       if (
@@ -100,20 +169,23 @@ class SmartContractService {
 
       console.log("✅ Signer initialized:", signerAddress);
 
-      // Validate signer can sign
-      const balance = await this.provider.getBalance(signerAddress);
-      console.log("💰 Signer balance:", ethers.formatEther(balance), "ETH");
+      // ✅ OPTIMIZED: Skip balance check in production for faster init
+      if (process.env.NODE_ENV === "development") {
+        const balance = await this.provider.getBalance(signerAddress);
+        console.log("💰 Signer balance:", ethers.formatEther(balance), "ETH");
+      }
     } catch (error) {
       throw new Error(`Signer initialization failed: ${error.message}`);
     }
   }
 
-  // ✅ NEW: Enhanced contract initialization
+  // ✅ OPTIMIZED: Faster contract initialization
   async _initializeContracts() {
     try {
       const addresses = BLOCKCHAIN_CONFIG.CONTRACTS;
 
-      this.contracts = {
+      // ✅ Create all contracts in parallel
+      const contractPromises = {
         courseFactory: new ethers.Contract(
           addresses.courseFactory,
           CourseFactoryABI,
@@ -136,27 +208,246 @@ class SmartContractService {
         ),
       };
 
+      this.contracts = contractPromises;
       console.log("✅ Contract instances created successfully");
     } catch (error) {
       throw new Error(`Contract initialization failed: ${error.message}`);
     }
   }
 
-  // ✅ NEW: Post-initialization validation
+  // ✅ OPTIMIZED: Lighter validation
   async _validateInitialization() {
     try {
-      // Test basic contract calls
-      const totalCourses = await this.contracts.courseFactory.getTotalCourses();
+      // ✅ Simple connectivity test with timeout
+      const totalCoursesPromise =
+        this.contracts.courseFactory.getTotalCourses();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Validation timeout")), 5000)
+      );
+
+      const totalCourses = await Promise.race([
+        totalCoursesPromise,
+        timeoutPromise,
+      ]);
       console.log(
         "✅ Contract connectivity test passed. Total courses:",
         Number(totalCourses)
       );
     } catch (error) {
-      throw new Error(`Initialization validation failed: ${error.message}`);
+      // ✅ Don't fail initialization for validation error
+      console.warn("⚠️ Validation warning (non-critical):", error.message);
     }
   }
 
-  // ✅ OPTIMIZED: Enhanced retry mechanism
+  // ✅ FIXED: Clean CID for proper URL generation
+  async _generateThumbnailUrlCached(thumbnailCID) {
+    if (!thumbnailCID) return null;
+
+    // ✅ FIXED: Clean CID for proper URL generation
+    const cleanCID = thumbnailCID.replace("ipfs://", "");
+    const cacheKey = `thumbnail_${cleanCID}`;
+    const cached = this.progressCache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
+      return cached.url;
+    }
+
+    try {
+      // ✅ Try to use PinataService first
+      const { pinataService } = await import("./PinataService");
+      const url = await pinataService.getOptimizedFileUrl(cleanCID, {
+        forcePublic: true,
+        network: "public",
+      });
+
+      this.progressCache.set(cacheKey, {
+        url,
+        timestamp: Date.now(),
+      });
+
+      return url;
+    } catch (error) {
+      console.warn("⚠️ PinataService failed, using fallback:", error.message);
+
+      // ✅ FIXED: Improved fallback URL generation
+      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
+
+      this.progressCache.set(cacheKey, {
+        url: fallbackUrl,
+        timestamp: Date.now(),
+      });
+
+      return fallbackUrl;
+    }
+  }
+
+  // ✅ OPTIMIZED: Enhanced getAllCourses with better error handling
+  async getAllCourses(offset = 0, limit = 20) {
+    this.ensureInitialized();
+
+    return await this._retryOperation(async () => {
+      console.log(`📚 Fetching courses: offset=${offset}, limit=${limit}`);
+
+      let coursesData = [];
+
+      try {
+        // ✅ Try paginated version with timeout
+        const paginatedPromise = this.contracts.courseFactory.getAllCourses(
+          offset,
+          limit
+        );
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Pagination timeout")), 10000)
+        );
+
+        coursesData = await Promise.race([paginatedPromise, timeoutPromise]);
+        console.log(
+          `✅ Fetched ${coursesData.length} courses using pagination`
+        );
+      } catch (paginationError) {
+        console.log("⚠️ Pagination failed, using fallback method");
+
+        // ✅ OPTIMIZED: Fallback with better batch processing
+        const totalCourses =
+          await this.contracts.courseFactory.getTotalCourses();
+        const start = Math.max(1, offset + 1);
+        const end = Math.min(Number(totalCourses), offset + limit);
+
+        // ✅ Smaller batch size for faster processing
+        const batchSize = 3;
+        const courses = [];
+
+        for (let i = start; i <= end; i += batchSize) {
+          const batchEnd = Math.min(i + batchSize - 1, end);
+          const batchPromises = [];
+
+          for (let j = i; j <= batchEnd; j++) {
+            batchPromises.push(
+              this.contracts.courseFactory
+                .getCourse(j)
+                .then((course) => (course.isActive ? course : null))
+                .catch((error) => {
+                  console.warn(
+                    `⚠️ Failed to fetch course ${j}:`,
+                    error.message
+                  );
+                  return null;
+                })
+            );
+          }
+
+          const batchResults = await Promise.allSettled(batchPromises);
+          const validCourses = batchResults
+            .filter((result) => result.status === "fulfilled" && result.value)
+            .map((result) => result.value);
+
+          courses.push(...validCourses);
+        }
+
+        coursesData = courses;
+      }
+
+      // ✅ OPTIMIZED: Parallel processing with better error handling
+      const processedCourses = await Promise.allSettled(
+        coursesData
+          .filter((course) => course?.isActive)
+          .map(async (course) => {
+            try {
+              const [sectionsCount, thumbnailUrl] = await Promise.allSettled([
+                this._getCourseSectionsCountCached(course.id),
+                this._generateThumbnailUrlCached(course.thumbnailCID),
+              ]);
+
+              return {
+                id: course.id.toString(),
+                title: course.title,
+                description: course.description,
+                thumbnailCID: course.thumbnailCID,
+                thumbnailUrl:
+                  thumbnailUrl.status === "fulfilled"
+                    ? thumbnailUrl.value
+                    : null,
+                creator: course.creator,
+                pricePerMonth: ethers.formatEther(course.pricePerMonth),
+                pricePerMonthWei: course.pricePerMonth.toString(),
+                isActive: course.isActive,
+                createdAt: new Date(Number(course.createdAt) * 1000),
+                sectionsCount:
+                  sectionsCount.status === "fulfilled"
+                    ? sectionsCount.value
+                    : 0,
+              };
+            } catch (error) {
+              console.warn(
+                `⚠️ Failed to process course ${course.id}:`,
+                error.message
+              );
+              return null;
+            }
+          })
+      );
+
+      // ✅ Filter out failed courses
+      const validCourses = processedCourses
+        .filter((result) => result.status === "fulfilled" && result.value)
+        .map((result) => result.value);
+
+      console.log(`✅ Processed ${validCourses.length} courses successfully`);
+      return validCourses;
+    }, "getAllCourses");
+  }
+
+  // ✅ OPTIMIZED: Better cache management for sections count
+  async _getCourseSectionsCountCached(courseId) {
+    const cacheKey = `sections_count_${courseId}`;
+    const cached = this.progressCache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
+      return cached.count;
+    }
+
+    try {
+      const sectionsPromise =
+        this.contracts.courseFactory.getCourseSections(courseId);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Sections timeout")), 5000)
+      );
+
+      const sections = await Promise.race([sectionsPromise, timeoutPromise]);
+      const count = sections.length;
+
+      this.progressCache.set(cacheKey, {
+        count,
+        timestamp: Date.now(),
+      });
+
+      return count;
+    } catch (error) {
+      console.warn(
+        `⚠️ Failed to get sections count for course ${courseId}:`,
+        error.message
+      );
+      return 0;
+    }
+  }
+
+  // ✅ ENHANCED: Better service validation
+  ensureInitialized() {
+    if (!this.isInitialized) {
+      throw new Error(
+        "SmartContractService not initialized. Call initialize() first."
+      );
+    }
+
+    // ✅ Additional validation for critical components
+    if (!this.contracts || !this.contracts.courseFactory) {
+      throw new Error(
+        "SmartContractService contracts not properly initialized"
+      );
+    }
+  }
+
+  // ✅ OPTIMIZED: Enhanced retry mechanism with backoff
   async _retryOperation(operation, context = "operation") {
     let lastError;
 
@@ -167,10 +458,10 @@ class SmartContractService {
         lastError = error;
 
         if (attempt === this.retryConfig.maxRetries) {
-          throw error;
+          break;
         }
 
-        // Check if error is retryable
+        // ✅ Enhanced non-retryable error detection
         if (this._isNonRetryableError(error)) {
           throw error;
         }
@@ -181,8 +472,7 @@ class SmartContractService {
         );
 
         console.warn(
-          `🔄 ${context} failed (attempt ${attempt}/${this.retryConfig.maxRetries}), retrying in ${delay}ms:`,
-          error.message
+          `🔄 ${context} failed (attempt ${attempt}/${this.retryConfig.maxRetries}), retrying in ${delay}ms`
         );
         await this._delay(delay);
       }
@@ -191,34 +481,42 @@ class SmartContractService {
     throw lastError;
   }
 
-  // ✅ NEW: Check if error should not be retried
+  // ✅ ENHANCED: Better error classification
   _isNonRetryableError(error) {
+    const errorMessage = error.message.toLowerCase();
     const nonRetryableMessages = [
       "user rejected",
+      "user denied",
       "insufficient funds",
       "invalid address",
       "contract not found",
       "method not found",
       "execution reverted",
+      "nonce too high",
+      "replacement fee too low",
     ];
 
-    return nonRetryableMessages.some((msg) =>
-      error.message.toLowerCase().includes(msg)
-    );
+    return nonRetryableMessages.some((msg) => errorMessage.includes(msg));
+  }
+
+  // ✅ NEW: Reset method for cleanup
+  reset() {
+    console.log("🔄 Resetting SmartContractService...");
+    this.isInitialized = false;
+    this.initializationLock = false;
+    this.initializationPromise = null;
+    this.lastInitAttempt = 0;
+    this.provider = null;
+    this.browserProvider = null;
+    this.signer = null;
+    this.contracts = {};
+    this.clearAllCaches();
+    console.log("✅ SmartContractService reset completed");
   }
 
   // ✅ UTILITY: Delay helper
   _delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  // ✅ ENHANCED: Service validation
-  ensureInitialized() {
-    if (!this.isInitialized) {
-      throw new Error(
-        "SmartContractService not initialized. Call initialize() first."
-      );
-    }
   }
 
   // === COURSE FACTORY METHODS ===
@@ -531,81 +829,112 @@ class SmartContractService {
     return await this._retryOperation(async () => {
       console.log(`📚 Fetching courses: offset=${offset}, limit=${limit}`);
 
-      let coursesData;
+      let coursesData = [];
 
       try {
-        // Try paginated version first
-        coursesData = await this.contracts.courseFactory.getAllCourses(
+        // ✅ Try paginated version with timeout
+        const paginatedPromise = this.contracts.courseFactory.getAllCourses(
           offset,
           limit
         );
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Pagination timeout")), 10000)
+        );
+
+        coursesData = await Promise.race([paginatedPromise, timeoutPromise]);
         console.log(
           `✅ Fetched ${coursesData.length} courses using pagination`
         );
       } catch (paginationError) {
-        console.log("⚠️ Pagination not supported, using fallback method");
+        console.log("⚠️ Pagination failed, using fallback method");
 
-        // Fallback to manual pagination
+        // ✅ OPTIMIZED: Fallback with better batch processing
         const totalCourses =
           await this.contracts.courseFactory.getTotalCourses();
-        const courses = [];
-
         const start = Math.max(1, offset + 1);
         const end = Math.min(Number(totalCourses), offset + limit);
 
-        // Batch fetch courses to avoid timeout
-        const batchSize = 5;
+        // ✅ Smaller batch size for faster processing
+        const batchSize = 3;
+        const courses = [];
+
         for (let i = start; i <= end; i += batchSize) {
           const batchEnd = Math.min(i + batchSize - 1, end);
           const batchPromises = [];
 
           for (let j = i; j <= batchEnd; j++) {
             batchPromises.push(
-              this.contracts.courseFactory.getCourse(j).catch((error) => {
-                console.warn(`Failed to fetch course ${j}:`, error.message);
-                return null;
-              })
+              this.contracts.courseFactory
+                .getCourse(j)
+                .then((course) => (course.isActive ? course : null))
+                .catch((error) => {
+                  console.warn(
+                    `⚠️ Failed to fetch course ${j}:`,
+                    error.message
+                  );
+                  return null;
+                })
             );
           }
 
-          const batchResults = await Promise.all(batchPromises);
-          courses.push(
-            ...batchResults.filter((course) => course && course.isActive)
-          );
+          const batchResults = await Promise.allSettled(batchPromises);
+          const validCourses = batchResults
+            .filter((result) => result.status === "fulfilled" && result.value)
+            .map((result) => result.value);
+
+          courses.push(...validCourses);
         }
 
         coursesData = courses;
       }
 
-      // Process courses with enhanced data
-      const processedCourses = await Promise.all(
+      // ✅ OPTIMIZED: Parallel processing with better error handling
+      const processedCourses = await Promise.allSettled(
         coursesData
-          .filter((course) => course.isActive)
+          .filter((course) => course?.isActive)
           .map(async (course) => {
-            const sectionsCount = await this._getCourseSectionsCountCached(
-              course.id
-            );
-            const thumbnailUrl = await this._generateThumbnailUrlCached(
-              course.thumbnailCID
-            );
+            try {
+              const [sectionsCount, thumbnailUrl] = await Promise.allSettled([
+                this._getCourseSectionsCountCached(course.id),
+                this._generateThumbnailUrlCached(course.thumbnailCID),
+              ]);
 
-            return {
-              id: course.id.toString(),
-              title: course.title,
-              description: course.description,
-              thumbnailCID: course.thumbnailCID,
-              thumbnailUrl,
-              creator: course.creator,
-              pricePerMonth: ethers.formatEther(course.pricePerMonth),
-              pricePerMonthWei: course.pricePerMonth.toString(),
-              isActive: course.isActive,
-              createdAt: new Date(Number(course.createdAt) * 1000),
-              sectionsCount,
-            };
+              return {
+                id: course.id.toString(),
+                title: course.title,
+                description: course.description,
+                thumbnailCID: course.thumbnailCID,
+                thumbnailUrl:
+                  thumbnailUrl.status === "fulfilled"
+                    ? thumbnailUrl.value
+                    : null,
+                creator: course.creator,
+                pricePerMonth: ethers.formatEther(course.pricePerMonth),
+                pricePerMonthWei: course.pricePerMonth.toString(),
+                isActive: course.isActive,
+                createdAt: new Date(Number(course.createdAt) * 1000),
+                sectionsCount:
+                  sectionsCount.status === "fulfilled"
+                    ? sectionsCount.value
+                    : 0,
+              };
+            } catch (error) {
+              console.warn(
+                `⚠️ Failed to process course ${course.id}:`,
+                error.message
+              );
+              return null;
+            }
           })
       );
 
-      return processedCourses;
+      // ✅ Filter out failed courses
+      const validCourses = processedCourses
+        .filter((result) => result.status === "fulfilled" && result.value)
+        .map((result) => result.value);
+
+      console.log(`✅ Processed ${validCourses.length} courses successfully`);
+      return validCourses;
     }, "getAllCourses");
   }
 
@@ -619,9 +948,13 @@ class SmartContractService {
     }
 
     try {
-      const sections = await this.contracts.courseFactory.getCourseSections(
-        courseId
+      const sectionsPromise =
+        this.contracts.courseFactory.getCourseSections(courseId);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Sections timeout")), 5000)
       );
+
+      const sections = await Promise.race([sectionsPromise, timeoutPromise]);
       const count = sections.length;
 
       this.progressCache.set(cacheKey, {
@@ -632,7 +965,7 @@ class SmartContractService {
       return count;
     } catch (error) {
       console.warn(
-        `Failed to get sections count for course ${courseId}:`,
+        `⚠️ Failed to get sections count for course ${courseId}:`,
         error.message
       );
       return 0;
@@ -643,7 +976,9 @@ class SmartContractService {
   async _generateThumbnailUrlCached(thumbnailCID) {
     if (!thumbnailCID) return null;
 
-    const cacheKey = `thumbnail_${thumbnailCID}`;
+    // ✅ FIXED: Clean CID for proper URL generation
+    const cleanCID = thumbnailCID.replace("ipfs://", "");
+    const cacheKey = `thumbnail_${cleanCID}`;
     const cached = this.progressCache.get(cacheKey);
 
     if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
@@ -651,8 +986,9 @@ class SmartContractService {
     }
 
     try {
+      // ✅ Try to use PinataService first
       const { pinataService } = await import("./PinataService");
-      const url = await pinataService.getOptimizedFileUrl(thumbnailCID, {
+      const url = await pinataService.getOptimizedFileUrl(cleanCID, {
         forcePublic: true,
         network: "public",
       });
@@ -664,8 +1000,10 @@ class SmartContractService {
 
       return url;
     } catch (error) {
-      console.warn("Failed to generate thumbnail URL:", error.message);
-      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${thumbnailCID}`;
+      console.warn("⚠️ PinataService failed, using fallback:", error.message);
+
+      // ✅ FIXED: Improved fallback URL generation
+      const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
 
       this.progressCache.set(cacheKey, {
         url: fallbackUrl,
@@ -1707,9 +2045,15 @@ class SmartContractService {
 
   // ✅ NEW: Clear all caches
   clearAllCaches() {
+    const licenseCount = this.licenseCache.size;
+    const progressCount = this.progressCache.size;
+
     this.licenseCache.clear();
     this.progressCache.clear();
-    console.log("✅ All caches cleared");
+
+    console.log(
+      `✅ Cleared ${licenseCount} license cache entries and ${progressCount} progress cache entries`
+    );
   }
 
   // === BACKWARD COMPATIBILITY METHODS ===

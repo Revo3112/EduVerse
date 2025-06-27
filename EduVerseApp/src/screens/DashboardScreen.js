@@ -1,4 +1,4 @@
-// src/screens/DashboardScreen.js - Enhanced with new SmartContractService integration
+// src/screens/DashboardScreen.js - Enhanced with latest SmartContract & Pinata integration
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -184,14 +184,23 @@ export default function DashboardScreen({ navigation }) {
       setSelectedCourse(course);
       setModalVisible(true);
 
-      // ✅ Preload course thumbnail if needed
+      // ✅ Enhanced course data preloading
       try {
-        if (course.thumbnailCID && !course.thumbnailUrl) {
-          console.log("🖼️ Preloading thumbnail for course:", course.id);
-          // This will be handled by CourseCard component
+        if (isInitialized && smartContractService && course.id) {
+          console.log("🔍 Preloading course sections count...");
+
+          // Preload sections count for better UX
+          const sectionsCount =
+            await smartContractService.getCourseSectionsCount(course.id);
+
+          // Update selected course with additional data
+          setSelectedCourse((prev) => ({
+            ...prev,
+            sectionsCount: sectionsCount || prev.sectionsCount,
+          }));
         }
       } catch (error) {
-        console.warn("Failed to preload thumbnail:", error);
+        console.warn("Failed to preload course data:", error);
       }
 
       // Reset interaction state
@@ -200,10 +209,10 @@ export default function DashboardScreen({ navigation }) {
         modalTimeoutRef.current = null;
       }, 1500);
     },
-    [modalInteracting]
+    [modalInteracting, isInitialized, smartContractService]
   );
 
-  // ✅ Enhanced mint license dengan duration selection
+  // ✅ FIXED: Enhanced mint license dengan proper duration validation
   const handleMintLicense = async (course, selectedDuration = 1) => {
     if (!isOnMantaNetwork) {
       Alert.alert(
@@ -213,10 +222,44 @@ export default function DashboardScreen({ navigation }) {
       return;
     }
 
+    // ✅ Validate duration according to smart contract (max 12 months)
+    if (selectedDuration <= 0) {
+      Alert.alert("Error", "Durasi harus lebih dari 0 bulan");
+      return;
+    }
+
+    if (selectedDuration > 12) {
+      Alert.alert("Error", "Durasi maksimal 12 bulan per transaksi");
+      return;
+    }
+
     try {
       console.log(
         `🎫 Minting license: Course ${course.id}, Duration: ${selectedDuration} month(s)`
       );
+
+      // ✅ Enhanced validation
+      if (!smartContractService || !isInitialized) {
+        throw new Error("Smart contract service not ready");
+      }
+
+      // ✅ Check if course is still active
+      const courseData = await smartContractService.getCourse(course.id);
+      if (!courseData.isActive) {
+        throw new Error("Course is no longer active");
+      }
+
+      // ✅ Calculate expected price for confirmation
+      const pricePerMonth = parseFloat(courseData.pricePerMonth);
+      const totalPriceETH = pricePerMonth * selectedDuration;
+      const estimatedPriceIDR = ethToIdrRate ? totalPriceETH * ethToIdrRate : 0;
+
+      console.log("💰 License pricing:", {
+        pricePerMonth: `${pricePerMonth} ETH`,
+        duration: `${selectedDuration} months`,
+        totalETH: `${totalPriceETH} ETH`,
+        estimatedIDR: formatRupiah(estimatedPriceIDR),
+      });
 
       const result = await mintLicense(course.id, selectedDuration);
 
@@ -226,25 +269,41 @@ export default function DashboardScreen({ navigation }) {
 
         Alert.alert(
           "Berhasil! 🎉",
-          `Lisensi ${durationText} untuk "${
-            course.title
-          }" berhasil dibeli.\n\nTransaction Hash: ${result.transactionHash?.slice(
-            0,
-            10
-          )}...`,
+          `Lisensi ${durationText} untuk "${course.title}" berhasil dibeli!` +
+            `\n\n💰 Total: ${totalPriceETH} ETH (≈ ${formatRupiah(
+              estimatedPriceIDR
+            )})` +
+            `\n📋 Transaction: ${result.transactionHash?.slice(0, 10)}...` +
+            `\n⏰ Berlaku hingga: ${
+              result.expiryTimestamp
+                ? new Date(
+                    Number(result.expiryTimestamp) * 1000
+                  ).toLocaleDateString("id-ID")
+                : "Tidak diketahui"
+            }`,
           [
             {
               text: "Lihat Kursus Saya",
               onPress: () => navigation.navigate("MyCourses"),
             },
+            {
+              text: "Mulai Belajar",
+              onPress: () => {
+                navigation.navigate("CourseDetail", {
+                  courseId: course.id,
+                  courseTitle: course.title,
+                });
+              },
+            },
             { text: "OK", style: "default" },
           ]
         );
 
-        // ✅ Refresh relevant data
+        // ✅ Enhanced data refresh
         await Promise.allSettled([
           refetchUserCourses(),
           refetchLicense(), // Refresh license status for current course
+          smartContractService.clearAllCaches(), // Clear caches for fresh data
         ]);
 
         setModalVisible(false);
@@ -255,10 +314,24 @@ export default function DashboardScreen({ navigation }) {
       console.error("❌ License minting error:", error);
 
       let errorMessage = "Terjadi kesalahan saat membeli lisensi.";
-      if (error.message.includes("rejected")) {
+
+      if (
+        error.message.includes("rejected") ||
+        error.message.includes("denied")
+      ) {
         errorMessage = "Transaksi dibatalkan oleh pengguna.";
       } else if (error.message.includes("insufficient")) {
-        errorMessage = "Saldo tidak cukup untuk membeli lisensi.";
+        errorMessage = "Saldo ETH tidak cukup untuk membeli lisensi.";
+      } else if (error.message.includes("Course not found")) {
+        errorMessage = "Course tidak ditemukan.";
+      } else if (error.message.includes("Course is not active")) {
+        errorMessage = "Course sudah tidak aktif.";
+      } else if (error.message.includes("Duration must be positive")) {
+        errorMessage = "Durasi harus lebih dari 0 bulan.";
+      } else if (error.message.includes("Maximum 12 months")) {
+        errorMessage = "Durasi maksimal 12 bulan per transaksi.";
+      } else if (error.message.includes("No valid License")) {
+        errorMessage = "Anda sudah memiliki lisensi untuk course ini.";
       }
 
       Alert.alert("Gagal", errorMessage);
@@ -270,7 +343,7 @@ export default function DashboardScreen({ navigation }) {
       <View>
         <Text style={styles.headerTitle}>Jelajahi Kursus</Text>
         <Text style={styles.headerSubtitle}>
-          Temukan pengetahuan baru di dunia
+          Temukan pengetahuan baru di blockchain
         </Text>
         {courses.length > 0 && (
           <Text style={styles.coursesCount}>
@@ -349,12 +422,25 @@ export default function DashboardScreen({ navigation }) {
     );
   };
 
-  // ✅ Enhanced price calculation untuk modal
+  // ✅ FIXED: Enhanced price calculation untuk modal dengan duration support
   const calculateModalPrice = (duration = 1) => {
     if (!selectedCourse || !ethToIdrRate) return "Menghitung...";
 
     const priceInEth = parseFloat(selectedCourse.pricePerMonth || "0");
-    const totalPriceInIdr = priceInEth * ethToIdrRate * duration;
+
+    if (priceInEth === 0) return "Gratis";
+
+    // ✅ Apply discount logic same as CourseDetailModal
+    const originalTotal = priceInEth * duration;
+
+    // Discount tiers (same as DURATION_OPTIONS in CourseDetailModal)
+    let discount = 0;
+    if (duration === 3) discount = 10;
+    else if (duration === 6) discount = 15;
+    else if (duration === 12) discount = 25;
+
+    const finalTotal = originalTotal * (1 - discount / 100);
+    const totalPriceInIdr = finalTotal * ethToIdrRate;
 
     return formatRupiah(totalPriceInIdr);
   };
@@ -402,9 +488,9 @@ export default function DashboardScreen({ navigation }) {
             modalTimeoutRef.current = null;
           }
         }}
-        onMintLicense={handleMintLicense}
+        onMintLicense={handleMintLicense} // ✅ Now properly handles duration
         isMinting={mintLoading}
-        priceCalculator={calculateModalPrice} // ✅ Pass calculator function
+        priceCalculator={calculateModalPrice} // ✅ Enhanced with discount calculation
         priceLoading={rateLoading}
         hasLicense={hasLicense}
         licenseData={licenseData} // ✅ Pass license details
