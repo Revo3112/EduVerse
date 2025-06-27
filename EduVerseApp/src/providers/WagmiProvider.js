@@ -28,11 +28,37 @@ const metadata = {
 // 3. Define chains array
 const chains = [mantaPacificTestnet];
 
-// 4. Create wagmi config
+// ✅ Enhanced Manta Pacific configuration
+const mantaPacificTestnetOptimized = {
+  ...mantaPacificTestnet,
+  rpcUrls: {
+    default: {
+      http: [
+        "https://pacific-rpc.sepolia-testnet.manta.network/http",
+        "https://pacific-rpc.testnet.manta.network/http", // Backup
+      ],
+    },
+  },
+  // ✅ Optimized settings for faster transactions
+  blockExplorers: {
+    default: {
+      name: "Manta Pacific Explorer",
+      url: "https://pacific-explorer.sepolia-testnet.manta.network/",
+    },
+  },
+};
+
+// ✅ Optimized wagmi config
 const wagmiConfig = defaultWagmiConfig({
-  chains,
+  chains: [mantaPacificTestnetOptimized],
   projectId,
   metadata,
+  pollingInterval: 8000, // Reduced from 12000
+  cacheTime: 20000, // Reduced from 30000
+  // ✅ Add batch settings for better performance
+  batch: {
+    multicall: true,
+  },
 });
 
 // 5. Create AppKit instance

@@ -4,11 +4,12 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./CourseFactory.sol";
 // Untuk mendapatkan harga real time antara ETH/USDT maka kita bisa menggunakan chainlink
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract CourseLicense is ERC1155, Ownable {
+contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     // Menggunakan library Strings dimasukkan uint
     using Strings for uint256;
     // Memasukkan library course factory
@@ -81,31 +82,52 @@ contract CourseLicense is ERC1155, Ownable {
     * @param courseId ID of the course
     * @param durationMonths Duration of the license in months
     */
-    function mintLicense(uint256 courseId, uint256 durationMonths) external payable {
+    function mintLicense(uint256 courseId, uint256 durationMonths) external payable nonReentrant {
         // Pastikan bulan dia melakukan minth ada
         require(durationMonths > 0, "Duration must be Positive");
+        require(durationMonths <= 12, "Maximum 12 months per transaction"); // Prevent overflow
 
         // Pastikan untuk course yang di mint aktif
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
         require(course.isActive, "Course is not Active");
 
-        // Pastikan saldo cukup dan mealakukan pembayaran
-        uint256 totalPrice = course.pricePerMonth * durationMonths;
+        // Pastikan saldo cukup dan mealukan pembayaran
+        uint256 totalPrice;
+        unchecked {
+            totalPrice = course.pricePerMonth * durationMonths;
+        }
+        require(totalPrice >= course.pricePerMonth, "Price overflow"); // Overflow check
         require(msg.value >= totalPrice, "Insufficent Payment");
 
-        // Dapetin tokennya untuk licensi tersebut
-        uint256 tokenId;        // Kita ngechek nih token user tuh ada apa enggak kalo misalnya ada kita coba chek apakah udah expiaret atau belom kalo gak ada kita buat id nya
+        // Dapetin tokennya untuk licensi tersebut - ATOMIC OPERATION
+        uint256 tokenId;
+        License storage existingLicense = licenses[courseId][msg.sender];
+        
+        // Check if user already has a token for this course
         if (studentTokenIds[msg.sender][courseId] == 0){
-            _tokenIds++;
+            // Increment token counter atomically
+            unchecked {
+                _tokenIds++;
+            }
             tokenId = _tokenIds;
             studentTokenIds[msg.sender][courseId] = tokenId;
-        }else {
+        } else {
             tokenId = studentTokenIds[msg.sender][courseId];
-            require(licenses[courseId][msg.sender].expiryTimestamp < block.timestamp, "Existing License Not Expired");
+            require(existingLicense.expiryTimestamp < block.timestamp, "Existing License Not Expired");
         }
 
-        // Set expiry date
-        uint256 expiryTimestamp = block.timestamp + (durationMonths * SECONDS_PER_MONTH);
+        // Set expiry date with overflow protection
+        uint256 durationInSeconds;
+        unchecked {
+            durationInSeconds = durationMonths * SECONDS_PER_MONTH;
+        }
+        require(durationInSeconds >= durationMonths, "Duration overflow"); // Overflow check
+        
+        uint256 expiryTimestamp;
+        unchecked {
+            expiryTimestamp = block.timestamp + durationInSeconds;
+        }
+        require(expiryTimestamp >= block.timestamp, "Expiry overflow"); // Overflow check
 
         // Store License details
         licenses[courseId][msg.sender] = License({
@@ -119,19 +141,8 @@ contract CourseLicense is ERC1155, Ownable {
         // Melakukan minting
         _mint(msg.sender, tokenId, 1, "");
 
-        // calculate Fees and distributed payment
-        uint256 creatorPayment = totalPrice;
-
-        // Send Payment
-        (bool creatorSuccess, ) = course.creator.call{value: creatorPayment}("");
-        require(creatorSuccess, "Creator payment failed");
-
-        // Tambahkan: kembalikan kelebihan ETH jika ada
-        if (msg.value > totalPrice) {
-            uint256 refundAmount = msg.value - totalPrice;
-            (bool refundSuccess, ) = msg.sender.call{value: refundAmount}("");
-            require(refundSuccess, "Refund failed");
-        }
+        // Process payments with checks-effects-interactions pattern
+        _processPayment(course.creator, totalPrice);
 
         // emit ke frontend untuk pembuatan minted
         emit LincenseMinted(courseId, msg.sender, tokenId, durationMonths, expiryTimestamp);
@@ -142,9 +153,10 @@ contract CourseLicense is ERC1155, Ownable {
     * @param courseId ID of the course
     * @param durationMonths Additional duration in months
     */
-    function renewLicense(uint256 courseId, uint256 durationMonths) external payable {
+    function renewLicense(uint256 courseId, uint256 durationMonths) external payable nonReentrant {
         //  pastikan duration month nya itu diatas 0
         require(durationMonths > 0, "Invalid Duration (Must be positive)");
+        require(durationMonths <= 12, "Maximum 12 months per transaction"); // Prevent overflow
 
         // Check apakah license nya itu ada
         uint256 tokenId = studentTokenIds[msg.sender][courseId];
@@ -152,49 +164,51 @@ contract CourseLicense is ERC1155, Ownable {
 
         // Get Course Details
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
-        require(course.isActive, "License is Not Active");
+        require(course.isActive, "Course is Not Active");
 
-        // Get total price
-        uint256 totalPrice = course.pricePerMonth * durationMonths;
+        // Get total price with overflow protection
+        uint256 totalPrice;
+        unchecked {
+            totalPrice = course.pricePerMonth * durationMonths;
+        }
+        require(totalPrice >= course.pricePerMonth, "Price overflow"); // Overflow check
         require (msg.value >= totalPrice,"Insufficient payment");
 
         // Get Current license
         License storage license = licenses[courseId][msg.sender];
 
-        // Update expiry date (extend from current expiry or from now if already expired)'
+        // Update expiry date (extend from current expiry or from now if already expired)
+        uint256 durationInSeconds;
+        unchecked {
+            durationInSeconds = durationMonths * SECONDS_PER_MONTH;
+        }
+        require(durationInSeconds >= durationMonths, "Duration overflow"); // Overflow check
 
         uint256 newExpiryTimeStamp;
         if (license.expiryTimestamp > block.timestamp){
-
-            newExpiryTimeStamp = license.expiryTimestamp + (durationMonths * SECONDS_PER_MONTH);
-
+            unchecked {
+                newExpiryTimeStamp = license.expiryTimestamp + durationInSeconds;
+            }
+            require(newExpiryTimeStamp >= license.expiryTimestamp, "Expiry overflow"); // Overflow check
         } else{
-
-            newExpiryTimeStamp = block.timestamp + (durationMonths * SECONDS_PER_MONTH);
-
+            unchecked {
+                newExpiryTimeStamp = block.timestamp + durationInSeconds;
+            }
+            require(newExpiryTimeStamp >= block.timestamp, "Expiry overflow"); // Overflow check
         }
 
+        // Update license details
         license.expiryTimestamp = newExpiryTimeStamp;
-        license.durationLicense += durationMonths;
+        unchecked {
+            license.durationLicense += durationMonths;
+        }
         license.isActive = true;
 
-        // calculate payment
-        uint256 creatorPayment = totalPrice;
-
-        // send payment
-        (bool creatorSuccess, ) = course.creator.call{value : creatorPayment}("");
-        require(creatorSuccess, "Creator Payment failed");
-
-         // Tambahkan: kembalikan kelebihan ETH jika ada
-        if (msg.value > totalPrice) {
-            uint256 refundAmount = msg.value - totalPrice;
-            (bool refundSuccess, ) = msg.sender.call{value: refundAmount}("");
-            require(refundSuccess, "Refund failed");
-        }
+        // Process payments with checks-effects-interactions pattern
+        _processPayment(course.creator, totalPrice);
 
         // Emit ke event frontend
         emit LicenseRenewed(courseId, msg.sender, tokenId, durationMonths, newExpiryTimeStamp);
-
     }
 
     /**
@@ -262,6 +276,27 @@ contract CourseLicense is ERC1155, Ownable {
      */
     function getTokenId(address student, uint256 courseId) external view returns (uint256) {
         return studentTokenIds[student][courseId];
+    }
+
+    /**
+     * @dev Internal function to handle payment processing safely
+     * @param creator Address of the course creator
+     * @param totalPrice Total payment amount
+     */
+    function _processPayment(address creator, uint256 totalPrice) internal {
+        // Send payment to creator
+        (bool creatorSuccess, ) = creator.call{value: totalPrice}("");
+        require(creatorSuccess, "Creator payment failed");
+
+        // Refund excess payment if any
+        if (msg.value > totalPrice) {
+            uint256 refundAmount;
+            unchecked {
+                refundAmount = msg.value - totalPrice;
+            }
+            (bool refundSuccess, ) = msg.sender.call{value: refundAmount}("");
+            require(refundSuccess, "Refund failed");
+        }
     }
 
 }

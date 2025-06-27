@@ -1,5 +1,6 @@
-// src/components/CourseCard.js - Redesigned Course Card with Horizontal Info Layout
-import React from "react";
+// src/components/CourseCard.js - Enhanced with Pinata image integration and performance optimization
+
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,25 +10,26 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { pinataService } from "../services/PinataService";
 
 // Helper untuk memformat timestamp menjadi format "X hari yang lalu"
 const timeAgo = (timestamp) => {
-  if (!timestamp) return null;
+  if (!timestamp) return "Baru saja";
+
   const now = new Date();
   const past = new Date(timestamp);
-  const seconds = Math.floor((now - past) / 1000);
+  const diffInSeconds = Math.floor((now - past) / 1000);
 
-  let interval = seconds / 31536000;
-  if (interval > 1) return Math.floor(interval) + " tahun lalu";
-  interval = seconds / 2592000;
-  if (interval > 1) return Math.floor(interval) + " bulan lalu";
-  interval = seconds / 86400;
-  if (interval > 1) return Math.floor(interval) + " hari lalu";
-  interval = seconds / 3600;
-  if (interval > 1) return Math.floor(interval) + " jam lalu";
-  interval = seconds / 60;
-  if (interval > 1) return Math.floor(interval) + " menit lalu";
-  return Math.floor(seconds) + " detik lalu";
+  if (diffInSeconds < 60) return "Baru saja";
+  if (diffInSeconds < 3600)
+    return `${Math.floor(diffInSeconds / 60)} menit lalu`;
+  if (diffInSeconds < 86400)
+    return `${Math.floor(diffInSeconds / 3600)} jam lalu`;
+  if (diffInSeconds < 2592000)
+    return `${Math.floor(diffInSeconds / 86400)} hari lalu`;
+  if (diffInSeconds < 31536000)
+    return `${Math.floor(diffInSeconds / 2592000)} bulan lalu`;
+  return `${Math.floor(diffInSeconds / 31536000)} tahun lalu`;
 };
 
 const CourseCard = ({
@@ -37,190 +39,324 @@ const CourseCard = ({
   priceLoading,
   hidePrice = false,
 }) => {
-  if (!course) return null;
+  const [thumbnailUrl, setThumbnailUrl] = useState(null);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
-  const creationDate = timeAgo(course.createdAt);
+  // ✅ Memoized course data untuk prevent unnecessary re-renders
+  const courseData = useMemo(
+    () => ({
+      id: course.id,
+      title: course.title,
+      description: course.description,
+      thumbnailCID: course.thumbnailCID,
+      thumbnailUrl: course.thumbnailUrl,
+      creator: course.creator,
+      pricePerMonth: course.pricePerMonth,
+      sectionsCount: course.sectionsCount || 0,
+      createdAt: course.createdAt,
+    }),
+    [course]
+  );
+
+  // ✅ Enhanced thumbnail loading dengan caching dan fallback
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadThumbnail = async () => {
+      try {
+        setImageLoading(true);
+        setImageError(false);
+
+        // ✅ Priority 1: Use pre-generated URL from SmartContractService
+        if (courseData.thumbnailUrl) {
+          console.log(
+            "📷 Using pre-generated thumbnail URL for course:",
+            courseData.id
+          );
+          setThumbnailUrl(courseData.thumbnailUrl);
+          return;
+        }
+
+        // ✅ Priority 2: Generate URL from CID via Pinata
+        if (courseData.thumbnailCID) {
+          console.log(
+            "🔗 Generating thumbnail URL from CID:",
+            courseData.thumbnailCID
+          );
+
+          try {
+            const optimizedUrl = await pinataService.getOptimizedFileUrl(
+              courseData.thumbnailCID,
+              {
+                forcePublic: true,
+                network: "public",
+                width: 400, // ✅ Optimize untuk card size
+                height: 240,
+                format: "webp", // ✅ Better compression
+              }
+            );
+
+            if (isMounted && optimizedUrl) {
+              setThumbnailUrl(optimizedUrl);
+              console.log("✅ Thumbnail URL generated successfully");
+            }
+          } catch (pinataError) {
+            console.warn(
+              "Failed to get optimized URL, using fallback:",
+              pinataError
+            );
+
+            // ✅ Fallback ke public gateway
+            const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${courseData.thumbnailCID}`;
+            if (isMounted) {
+              setThumbnailUrl(fallbackUrl);
+            }
+          }
+        } else {
+          console.log(
+            "⚠️ No thumbnail CID available for course:",
+            courseData.id
+          );
+          setThumbnailUrl(null);
+        }
+      } catch (error) {
+        console.error("Error loading thumbnail:", error);
+        if (isMounted) {
+          setImageError(true);
+          setThumbnailUrl(null);
+        }
+      } finally {
+        if (isMounted) {
+          setImageLoading(false);
+        }
+      }
+    };
+
+    loadThumbnail();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [courseData.thumbnailCID, courseData.thumbnailUrl, courseData.id]);
+
+  // ✅ Enhanced image load handlers
+  const handleImageLoad = () => {
+    setImageLoading(false);
+    setImageError(false);
+  };
+
+  const handleImageError = (error) => {
+    console.warn("Image load error:", error);
+    setImageLoading(false);
+    setImageError(true);
+  };
+
+  // ✅ Memoized creator display
+  const creatorDisplay = useMemo(() => {
+    if (!courseData.creator) return "Unknown Creator";
+    return `${courseData.creator.slice(0, 6)}...${courseData.creator.slice(
+      -4
+    )}`;
+  }, [courseData.creator]);
+
+  // ✅ Memoized price display
+  const priceDisplay = useMemo(() => {
+    if (hidePrice) return null;
+    if (priceLoading) return "Memuat harga...";
+    if (!priceInIdr || priceInIdr === "Rp 0") return "Gratis";
+    return `${priceInIdr}/bulan`;
+  }, [hidePrice, priceLoading, priceInIdr]);
+
+  // ✅ Render thumbnail dengan optimizations
+  const renderThumbnail = () => {
+    if (imageLoading) {
+      return (
+        <View style={styles.thumbnailPlaceholder}>
+          <ActivityIndicator size="large" color="#8b5cf6" />
+          <Text style={styles.loadingText}>Memuat gambar...</Text>
+        </View>
+      );
+    }
+
+    if (imageError || !thumbnailUrl) {
+      return (
+        <View style={styles.thumbnailPlaceholder}>
+          <Ionicons name="image-outline" size={40} color="#cbd5e1" />
+          <Text style={styles.placeholderText}>Tidak ada gambar</Text>
+        </View>
+      );
+    }
+
+    return (
+      <Image
+        source={{ uri: thumbnailUrl }}
+        style={styles.thumbnail}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+        resizeMode="cover"
+        // ✅ Performance optimizations
+        cache="force-cache"
+        progressiveRenderingEnabled={true}
+        fadeDuration={300}
+      />
+    );
+  };
+
   return (
     <TouchableOpacity
-      style={[styles.cardContainer, priceLoading && styles.cardDisabled]}
-      onPress={() => !priceLoading && onDetailPress(course)}
-      activeOpacity={priceLoading ? 1 : 0.8}
-      disabled={priceLoading}
+      style={styles.card}
+      onPress={() => onDetailPress(courseData)}
+      activeOpacity={0.9}
     >
-      <Image
-        source={{
-          uri:
-            course.thumbnailURI ||
-            "https://placehold.co/600x400/9747FF/FFFFFF/png?text=Course",
-        }}
-        style={styles.cardImage}
-      />
-      <View style={styles.content}>
-        <Text style={styles.title} numberOfLines={2}>
-          {course.title || "Untitled Course"}
-        </Text>
-        {/* Description preview dari blockchain */}
-        {course.description && (
-          <Text style={styles.description} numberOfLines={2}>
-            {course.description}
-          </Text>
-        )}
-        {/* --- Area Informasi dengan Layout Horizontal --- */}
-        <View style={styles.infoContainer}>
-          <View style={styles.infoItem}>
-            <Ionicons name="book-outline" size={16} color="#8b5cf6" />
-            <Text style={styles.infoText}>
-              {course.sectionsCount !== undefined
-                ? `${course.sectionsCount} Sesi`
-                : "... Sesi"}
-            </Text>
-          </View>
-
-          {creationDate && (
-            <View style={styles.infoItem}>
-              <Ionicons name="time-outline" size={16} color="#8b5cf6" />
-              <Text style={styles.infoText}>{creationDate}</Text>
-            </View>
-          )}
-        </View>
-        {/* Additional info dari blockchain */}
-        <View style={styles.additionalInfo}>
-          <View style={styles.creatorInfo}>
-            <Ionicons name="person-outline" size={12} color="#6366f1" />
-            <Text style={styles.creatorInfoText}>
-              {course.creator
-                ? `${course.creator.slice(0, 4)}...${course.creator.slice(-4)}`
-                : "Unknown Creator"}
-            </Text>
-          </View>
-          <View style={styles.pricePreview}>
-            <Ionicons name="diamond-outline" size={12} color="#8b5cf6" />
-            <Text style={styles.pricePreviewText}>
-              {course.pricePerMonth && parseFloat(course.pricePerMonth) === 0
-                ? "Gratis"
-                : course.pricePerMonth
-                ? `${parseFloat(course.pricePerMonth).toFixed(4)} ETH`
-                : "Gratis"}
-            </Text>
-          </View>
-          <View style={styles.idBadge}>
-            <Ionicons name="pricetag-outline" size={12} color="#64748b" />
-            <Text style={styles.idText}>ID: {course.id}</Text>
-          </View>
-        </View>
-        {/* --- Footer dengan Harga dan Status --- */}
-        <View style={[styles.footer, hidePrice && styles.footerWithoutPrice]}>
-          {!hidePrice &&
-            (priceLoading ? (
-              <ActivityIndicator size="small" color="#8b5cf6" />
-            ) : (
-              <Text style={styles.priceText}>{priceInIdr || "Gratis"}</Text>
-            ))}
-
-          <View
-            style={[
-              styles.statusBadge,
-              {
-                backgroundColor:
-                  course.isActive !== false ? "#dcfce7" : "#fee2e2",
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.statusDot,
-                {
-                  backgroundColor:
-                    course.isActive !== false ? "#22c55e" : "#ef4444",
-                },
-              ]}
-            />
-            <Text
-              style={[
-                styles.statusText,
-                { color: course.isActive !== false ? "#166534" : "#991b1b" },
-              ]}
-            >
-              {course.isActive !== false ? "Aktif" : "Nonaktif"}
+      {/* ✅ Enhanced thumbnail section */}
+      <View style={styles.thumbnailContainer}>
+        {renderThumbnail()}
+        {/* ✅ Course stats overlay */}
+        <View style={styles.statsOverlay}>
+          <View style={styles.statsBadge}>
+            <Ionicons name="play-circle-outline" size={12} color="#ffffff" />
+            <Text style={styles.statsText}>
+              {courseData.sectionsCount} video
             </Text>
           </View>
         </View>
       </View>
-      {/* Creator badge tetap di atas */}
-      <View style={styles.creatorBadge}>
-        <Text style={styles.creatorText} numberOfLines={1}>
-          Oleh:{" "}
-          {course.creator
-            ? `${course.creator.slice(0, 6)}...${course.creator.slice(-4)}`
-            : "Unknown Creator"}
+
+      {/* ✅ Enhanced course info */}
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title} numberOfLines={2}>
+            {courseData.title}
+          </Text>
+          {!hidePrice && (
+            <View style={styles.priceContainer}>
+              <Text style={styles.price}>{priceDisplay}</Text>
+            </View>
+          )}
+        </View>
+
+        <Text style={styles.description} numberOfLines={2}>
+          {courseData.description}
         </Text>
+
+        <View style={styles.footer}>
+          <View style={styles.creatorInfo}>
+            <Ionicons name="person-circle-outline" size={16} color="#8b5cf6" />
+            <Text style={styles.creator}>{creatorDisplay}</Text>
+          </View>
+
+          <View style={styles.timeInfo}>
+            <Ionicons name="time-outline" size={12} color="#94a3b8" />
+            <Text style={styles.timeAgo}>{timeAgo(courseData.createdAt)}</Text>
+          </View>
+        </View>
+
+        {/* ✅ Course progress indicator (if needed) */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: "0%" }]} />
+          </View>
+          <Text style={styles.progressText}>Belum dimulai</Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  cardContainer: {
-    backgroundColor: "#fff",
+  card: {
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     marginBottom: 16,
-    elevation: 4,
-    shadowColor: "#4a044e",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    overflow: "hidden",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
-  cardDisabled: {
-    opacity: 0.6,
+  thumbnailContainer: {
+    position: "relative",
+    height: 160,
   },
-  cardImage: {
+  thumbnail: {
     width: "100%",
-    height: 150,
+    height: "100%",
+  },
+  thumbnailPlaceholder: {
+    width: "100%",
+    height: "100%",
     backgroundColor: "#f1f5f9",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  content: {
-    padding: 14,
-  },
-  title: {
-    fontSize: 21,
-    fontWeight: "bold",
-    color: "#1e293b",
-    marginBottom: 2,
-    minHeight: 33,
-    lineHeight: 20,
-  },
-  description: {
-    fontSize: 13,
-    color: "#64748b",
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  // --- New Horizontal Info Container ---
-  infoContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 10,
+    gap: 8,
   },
-  infoItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  infoText: {
+  loadingText: {
     fontSize: 12,
-    color: "#64748b",
-    marginLeft: 6,
+    color: "#8b5cf6",
     fontWeight: "500",
   },
-  // Additional info styles - semua dari blockchain
-  additionalInfo: {
+  placeholderText: {
+    fontSize: 12,
+    color: "#cbd5e1",
+  },
+  statsOverlay: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+  },
+  statsBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  statsText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "500",
+  },
+  content: {
+    padding: 16,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+    gap: 12,
+  },
+  title: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    lineHeight: 22,
+  },
+  priceContainer: {
+    backgroundColor: "#ede9fe",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    minWidth: 60,
+    alignItems: "center",
+  },
+  price: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#8b5cf6",
+  },
+  description: {
+    fontSize: 14,
+    color: "#64748b",
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  footer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -229,98 +365,41 @@ const styles = StyleSheet.create({
   creatorInfo: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#e0e7ff",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    gap: 6,
     flex: 1,
-    marginRight: 4,
   },
-  creatorInfoText: {
-    fontSize: 10,
-    color: "#6366f1",
-    fontWeight: "600",
-    marginLeft: 3,
-  },
-  pricePreview: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f3e8ff",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    flex: 1,
-    marginHorizontal: 2,
-  },
-  pricePreviewText: {
-    fontSize: 10,
+  creator: {
+    fontSize: 12,
     color: "#8b5cf6",
-    fontWeight: "600",
-    marginLeft: 3,
+    fontWeight: "500",
   },
-  idBadge: {
+  timeInfo: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f1f5f9",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    flex: 1,
-    marginLeft: 4,
+    gap: 4,
   },
-  idText: {
+  timeAgo: {
     fontSize: 10,
-    color: "#64748b",
-    fontWeight: "600",
-    marginLeft: 3,
+    color: "#94a3b8",
   },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
-    paddingTop: 12,
+  progressContainer: {
+    gap: 6,
   },
-  footerWithoutPrice: {
-    justifyContent: "flex-end",
+  progressBar: {
+    height: 3,
+    backgroundColor: "#e2e8f0",
+    borderRadius: 2,
+    overflow: "hidden",
   },
-  priceText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#212121",
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#8b5cf6",
   },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  creatorBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  creatorText: {
-    color: "#fff",
+  progressText: {
     fontSize: 10,
-    fontWeight: "600",
+    color: "#94a3b8",
+    textAlign: "center",
   },
 });
 
-export default CourseCard;
+export default React.memo(CourseCard);

@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./CourseFactory.sol";
 import "./ProgressTracker.sol";
 
@@ -11,7 +12,7 @@ import "./ProgressTracker.sol";
  * @title CertificateManager
  * @dev Issues and manages course completion certificates as NFTs
  */
-contract CertificateManager is ERC1155, Ownable {
+contract CertificateManager is ERC1155, Ownable, ReentrancyGuard {
     // Membuat agar kita bisa mengkonversi dari int ke string
     using Strings for uint256;
 
@@ -68,7 +69,11 @@ contract CertificateManager is ERC1155, Ownable {
      * @param courseId ID of the completed course
      * @param studentName Name of the student to appear on certificate
      */
-    function issueCertificate(uint256 courseId, string memory studentName) external payable {
+    function issueCertificate(uint256 courseId, string memory studentName) external payable nonReentrant {
+        // Validate input
+        require(bytes(studentName).length > 0, "Student name cannot be empty");
+        require(bytes(studentName).length <= 100, "Student name too long");
+        
         // Check if course is completed
         require(progressTracker.isCourseCompleted(msg.sender, courseId), "Course not completed");
 
@@ -78,9 +83,13 @@ contract CertificateManager is ERC1155, Ownable {
         // Check payment
         require(msg.value >= certificateFee, "Insufficient fee");
 
-        // Create new certificate
-        uint256 certificateId = _nextCertificateId++;
+        // Create new certificate ID atomically
+        uint256 certificateId = _nextCertificateId;
+        unchecked {
+            _nextCertificateId++;
+        }
 
+        // Create certificate
         certificates[certificateId] = Certificate({
             courseId: courseId,
             student: msg.sender,
@@ -98,19 +107,45 @@ contract CertificateManager is ERC1155, Ownable {
 
         // Process payment
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
-
-        // Calculate fees
-        uint256 platformFee = (certificateFee * platformFeePercentage) / 10000;
-        uint256 creatorFee = certificateFee - platformFee;
-
-        // Distribute payments
-        (bool platformSuccess, ) = platformWallet.call{value: platformFee}("");
-        require(platformSuccess, "Platform fee transfer failed");
-
-        (bool creatorSuccess, ) = course.creator.call{value: creatorFee}("");
-        require(creatorSuccess, "Creator payment failed");
+        _processPayment(course.creator);
 
         emit CertificateIssued(certificateId, courseId, msg.sender, block.timestamp);
+    }
+
+    /**
+     * @dev Internal function to handle certificate payment processing
+     */
+    function _processPayment(address creator) internal {
+        // Calculate fees with overflow protection
+        uint256 platformFee;
+        unchecked {
+            platformFee = (certificateFee * platformFeePercentage) / 10000;
+        }
+        uint256 creatorFee;
+        unchecked {
+            creatorFee = certificateFee - platformFee;
+        }
+
+        // Distribute payments
+        if (platformFee > 0) {
+            (bool platformSuccess, ) = platformWallet.call{value: platformFee}("");
+            require(platformSuccess, "Platform fee transfer failed");
+        }
+
+        if (creatorFee > 0) {
+            (bool creatorSuccess, ) = creator.call{value: creatorFee}("");
+            require(creatorSuccess, "Creator payment failed");
+        }
+
+        // Refund excess payment if any
+        if (msg.value > certificateFee) {
+            uint256 refundAmount;
+            unchecked {
+                refundAmount = msg.value - certificateFee;
+            }
+            (bool refundSuccess, ) = msg.sender.call{value: refundAmount}("");
+            require(refundSuccess, "Refund failed");
+        }
     }
 
     /**

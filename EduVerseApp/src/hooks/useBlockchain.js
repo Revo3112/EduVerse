@@ -36,7 +36,7 @@ function walletClientToSigner(walletClient, publicClient) {
   });
 }
 
-// Hooks for managing smart contract service initialization
+// ✅ Enhanced useSmartContract hook dengan optimasi
 export const useSmartContract = () => {
   const { isConnected, status } = useAccount();
   const publicClient = usePublicClient();
@@ -84,7 +84,7 @@ export const useSmartContract = () => {
     if (status === "connected" && publicClient && walletClient) {
       console.log("Wallet connected, menginisialisasi SmartContractService...");
       // Tambahkan delay lebih lama untuk memastikan provider stabil
-      initTimer = setTimeout(initializeService, 1500); // Tunda 1.5 detik
+      initTimer = setTimeout(initializeService, 1200); // ✅ Reduced delay
     } else {
       setIsInitialized(false);
     }
@@ -94,7 +94,6 @@ export const useSmartContract = () => {
     };
   }, [status, publicClient, walletClient]);
 
-  // PERBAIKAN: Return SmartContractService instance jika sudah diinisialisasi
   return {
     smartContractService: isInitialized ? SmartContractService : null,
     isInitialized,
@@ -102,43 +101,68 @@ export const useSmartContract = () => {
   };
 };
 
-// Hook Fetching all courses
-export const useCourses = () => {
+// ✅ Enhanced useCourses hook dengan pagination support
+export const useCourses = (offset = 0, limit = 50) => {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
   const { isInitialized } = useSmartContract();
 
-  const fetchCourses = useCallback(async () => {
-    if (!isInitialized) return;
+  const fetchCourses = useCallback(
+    async (reset = false) => {
+      if (!isInitialized) return;
 
-    setLoading(true);
-    setError(null);
+      setLoading(true);
+      setError(null);
 
-    try {
-      const coursesData = await SmartContractService.getAllCourses();
-      setCourses(coursesData);
-    } catch (err) {
-      console.error("Error fetching courses:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [isInitialized]);
+      try {
+        const currentOffset = reset ? 0 : offset;
+        console.log(
+          `📚 Fetching courses: offset=${currentOffset}, limit=${limit}`
+        );
+
+        // ✅ Use enhanced getAllCourses with pagination
+        const coursesData = await SmartContractService.getAllCourses(
+          currentOffset,
+          limit
+        );
+
+        if (reset) {
+          setCourses(coursesData);
+        } else {
+          setCourses((prev) => [...prev, ...coursesData]);
+        }
+
+        // Check if there are more courses
+        setHasMore(coursesData.length === limit);
+
+        console.log(`✅ Fetched ${coursesData.length} courses`);
+      } catch (err) {
+        console.error("Error fetching courses:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isInitialized, offset, limit]
+  );
 
   useEffect(() => {
-    fetchCourses();
-  }, [fetchCourses]);
+    fetchCourses(true); // Reset on first load
+  }, [isInitialized]);
 
   return {
     courses,
     loading,
     error,
-    refetch: fetchCourses,
+    hasMore,
+    refetch: () => fetchCourses(true),
+    loadMore: () => fetchCourses(false),
   };
 };
 
-// Hook for fetching user's enrolled courses (licenses)
+// ✅ Enhanced useUserCourses hook
 export const useUserCourses = () => {
   const { address } = useAccount();
   const [enrolledCourses, setEnrolledCourses] = useState([]);
@@ -152,23 +176,38 @@ export const useUserCourses = () => {
     setError(null);
 
     try {
+      console.log(`👤 Fetching enrolled courses for: ${address}`);
+
       const licenses = await SmartContractService.getUserLicenses(address);
       const coursesWithProgress = [];
+
       for (const license of licenses) {
         try {
+          // ✅ Use enhanced getCourse method
           const course = await SmartContractService.getCourse(license.courseId);
-          const progress = await SmartContractService.getUserProgress(
-            address,
-            license.courseId
-          );
 
           if (course) {
+            // ✅ Use enhanced progress tracking if available
+            let progress = null;
+            try {
+              progress = await SmartContractService.getUserProgress(
+                address,
+                license.courseId
+              );
+            } catch (progressError) {
+              console.warn(
+                `Progress not available for course ${license.courseId}:`,
+                progressError
+              );
+            }
+
             coursesWithProgress.push({
               ...course,
               license,
               progress: progress?.progressPercentage || 0,
               completedSections: progress?.completedSections?.length || 0,
-              totalSections: progress?.totalSections || 0,
+              totalSections:
+                progress?.totalSections || course.sectionsCount || 0,
             });
           }
         } catch (err) {
@@ -178,7 +217,9 @@ export const useUserCourses = () => {
           );
         }
       }
+
       setEnrolledCourses(coursesWithProgress);
+      console.log(`✅ Fetched ${coursesWithProgress.length} enrolled courses`);
     } catch (err) {
       console.error("Error fetching user courses:", err);
       setError(err.message);
@@ -199,7 +240,7 @@ export const useUserCourses = () => {
   };
 };
 
-// Hook for fetching creator's courses
+// ✅ Enhanced useCreatorCourses hook
 export const useCreatorCourses = () => {
   const { address } = useAccount();
   const [createdCourses, setCreatedCourses] = useState([]);
@@ -214,8 +255,13 @@ export const useCreatorCourses = () => {
     setError(null);
 
     try {
+      console.log(`👨‍🏫 Fetching created courses for: ${address}`);
+
+      // ✅ Use enhanced getCreatorCourses method
       const courses = await SmartContractService.getCreatorCourses(address);
       setCreatedCourses(courses);
+
+      console.log(`✅ Fetched ${courses.length} created courses`);
     } catch (err) {
       console.error("Error fetching creator courses:", err);
       setError(err.message);
@@ -236,7 +282,7 @@ export const useCreatorCourses = () => {
   };
 };
 
-// Hook for course creation
+// ✅ Enhanced useCreateCourse hook dengan CID parameter
 export const useCreateCourse = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -252,37 +298,69 @@ export const useCreateCourse = () => {
       setError(null);
 
       try {
-        // Create the course
-        const courseResult = await SmartContractService.createCourse(
-          courseData
-        );
+        console.log("🚀 Creating course with data:", {
+          title: courseData.title,
+          thumbnailCID: courseData.thumbnailCID, // ✅ Use CID parameter
+          sectionsCount: sections.length,
+        });
+
+        // ✅ Create course with CID parameter
+        const courseResult = await SmartContractService.createCourse({
+          title: courseData.title,
+          description: courseData.description,
+          thumbnailCID: courseData.thumbnailCID, // ✅ Changed from thumbnailURI
+          pricePerMonth: courseData.pricePerMonth || "0",
+        });
 
         if (!courseResult.success) {
           throw new Error(courseResult.error);
         }
 
         const courseId = courseResult.courseId;
+        console.log(`✅ Course created with ID: ${courseId}`);
 
-        // Add sections if provided
+        // ✅ Add sections with CID parameter
         const sectionResults = [];
-        for (const section of sections) {
+        for (let i = 0; i < sections.length; i++) {
+          const section = sections[i];
           try {
+            console.log(`📖 Adding section ${i + 1}: ${section.title}`);
+
             const sectionResult = await SmartContractService.addCourseSection(
               courseId,
-              section
+              {
+                title: section.title,
+                contentCID: section.contentCID, // ✅ Changed from contentURI
+                duration: section.duration,
+              }
             );
-            sectionResults.push(sectionResult);
+
+            if (sectionResult.success) {
+              sectionResults.push(sectionResult);
+              console.log(`✅ Section ${i + 1} added successfully`);
+            } else {
+              console.warn(
+                `❌ Failed to add section ${i + 1}:`,
+                sectionResult.error
+              );
+            }
           } catch (err) {
             console.warn(`Failed to add section "${section.title}":`, err);
           }
         }
 
-        return {
+        const successMessage = {
           success: true,
           courseId,
           transactionHash: courseResult.transactionHash,
           sectionsAdded: sectionResults.filter((r) => r.success).length,
+          totalSections: sections.length,
+          blockNumber: courseResult.blockNumber,
+          gasUsed: courseResult.gasUsed,
         };
+
+        console.log("🎉 Course creation completed:", successMessage);
+        return successMessage;
       } catch (err) {
         console.error("Error creating course:", err);
         setError(err.message);
@@ -304,7 +382,7 @@ export const useCreateCourse = () => {
   };
 };
 
-// Hook for minting course license
+// ✅ Enhanced useMintLicense hook
 export const useMintLicense = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -320,6 +398,10 @@ export const useMintLicense = () => {
       setError(null);
 
       try {
+        console.log(
+          `🎫 Minting license for course ${courseId}, duration: ${duration} month(s)`
+        );
+
         const result = await SmartContractService.mintLicense(
           courseId,
           duration
@@ -329,6 +411,7 @@ export const useMintLicense = () => {
           throw new Error(result.error);
         }
 
+        console.log("✅ License minted successfully:", result);
         return result;
       } catch (err) {
         console.error("Error minting license:", err);
@@ -351,7 +434,7 @@ export const useMintLicense = () => {
   };
 };
 
-// Hook for updating course progress
+// ✅ Enhanced useUpdateProgress hook
 export const useUpdateProgress = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -367,6 +450,10 @@ export const useUpdateProgress = () => {
       setError(null);
 
       try {
+        console.log(
+          `📈 Updating progress: course ${courseId}, section ${sectionId}, completed: ${completed}`
+        );
+
         const result = await SmartContractService.updateProgress(
           courseId,
           sectionId,
@@ -377,6 +464,7 @@ export const useUpdateProgress = () => {
           throw new Error(result.error);
         }
 
+        console.log("✅ Progress updated successfully");
         return result;
       } catch (err) {
         console.error("Error updating progress:", err);
@@ -399,7 +487,7 @@ export const useUpdateProgress = () => {
   };
 };
 
-// Hook for fetching user certificates
+// ✅ Enhanced useUserCertificates hook
 export const useUserCertificates = () => {
   const { address } = useAccount();
   const [certificates, setCertificates] = useState([]);
@@ -414,8 +502,12 @@ export const useUserCertificates = () => {
     setError(null);
 
     try {
+      console.log(`🏆 Fetching certificates for: ${address}`);
+
       const certs = await SmartContractService.getUserCertificates(address);
       setCertificates(certs);
+
+      console.log(`✅ Fetched ${certs.length} certificates`);
     } catch (err) {
       console.error("Error fetching certificates:", err);
       setError(err.message);
@@ -436,22 +528,35 @@ export const useUserCertificates = () => {
   };
 };
 
-// Hook for ETH price
+// ✅ Enhanced useETHPrice hook
 export const useETHPrice = () => {
   const [price, setPrice] = useState("0");
+  const [maxPriceETH, setMaxPriceETH] = useState("0");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const { isInitialized } = useSmartContract();
 
-  const fetchPrice = useCallback(async () => {
+  const fetchPriceData = useCallback(async () => {
     if (!isInitialized) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const ethPrice = await SmartContractService.getETHPrice();
+      console.log("💰 Fetching ETH price data...");
+
+      // ✅ Fetch both current price and max allowed price
+      const [ethPrice, maxPrice] = await Promise.all([
+        SmartContractService.getETHPrice(),
+        SmartContractService.getMaxPriceInETH
+          ? SmartContractService.getMaxPriceInETH()
+          : Promise.resolve("0"),
+      ]);
+
       setPrice(ethPrice);
+      setMaxPriceETH(maxPrice);
+
+      console.log(`✅ ETH Price: ${ethPrice}, Max Price: ${maxPrice} ETH`);
     } catch (err) {
       console.error("Error fetching ETH price:", err);
       setError(err.message);
@@ -461,26 +566,28 @@ export const useETHPrice = () => {
   }, [isInitialized]);
 
   useEffect(() => {
-    fetchPrice();
+    fetchPriceData();
 
     // Refresh price every 5 minutes
-    const interval = setInterval(fetchPrice, 5 * 60 * 1000);
+    const interval = setInterval(fetchPriceData, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [fetchPrice]);
+  }, [fetchPriceData]);
 
   return {
     price,
+    maxPriceETH, // ✅ Add max price in ETH
     loading,
     error,
-    refetch: fetchPrice,
+    refetch: fetchPriceData,
   };
 };
 
-// Hook untuk mengecek apakah user memiliki lisensi aktif untuk course tertentu
+// ✅ Enhanced useHasActiveLicense hook
 export const useHasActiveLicense = (courseId) => {
   const { address } = useAccount();
   const [hasLicense, setHasLicense] = useState(false);
+  const [licenseData, setLicenseData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const { isInitialized } = useSmartContract();
@@ -488,6 +595,7 @@ export const useHasActiveLicense = (courseId) => {
   const checkLicense = useCallback(async () => {
     if (!isInitialized || !address || !courseId) {
       setHasLicense(false);
+      setLicenseData(null);
       return;
     }
 
@@ -495,16 +603,40 @@ export const useHasActiveLicense = (courseId) => {
     setError(null);
 
     try {
-      // Menggunakan method hasValidLicense yang baru untuk pengecekan yang efisien
+      console.log(`🎫 Checking license for course ${courseId}`);
+
+      // ✅ Use hasValidLicense method for efficient checking
       const isValid = await SmartContractService.hasValidLicense(
         address,
         courseId
       );
+
       setHasLicense(isValid);
+
+      // ✅ If valid, get detailed license data
+      if (isValid) {
+        try {
+          const licenseDetails = await SmartContractService.getLicense(
+            address,
+            courseId
+          );
+          setLicenseData(licenseDetails);
+        } catch (detailError) {
+          console.warn("Could not fetch license details:", detailError);
+          setLicenseData(null);
+        }
+      } else {
+        setLicenseData(null);
+      }
+
+      console.log(
+        `✅ License check completed: ${isValid ? "Valid" : "Invalid"}`
+      );
     } catch (err) {
       console.error("Error checking license:", err);
       setError(err.message);
       setHasLicense(false);
+      setLicenseData(null);
     } finally {
       setLoading(false);
     }
@@ -516,13 +648,102 @@ export const useHasActiveLicense = (courseId) => {
 
   return {
     hasLicense,
+    licenseData, // ✅ Return detailed license information
     loading,
     error,
     refetch: checkLicense,
   };
 };
 
-// Main useBlockchain hook yang menggabungkan semua fungsionalitas
+// ✅ NEW: Hook for getting course metadata efficiently
+export const useCourseMetadata = (courseId) => {
+  const [metadata, setMetadata] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const { isInitialized } = useSmartContract();
+
+  const fetchMetadata = useCallback(async () => {
+    if (!isInitialized || !courseId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`📋 Fetching metadata for course ${courseId}`);
+
+      // ✅ Use efficient getCourseMetadata method
+      const metadataResult = await SmartContractService.getCourseMetadata(
+        courseId
+      );
+      setMetadata(metadataResult);
+
+      console.log(`✅ Metadata fetched for course ${courseId}`);
+    } catch (err) {
+      console.error("Error fetching course metadata:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, courseId]);
+
+  useEffect(() => {
+    fetchMetadata();
+  }, [fetchMetadata]);
+
+  return {
+    metadata,
+    loading,
+    error,
+    refetch: fetchMetadata,
+  };
+};
+
+// ✅ NEW: Hook for getting course sections with URLs
+export const useCourseSections = (courseId) => {
+  const [sections, setSections] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const { isInitialized } = useSmartContract();
+
+  const fetchSections = useCallback(async () => {
+    if (!isInitialized || !courseId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`📖 Fetching sections for course ${courseId}`);
+
+      // ✅ Use enhanced getCourseSections with URL generation
+      const sectionsData = await SmartContractService.getCourseSections(
+        courseId
+      );
+      setSections(sectionsData);
+
+      console.log(
+        `✅ Fetched ${sectionsData.length} sections for course ${courseId}`
+      );
+    } catch (err) {
+      console.error("Error fetching course sections:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, courseId]);
+
+  useEffect(() => {
+    fetchSections();
+  }, [fetchSections]);
+
+  return {
+    sections,
+    loading,
+    error,
+    refetch: fetchSections,
+  };
+};
+
+// ✅ Enhanced main useBlockchain hook
 export const useBlockchain = () => {
   const smartContractData = useSmartContract();
 

@@ -1,42 +1,74 @@
-// src/components/CourseDetailModal.js - Enhanced Floating Modal with Elegant Design
-import React from "react";
+// src/components/CourseDetailModal.js - Enhanced with duration selection and better UX
+
+import React, { useState, useEffect, useMemo } from "react";
 import {
+  Modal,
   View,
   Text,
   StyleSheet,
-  Modal,
-  ScrollView,
   TouchableOpacity,
+  ScrollView,
   Image,
   ActivityIndicator,
-  SafeAreaView,
   Dimensions,
-  Animated,
-  TouchableWithoutFeedback,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { pinataService } from "../services/PinataService";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 // Helper untuk format timestamp
 const timeAgo = (timestamp) => {
-  if (!timestamp) return "Tanggal tidak tersedia";
+  if (!timestamp) return "Baru saja";
+
   const now = new Date();
   const past = new Date(timestamp);
-  const seconds = Math.floor((now - past) / 1000);
+  const diffInSeconds = Math.floor((now - past) / 1000);
 
-  let interval = seconds / 31536000;
-  if (interval > 1) return Math.floor(interval) + " tahun lalu";
-  interval = seconds / 2592000;
-  if (interval > 1) return Math.floor(interval) + " bulan lalu";
-  interval = seconds / 86400;
-  if (interval > 1) return Math.floor(interval) + " hari lalu";
-  interval = seconds / 3600;
-  if (interval > 1) return Math.floor(interval) + " jam lalu";
-  interval = seconds / 60;
-  if (interval > 1) return Math.floor(interval) + " menit lalu";
-  return Math.floor(seconds) + " detik lalu";
+  if (diffInSeconds < 60) return "Baru saja";
+  if (diffInSeconds < 3600)
+    return `${Math.floor(diffInSeconds / 60)} menit lalu`;
+  if (diffInSeconds < 86400)
+    return `${Math.floor(diffInSeconds / 3600)} jam lalu`;
+  if (diffInSeconds < 2592000)
+    return `${Math.floor(diffInSeconds / 86400)} hari lalu`;
+  if (diffInSeconds < 31536000)
+    return `${Math.floor(diffInSeconds / 2592000)} bulan lalu`;
+  return `${Math.floor(diffInSeconds / 31536000)} tahun lalu`;
 };
+
+// ✅ Duration options dengan discount
+const DURATION_OPTIONS = [
+  {
+    months: 1,
+    label: "1 Bulan",
+    discount: 0,
+    popular: false,
+    description: "Akses selama 1 bulan",
+  },
+  {
+    months: 3,
+    label: "3 Bulan",
+    discount: 10,
+    popular: true,
+    description: "Hemat 10% + akses extended",
+  },
+  {
+    months: 6,
+    label: "6 Bulan",
+    discount: 15,
+    popular: false,
+    description: "Hemat 15% + bonus materi",
+  },
+  {
+    months: 12,
+    label: "1 Tahun",
+    discount: 25,
+    popular: false,
+    description: "Hemat 25% + lifetime support",
+  },
+];
 
 const CourseDetailModal = ({
   visible,
@@ -44,694 +76,741 @@ const CourseDetailModal = ({
   onClose,
   onMintLicense,
   isMinting,
-  priceInIdr,
+  priceCalculator, // ✅ Function untuk calculate price berdasarkan duration
   priceLoading,
-  hasLicense, // <-- Tambahkan prop ini
-  licenseLoading, // <-- Tambahkan prop untuk loading state pengecekan lisensi
+  hasLicense,
+  licenseData, // ✅ Detailed license information
+  licenseLoading,
 }) => {
-  const scaleValue = new Animated.Value(0);
-  const opacityValue = new Animated.Value(0);
-  const [selectedDuration, setSelectedDuration] = React.useState(1);
-  // Duration options with exact multiplier (matching smart contract logic)
-  const durationOptions = [
-    { months: 1, label: "1 Bulan", multiplier: 1 },
-    { months: 3, label: "3 Bulan", multiplier: 3 }, // 3 months = 3x price
-    { months: 6, label: "6 Bulan", multiplier: 6 }, // 6 months = 6x price
-    { months: 12, label: "12 Bulan", multiplier: 12 }, // 12 months = 12x price
-  ];
-  React.useEffect(() => {
+  const [selectedDuration, setSelectedDuration] = useState(1);
+  const [thumbnailUrl, setThumbnailUrl] = useState(null);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [showFullDescription, setShowFullDescription] = useState(false);
+
+  // ✅ Memoized course data
+  const courseData = useMemo(() => {
+    if (!course) return null;
+
+    return {
+      id: course.id,
+      title: course.title,
+      description: course.description,
+      thumbnailCID: course.thumbnailCID,
+      thumbnailUrl: course.thumbnailUrl,
+      creator: course.creator,
+      pricePerMonth: parseFloat(course.pricePerMonth || "0"),
+      sectionsCount: course.sectionsCount || 0,
+      createdAt: course.createdAt,
+    };
+  }, [course]);
+
+  // ✅ Enhanced thumbnail loading
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadThumbnail = async () => {
+      if (!courseData) return;
+
+      try {
+        setImageLoading(true);
+
+        // Priority 1: Use pre-generated URL
+        if (courseData.thumbnailUrl) {
+          setThumbnailUrl(courseData.thumbnailUrl);
+          return;
+        }
+
+        // Priority 2: Generate from CID
+        if (courseData.thumbnailCID) {
+          try {
+            const optimizedUrl = await pinataService.getOptimizedFileUrl(
+              courseData.thumbnailCID,
+              {
+                forcePublic: true,
+                network: "public",
+                width: 600,
+                height: 360,
+                format: "webp",
+              }
+            );
+
+            if (isMounted && optimizedUrl) {
+              setThumbnailUrl(optimizedUrl);
+            }
+          } catch (error) {
+            // Fallback
+            const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${courseData.thumbnailCID}`;
+            if (isMounted) {
+              setThumbnailUrl(fallbackUrl);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error loading modal thumbnail:", error);
+      } finally {
+        if (isMounted) {
+          setImageLoading(false);
+        }
+      }
+    };
+
+    if (visible && courseData) {
+      loadThumbnail();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [visible, courseData]);
+
+  // ✅ Reset state when modal opens/closes
+  useEffect(() => {
     if (visible) {
-      // Reset duration selection when modal opens
       setSelectedDuration(1);
-      Animated.parallel([
-        Animated.spring(scaleValue, {
-          toValue: 1,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 8,
-        }),
-        Animated.timing(opacityValue, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.spring(scaleValue, {
-          toValue: 0,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 8,
-        }),
-        Animated.timing(opacityValue, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      setShowFullDescription(false);
     }
   }, [visible]);
-  if (!course) return null;
 
-  const creationDate = timeAgo(course.createdAt);
-  // Memastikan bahwa ethPrice menggunakan course.pricePerMonth yang sudah diformat ke ETH
-  const ethPrice = parseFloat(course.pricePerMonth || "0");
-  // Menyimpan nilai wei asli untuk debugging dan verifikasi kalkulasi transaksi
-  const ethPriceWei = course.pricePerMonthWei || "0";
-  const isFree = ethPrice === 0;
+  // ✅ Memoized price calculations
+  const priceInfo = useMemo(() => {
+    if (!courseData || priceLoading) {
+      return {
+        loading: true,
+        originalPrice: "Menghitung...",
+        finalPrice: "Menghitung...",
+        savings: null,
+        pricePerMonth: "Menghitung...",
+      };
+    }
 
-  // Calculate price based on selected duration
-  const selectedOption = durationOptions.find(
-    (opt) => opt.months === selectedDuration
+    const selectedOption = DURATION_OPTIONS.find(
+      (opt) => opt.months === selectedDuration
+    );
+    const originalTotal = courseData.pricePerMonth * selectedDuration;
+    const discount = selectedOption?.discount || 0;
+    const finalTotal = originalTotal * (1 - discount / 100);
+    const savings = originalTotal - finalTotal;
+
+    return {
+      loading: false,
+      originalPrice: priceCalculator
+        ? priceCalculator(selectedDuration)
+        : `Rp ${(originalTotal * 55000000).toLocaleString("id-ID")}`,
+      finalPrice: priceCalculator
+        ? priceCalculator(selectedDuration)
+        : `Rp ${(finalTotal * 55000000).toLocaleString("id-ID")}`,
+      savings:
+        savings > 0
+          ? `Rp ${(savings * 55000000).toLocaleString("id-ID")}`
+          : null,
+      pricePerMonth: `Rp ${(courseData.pricePerMonth * 55000000).toLocaleString(
+        "id-ID"
+      )}/bulan`,
+      discount: discount,
+    };
+  }, [courseData, selectedDuration, priceCalculator, priceLoading]);
+
+  if (!visible || !courseData) return null;
+
+  // ✅ Enhanced creator display
+  const creatorDisplay = `${courseData.creator.slice(
+    0,
+    8
+  )}...${courseData.creator.slice(-6)}`;
+
+  // ✅ License status display
+  const renderLicenseStatus = () => {
+    if (licenseLoading) {
+      return (
+        <View style={styles.licenseStatus}>
+          <ActivityIndicator size="small" color="#8b5cf6" />
+          <Text style={styles.licenseStatusText}>Memeriksa lisensi...</Text>
+        </View>
+      );
+    }
+
+    if (hasLicense) {
+      const expiryDate = licenseData?.expiryTimestamp
+        ? new Date(licenseData.expiryTimestamp).toLocaleDateString("id-ID")
+        : "Tidak diketahui";
+
+      return (
+        <View style={[styles.licenseStatus, styles.licenseActive]}>
+          <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+          <Text style={[styles.licenseStatusText, styles.licenseActiveText]}>
+            Lisensi Aktif - Berlaku hingga {expiryDate}
+          </Text>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
+  // ✅ Duration selection component
+  const renderDurationOptions = () => (
+    <View style={styles.durationSection}>
+      <Text style={styles.sectionTitle}>Pilih Durasi Lisensi</Text>
+      <View style={styles.durationGrid}>
+        {DURATION_OPTIONS.map((option) => (
+          <TouchableOpacity
+            key={option.months}
+            style={[
+              styles.durationOption,
+              selectedDuration === option.months &&
+                styles.durationOptionSelected,
+              option.popular && styles.durationOptionPopular,
+            ]}
+            onPress={() => setSelectedDuration(option.months)}
+          >
+            {option.popular && (
+              <View style={styles.popularBadge}>
+                <Text style={styles.popularBadgeText}>POPULER</Text>
+              </View>
+            )}
+
+            <Text
+              style={[
+                styles.durationLabel,
+                selectedDuration === option.months &&
+                  styles.durationLabelSelected,
+              ]}
+            >
+              {option.label}
+            </Text>
+
+            {option.discount > 0 && (
+              <View style={styles.discountBadge}>
+                <Text style={styles.discountText}>-{option.discount}%</Text>
+              </View>
+            )}
+
+            <Text
+              style={[
+                styles.durationDescription,
+                selectedDuration === option.months &&
+                  styles.durationDescriptionSelected,
+              ]}
+            >
+              {option.description}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
   );
-  const finalEthPrice = ethPrice * (selectedOption?.multiplier || 1);
-  // Untuk tampilan yang konsisten dengan CourseCard
-  const finalEthDisplay = finalEthPrice.toFixed(4) + " ETH";
 
-  // Menampilkan harga sesuai durasi yang dipilih
-  const finalIdrPrice =
-    priceInIdr && !isFree
-      ? priceInIdr // Gunakan format asli, tidak perlu konversi
-      : "";
+  // ✅ Main action button
+  const renderActionButton = () => {
+    if (hasLicense) {
+      return (
+        <TouchableOpacity style={[styles.actionButton, styles.accessButton]}>
+          <Ionicons name="play-circle" size={20} color="#ffffff" />
+          <Text style={styles.actionButtonText}>Mulai Belajar</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.actionButton,
+          (isMinting || priceInfo.loading) && styles.actionButtonDisabled,
+        ]}
+        onPress={() => {
+          if (courseData.pricePerMonth === 0) {
+            // Free course
+            onMintLicense(courseData, selectedDuration);
+          } else {
+            // Paid course - show confirmation
+            Alert.alert(
+              "Konfirmasi Pembelian",
+              `Anda akan membeli lisensi ${
+                DURATION_OPTIONS.find((opt) => opt.months === selectedDuration)
+                  ?.label
+              } untuk "${courseData.title}".\n\nTotal: ${priceInfo.finalPrice}${
+                priceInfo.savings ? `\nHemat: ${priceInfo.savings}` : ""
+              }`,
+              [
+                { text: "Batal", style: "cancel" },
+                {
+                  text: "Beli Sekarang",
+                  onPress: () => onMintLicense(courseData, selectedDuration),
+                  style: "default",
+                },
+              ]
+            );
+          }
+        }}
+        disabled={isMinting || priceInfo.loading}
+      >
+        {isMinting ? (
+          <>
+            <ActivityIndicator size="small" color="#ffffff" />
+            <Text style={styles.actionButtonText}>Memproses...</Text>
+          </>
+        ) : (
+          <>
+            <Ionicons
+              name={
+                courseData.pricePerMonth === 0
+                  ? "download-outline"
+                  : "card-outline"
+              }
+              size={20}
+              color="#ffffff"
+            />
+            <Text style={styles.actionButtonText}>
+              {courseData.pricePerMonth === 0
+                ? "Ambil Gratis"
+                : `Beli ${priceInfo.finalPrice}`}
+            </Text>
+          </>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <Modal
-      animationType="none"
-      transparent={true}
       visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
       onRequestClose={onClose}
-      statusBarTranslucent
     >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <Animated.View style={[styles.overlay, { opacity: opacityValue }]}>
-          <TouchableWithoutFeedback>
-            <Animated.View
-              style={[
-                styles.modalContainer,
-                {
-                  transform: [{ scale: scaleValue }],
-                  opacity: opacityValue,
-                },
-              ]}
-            >
-              {/* Header dengan Gradient */}
-              <View style={styles.modalHeader}>
-                <View style={styles.headerContent}>
-                  <TouchableOpacity
-                    onPress={onClose}
-                    style={styles.closeButton}
-                  >
-                    <Ionicons name="close" size={24} color="#ffffff" />
-                  </TouchableOpacity>
-                  <View style={styles.headerInfo}>
-                    <Text style={styles.headerTitle} numberOfLines={1}>
-                      Detail Kursus
-                    </Text>
-                    <View style={styles.courseIdBadge}>
-                      <Text style={styles.courseIdText}>ID: {course.id}</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
+      <View style={styles.modalContainer}>
+        {/* ✅ Enhanced header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Ionicons name="close" size={24} color="#64748b" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Detail Kursus</Text>
+          <View style={styles.headerSpacer} />
+        </View>
 
-              <ScrollView
-                style={styles.modalContent}
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-              >
-                {/* Course Image dengan Overlay Info */}
-                <View style={styles.imageContainer}>
-                  <Image
-                    source={{
-                      uri:
-                        course.thumbnailURI ||
-                        "https://placehold.co/600x400/8B5CF6/FFFFFF/png?text=Course+Image",
-                    }}
-                    style={styles.courseImage}
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* ✅ Enhanced course image */}
+          <View style={styles.imageContainer}>
+            {imageLoading ? (
+              <View style={styles.imagePlaceholder}>
+                <ActivityIndicator size="large" color="#8b5cf6" />
+              </View>
+            ) : thumbnailUrl ? (
+              <Image
+                source={{ uri: thumbnailUrl }}
+                style={styles.courseImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Ionicons name="image-outline" size={50} color="#cbd5e1" />
+              </View>
+            )}
+
+            {/* ✅ Course stats overlay */}
+            <View style={styles.imageOverlay}>
+              <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                  <Ionicons
+                    name="play-circle-outline"
+                    size={16}
+                    color="#ffffff"
                   />
-                  <View style={styles.imageOverlay}>
-                    <View style={styles.statusContainer}>
-                      <View
-                        style={[
-                          styles.statusIndicator,
-                          {
-                            backgroundColor: course.isActive
-                              ? "#22c55e"
-                              : "#ef4444",
-                          },
-                        ]}
-                      />
-                      <Text style={styles.statusText}>
-                        {course.isActive ? "Aktif" : "Nonaktif"}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Main Content */}
-                <View style={styles.contentSection}>
-                  {/* Title */}
-                  <Text style={styles.courseTitle}>{course.title}</Text>
-                  {/* Creator Info */}
-                  <View style={styles.creatorSection}>
-                    <View style={styles.creatorIcon}>
-                      <Ionicons name="person" size={16} color="#8b5cf6" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.creatorLabel}>Dibuat oleh</Text>
-                      <Text
-                        style={styles.creatorAddress}
-                        numberOfLines={2}
-                        ellipsizeMode="tail"
-                      >
-                        {course.creator}
-                      </Text>
-                    </View>
-                  </View>
-                  {/* Stats Cards */}
-                  <View style={styles.statsContainer}>
-                    <View style={styles.statCard}>
-                      <Ionicons name="book-outline" size={20} color="#8b5cf6" />
-                      <Text style={styles.statNumber}>
-                        {course.sectionsCount !== undefined
-                          ? course.sectionsCount
-                          : "..."}
-                      </Text>
-                      <Text style={styles.statLabel}>Sesi</Text>
-                    </View>
-                    <View style={styles.statCard}>
-                      <Ionicons name="time-outline" size={20} color="#8b5cf6" />
-                      <Text style={styles.statNumber}>
-                        {creationDate === "Tanggal tidak tersedia"
-                          ? "..."
-                          : creationDate.split(" ")[0]}
-                      </Text>
-                      <Text style={styles.statLabel}>
-                        {creationDate === "Tanggal tidak tersedia"
-                          ? "Hari"
-                          : creationDate.split(" ")[1] + " lalu"}
-                      </Text>
-                    </View>
-                    <View style={styles.statCard}>
-                      <Ionicons
-                        name="diamond-outline"
-                        size={20}
-                        color="#8b5cf6"
-                      />
-                      <Text style={styles.statNumber}>
-                        {isFree ? "Gratis" : `${ethPrice.toFixed(4)}`}
-                      </Text>
-                      <Text style={styles.statLabel}>
-                        {isFree ? "" : "ETH"}
-                      </Text>
-                    </View>
-                  </View>
-                  {/* Description */}
-                  <View style={styles.descriptionSection}>
-                    <Text style={styles.sectionTitle}>Deskripsi</Text>
-                    <Text style={styles.description}>
-                      {course.description ||
-                        "Belum ada deskripsi untuk kursus ini."}
-                    </Text>
-                  </View>
-                  {/* Blockchain Info */}
-                  <View style={styles.blockchainInfo}>
-                    <Text style={styles.sectionTitle}>
-                      Informasi Blockchain
-                    </Text>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Contract Address:</Text>
-                      <Text style={styles.infoValue} numberOfLines={1}>
-                        {course.creator}
-                      </Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Harga per Bulan:</Text>
-                      <Text style={styles.infoValue}>
-                        {isFree ? "Gratis" : `${ethPrice.toFixed(6)} ETH`}
-                      </Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Status:</Text>
-                      <Text
-                        style={[
-                          styles.infoValue,
-                          { color: course.isActive ? "#22c55e" : "#ef4444" },
-                        ]}
-                      >
-                        {course.isActive ? "Aktif & Tersedia" : "Nonaktif"}{" "}
-                      </Text>
-                    </View>
-                  </View>
-                  {/* Tambahkan pesan lisensi di sini */}
-                  {licenseLoading ? (
-                    <View style={{ alignItems: "center", marginVertical: 8 }}>
-                      <ActivityIndicator color="#8b5cf6" size="small" />
-                      <Text
-                        style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}
-                      >
-                        Mengecek status lisensi...
-                      </Text>
-                    </View>
-                  ) : hasLicense ? (
-                    <View
-                      style={{
-                        backgroundColor: "#dcfce7",
-                        padding: 12,
-                        borderRadius: 8,
-                        marginVertical: 8,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: "#166534",
-                          textAlign: "center",
-                          fontWeight: "500",
-                        }}
-                      >
-                        ✅ Anda sudah memiliki lisensi aktif untuk kursus ini.
-                      </Text>
-                    </View>
-                  ) : null}
-                  {/* Duration Selector - hanya tampil jika user belum punya lisensi */}
-                  {!hasLicense && !licenseLoading && !isFree && (
-                    <View style={styles.durationSection}>
-                      <Text style={styles.durationTitle}>
-                        Pilih Durasi Lisensi
-                      </Text>
-                      <View style={styles.durationOptions}>
-                        {durationOptions.map((option) => (
-                          <TouchableOpacity
-                            key={option.months}
-                            style={[
-                              styles.durationOption,
-                              selectedDuration === option.months &&
-                                styles.durationOptionSelected,
-                            ]}
-                            onPress={() => setSelectedDuration(option.months)}
-                          >
-                            <Text
-                              style={[
-                                styles.durationOptionText,
-                                selectedDuration === option.months &&
-                                  styles.durationOptionTextSelected,
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              </ScrollView>
-
-              {/* Footer dengan Pricing */}
-              <View style={styles.footer}>
-                <View style={styles.priceSection}>
-                  {/* REMOVED the {" "} from here */}
-                  <Text style={styles.priceLabel}>
-                    Harga{" "}
-                    {selectedDuration > 1
-                      ? `Total (${selectedDuration} bulan)`
-                      : "per Bulan"}
+                  <Text style={styles.statText}>
+                    {courseData.sectionsCount} Video
                   </Text>
-                  <View style={styles.priceContainer}>
-                    {priceLoading ? (
-                      <ActivityIndicator color="#8b5cf6" size="small" />
-                    ) : (
-                      <>
-                        {/* REMOVED the {" "} from here */}
-                        <Text style={styles.priceMain}>
-                          {!isFree
-                            ? selectedDuration > 1
-                              ? `${finalIdrPrice} × ${selectedDuration} bulan`
-                              : finalIdrPrice
-                            : "Gratis"}
-                        </Text>
-                        {!isFree && (
-                          <Text style={styles.priceEth}>
-                            ≈ {finalEthDisplay}
-                          </Text>
-                        )}
-                      </>
-                    )}
-                  </View>
                 </View>
-                <TouchableOpacity
-                  style={[
-                    styles.purchaseButton,
-                    (isMinting ||
-                      !course.isActive ||
-                      hasLicense ||
-                      licenseLoading) &&
-                      styles.purchaseButtonDisabled,
-                  ]}
-                  onPress={() => {
-                    if (!hasLicense && !licenseLoading)
-                      onMintLicense(course, selectedDuration);
-                  }}
-                  disabled={
-                    isMinting ||
-                    !course.isActive ||
-                    hasLicense ||
-                    licenseLoading
-                  }
-                >
-                  {isMinting ? (
-                    <ActivityIndicator color="#ffffff" size="small" />
-                  ) : licenseLoading ? (
-                    <View style={styles.buttonContent}>
-                      <ActivityIndicator color="#ffffff" size="small" />
-                      <Text style={styles.purchaseButtonText}>
-                        Mengecek lisensi...
-                      </Text>
-                    </View>
-                  ) : hasLicense ? (
-                    <Text style={styles.purchaseButtonText}>
-                      Anda sudah memiliki lisensi aktif
-                    </Text>
-                  ) : (
-                    <View style={styles.buttonContent}>
-                      <Ionicons name="diamond" size={20} color="#ffffff" />
-                      <Text style={styles.purchaseButtonText}>
-                        {isFree ? "Dapatkan Gratis" : "Beli Lisensi"}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.statItem}>
+                  <Ionicons name="time-outline" size={16} color="#ffffff" />
+                  <Text style={styles.statText}>
+                    ~{courseData.sectionsCount * 15} menit
+                  </Text>
+                </View>
               </View>
-            </Animated.View>
-          </TouchableWithoutFeedback>
-        </Animated.View>
-      </TouchableWithoutFeedback>
+            </View>
+          </View>
+
+          {/* ✅ Course info */}
+          <View style={styles.courseInfo}>
+            <Text style={styles.courseTitle}>{courseData.title}</Text>
+
+            <View style={styles.creatorInfo}>
+              <Ionicons
+                name="person-circle-outline"
+                size={18}
+                color="#8b5cf6"
+              />
+              <Text style={styles.creatorText}>oleh {creatorDisplay}</Text>
+              <Text style={styles.createdTime}>
+                • {timeAgo(courseData.createdAt)}
+              </Text>
+            </View>
+
+            {renderLicenseStatus()}
+
+            <View style={styles.descriptionSection}>
+              <Text style={styles.sectionTitle}>Deskripsi</Text>
+              <Text
+                style={styles.description}
+                numberOfLines={showFullDescription ? undefined : 3}
+              >
+                {courseData.description}
+              </Text>
+              {courseData.description.length > 100 && (
+                <TouchableOpacity
+                  onPress={() => setShowFullDescription(!showFullDescription)}
+                  style={styles.showMoreButton}
+                >
+                  <Text style={styles.showMoreText}>
+                    {showFullDescription ? "Sembunyikan" : "Selengkapnya"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* ✅ Only show duration options if no active license */}
+            {!hasLicense &&
+              courseData.pricePerMonth > 0 &&
+              renderDurationOptions()}
+
+            {/* ✅ Price summary */}
+            {!hasLicense && (
+              <View style={styles.priceSection}>
+                <Text style={styles.sectionTitle}>Ringkasan Harga</Text>
+                <View style={styles.priceDetails}>
+                  {priceInfo.loading ? (
+                    <ActivityIndicator size="small" color="#8b5cf6" />
+                  ) : (
+                    <>
+                      <View style={styles.priceRow}>
+                        <Text style={styles.priceLabel}>Harga per bulan</Text>
+                        <Text style={styles.priceValue}>
+                          {priceInfo.pricePerMonth}
+                        </Text>
+                      </View>
+
+                      {selectedDuration > 1 && (
+                        <View style={styles.priceRow}>
+                          <Text style={styles.priceLabel}>
+                            Durasi ({selectedDuration} bulan)
+                          </Text>
+                          <Text style={styles.priceValue}>
+                            {priceInfo.originalPrice}
+                          </Text>
+                        </View>
+                      )}
+
+                      {priceInfo.discount > 0 && (
+                        <View style={styles.priceRow}>
+                          <Text
+                            style={[styles.priceLabel, styles.discountLabel]}
+                          >
+                            Diskon ({priceInfo.discount}%)
+                          </Text>
+                          <Text
+                            style={[styles.priceValue, styles.discountValue]}
+                          >
+                            -{priceInfo.savings}
+                          </Text>
+                        </View>
+                      )}
+
+                      <View style={[styles.priceRow, styles.totalRow]}>
+                        <Text style={styles.totalLabel}>Total</Text>
+                        <Text style={styles.totalValue}>
+                          {priceInfo.finalPrice}
+                        </Text>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+
+        {/* ✅ Enhanced action section */}
+        <View style={styles.actionSection}>{renderActionButton()}</View>
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
   modalContainer: {
-    width: screenWidth * 0.92,
-    maxHeight: screenHeight * 0.85,
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    overflow: "hidden",
-    elevation: 25,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 25,
-  },
-  modalHeader: {
-    height: 80,
-    backgroundColor: "#8b5cf6",
-    position: "relative",
-  },
-  headerContent: {
     flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
   },
   closeButton: {
-    width: 40,
-    height: 40,
+    padding: 8,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerInfo: {
-    flex: 1,
-    alignItems: "center",
+    backgroundColor: "#f1f5f9",
   },
   headerTitle: {
-    color: "#ffffff",
     fontSize: 18,
-    fontWeight: "bold",
-  },
-  courseIdBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  courseIdText: {
-    color: "#ffffff",
-    fontSize: 12,
     fontWeight: "600",
+    color: "#1e293b",
   },
-  modalContent: {
+  headerSpacer: {
+    width: 40,
+  },
+  content: {
     flex: 1,
   },
   imageContainer: {
     position: "relative",
+    height: 220,
+    backgroundColor: "#f1f5f9",
   },
   courseImage: {
     width: "100%",
-    height: 200,
+    height: "100%",
+  },
+  imagePlaceholder: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: "#f1f5f9",
   },
   imageOverlay: {
     position: "absolute",
-    top: 15,
-    right: 15,
-  },
-  statusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  statusIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  statusText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  contentSection: {
-    padding: 24,
-  },
-  courseTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#1e293b",
-    marginBottom: 16,
-    lineHeight: 32,
-  },
-  creatorSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  creatorIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#e0e7ff",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  creatorLabel: {
-    fontSize: 12,
-    color: "#64748b",
-    marginBottom: 2,
-  },
-  creatorAddress: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1e293b",
-    fontFamily: "monospace",
   },
   statsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 24,
+    gap: 16,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-    padding: 16,
-    borderRadius: 12,
+  statItem: {
+    flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+    gap: 6,
   },
-  statNumber: {
-    fontSize: 18,
+  statText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  courseInfo: {
+    padding: 20,
+  },
+  courseTitle: {
+    fontSize: 22,
     fontWeight: "bold",
     color: "#1e293b",
-    marginTop: 8,
-    marginBottom: 4,
+    marginBottom: 12,
+    lineHeight: 30,
   },
-  statLabel: {
+  creatorInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 16,
+  },
+  creatorText: {
+    fontSize: 14,
+    color: "#8b5cf6",
+    fontWeight: "500",
+  },
+  createdTime: {
     fontSize: 12,
+    color: "#94a3b8",
+  },
+  licenseStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#f1f5f9",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  licenseActive: {
+    backgroundColor: "#ecfdf5",
+  },
+  licenseStatusText: {
+    fontSize: 14,
     color: "#64748b",
-    textAlign: "center",
+    fontWeight: "500",
+  },
+  licenseActiveText: {
+    color: "#10b981",
   },
   descriptionSection: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
+    fontWeight: "600",
     color: "#1e293b",
     marginBottom: 12,
   },
   description: {
-    fontSize: 15,
-    color: "#475569",
-    lineHeight: 24,
+    fontSize: 14,
+    color: "#64748b",
+    lineHeight: 22,
   },
-  blockchainInfo: {
+  showMoreButton: {
+    marginTop: 8,
+  },
+  showMoreText: {
+    fontSize: 14,
+    color: "#8b5cf6",
+    fontWeight: "500",
+  },
+  durationSection: {
+    marginBottom: 24,
+  },
+  durationGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  durationOption: {
+    flex: 1,
+    minWidth: "45%",
     backgroundColor: "#f8fafc",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 16,
+    position: "relative",
   },
-  infoRow: {
+  durationOptionSelected: {
+    borderColor: "#8b5cf6",
+    backgroundColor: "#ede9fe",
+  },
+  durationOptionPopular: {
+    borderColor: "#f59e0b",
+  },
+  popularBadge: {
+    position: "absolute",
+    top: -8,
+    right: 8,
+    backgroundColor: "#f59e0b",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  popularBadgeText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  durationLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  durationLabelSelected: {
+    color: "#8b5cf6",
+  },
+  discountBadge: {
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  discountText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#16a34a",
+  },
+  durationDescription: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  durationDescriptionSelected: {
+    color: "#7c3aed",
+  },
+  priceSection: {
+    marginBottom: 24,
+  },
+  priceDetails: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 16,
+  },
+  priceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
   },
-  infoLabel: {
-    fontSize: 13,
-    color: "#64748b",
-    flex: 1,
+  totalRow: {
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingTop: 12,
+    marginTop: 8,
+    marginBottom: 0,
   },
-  infoValue: {
-    fontSize: 13,
+  priceLabel: {
+    fontSize: 14,
+    color: "#64748b",
+  },
+  priceValue: {
+    fontSize: 14,
+    color: "#1e293b",
+    fontWeight: "500",
+  },
+  discountLabel: {
+    color: "#16a34a",
+  },
+  discountValue: {
+    color: "#16a34a",
+  },
+  totalLabel: {
+    fontSize: 16,
     fontWeight: "600",
     color: "#1e293b",
-    flex: 1,
-    textAlign: "right",
   },
-  footer: {
+  totalValue: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#8b5cf6",
+  },
+  actionSection: {
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: "#e2e8f0",
     backgroundColor: "#ffffff",
   },
-  priceSection: {
-    marginBottom: 16,
-  },
-  priceLabel: {
-    fontSize: 14,
-    color: "#64748b",
-    marginBottom: 8,
-  },
-  priceContainer: {
-    alignItems: "flex-start",
-  },
-  priceMain: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#8b5cf6",
-  },
-  priceEth: {
-    fontSize: 14,
-    color: "#64748b",
-    marginTop: 2,
-  },
-  purchaseButton: {
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#8b5cf6",
     paddingVertical: 16,
     borderRadius: 12,
-    alignItems: "center",
-    elevation: 2,
-    shadowColor: "#8b5cf6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    gap: 8,
   },
-  purchaseButtonDisabled: {
-    backgroundColor: "#cbd5e1",
-    elevation: 0,
-    shadowOpacity: 0,
+  actionButtonDisabled: {
+    backgroundColor: "#94a3b8",
   },
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
+  accessButton: {
+    backgroundColor: "#10b981",
   },
-  purchaseButtonText: {
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
     color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
-  durationSection: {
-    padding: 16,
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    marginVertical: 12,
-  },
-  durationTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1e293b",
-    marginBottom: 12,
-  },
-  durationOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  durationOption: {
-    backgroundColor: "#ffffff",
-    borderWidth: 2,
-    borderColor: "#e2e8f0",
-    borderRadius: 8,
-    padding: 12,
-    minWidth: "48%",
-    marginBottom: 8,
-    alignItems: "center",
-  },
-  durationOptionSelected: {
-    borderColor: "#8b5cf6",
-    backgroundColor: "#f3f4f6",
-  },
-  durationOptionText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#64748b",
-  },
-  durationOptionTextSelected: {
-    color: "#8b5cf6",
-  },
-  durationDiscount: {
-    fontSize: 12,
-    color: "#059669",
-    marginTop: 4,
-    fontWeight: "500",
-  },
-  durationDiscountSelected: {
-    color: "#059669",
   },
 });
 

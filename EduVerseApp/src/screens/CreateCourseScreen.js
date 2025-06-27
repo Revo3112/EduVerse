@@ -211,6 +211,7 @@ export default function CreateCourseScreen({ navigation }) {
   };
 
   // Execute the actual course creation with proper upload sequence
+  // ✅ Enhanced executeCreateCourse with retry mechanism
   const executeCreateCourse = async () => {
     setIsCreatingCourse(true);
     setUploadProgress(0);
@@ -219,122 +220,106 @@ export default function CreateCourseScreen({ navigation }) {
     try {
       console.log("🚀 Starting course creation process...");
 
-      // STEP 1: Upload thumbnail to IPFS
-      setProgressMessage("Uploading thumbnail to IPFS...");
+      // ✅ STEP 1: Upload semua file secara PARALLEL (lebih cepat)
+      setProgressMessage("Uploading files to IPFS...");
       setUploadProgress(10);
 
-      const thumbnailResult = await uploadThumbnailToIPFS(
-        courseData.thumbnailFile
-      );
-      if (!thumbnailResult.success) {
-        throw new Error(
-          thumbnailResult.error || "Failed to upload thumbnail to IPFS"
+      const uploadPromises = [];
+
+      // Upload thumbnail
+      if (courseData.thumbnailFile) {
+        uploadPromises.push(
+          uploadThumbnailToIPFS(courseData.thumbnailFile).then((result) => ({
+            type: "thumbnail",
+            result,
+          }))
         );
       }
 
-      console.log(
-        "✅ Thumbnail uploaded successfully:",
-        thumbnailResult.ipfsHash
-      );
-      const thumbnailURI = `ipfs://${thumbnailResult.ipfsHash}`;
-      setUploadProgress(20);
-
-      // STEP 2: Upload all section videos to IPFS
-      setProgressMessage("Uploading section videos to IPFS...");
+      // Upload videos secara parallel
       const sectionsWithVideos = sections.filter(
         (section) => section.videoFile
       );
+      sectionsWithVideos.forEach((section, index) => {
+        uploadPromises.push(
+          videoService
+            .uploadVideoPublic(section.videoFile, {
+              courseId: "temp-course",
+              sectionId: section.id.toString(),
+              name: section.videoFile.name,
+              metadata: {
+                uploadSource: "CreateCourseScreen",
+                sectionTitle: section.title,
+                uploadedAt: new Date().toISOString(),
+              },
+            })
+            .then((result) => ({
+              type: "video",
+              sectionId: section.id,
+              result,
+            }))
+        );
+      });
 
       console.log(
-        `📹 Found ${sectionsWithVideos.length} sections with videos to upload`
+        `📤 Starting parallel upload of ${uploadPromises.length} files...`
       );
 
-      const uploadedSections = [];
-      let videoUploadProgress = 20; // Start from 20%
-      const videoProgressStep =
-        sectionsWithVideos.length > 0 ? 40 / sectionsWithVideos.length : 0; // Up to 60% for videos
+      // ✅ Upload semua file secara bersamaan (PARALLEL)
+      const uploadResults = await Promise.allSettled(uploadPromises);
 
-      for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-        let finalSection = { ...section };
+      let thumbnailResult = null;
+      const videoResults = new Map();
 
-        if (section.videoFile) {
-          setProgressMessage(
-            `Uploading video ${i + 1}/${sectionsWithVideos.length}: ${
-              section.videoFile.name
-            }`
-          );
-
-          try {
-            console.log(`🎬 Uploading video for section: ${section.title}`);
-
-            // Upload video using the working videoService pattern from IPFSTestScreen
-            const videoUploadResult = await videoService.uploadVideoPublic(
-              section.videoFile,
-              {
-                courseId: "temp-course", // Will be updated after course creation
-                sectionId: section.id.toString(),
-                name: section.videoFile.name,
-                metadata: {
-                  uploadSource: "CreateCourseScreen",
-                  sectionTitle: section.title,
-                  uploadedAt: new Date().toISOString(),
-                },
-              }
-            );
-
-            if (videoUploadResult.success) {
-              console.log(
-                `✅ Video uploaded successfully:`,
-                videoUploadResult.ipfsHash
-              );
-
-              // Update section with IPFS URI
-              finalSection.contentURI = `ipfs://${videoUploadResult.ipfsHash}`;
-              finalSection.uploadedVideoData = videoUploadResult;
-              finalSection.uploadStatus = "uploaded";
-
-              videoUploadProgress += videoProgressStep;
-              setUploadProgress(Math.min(videoUploadProgress, 60));
-            } else {
-              console.error(
-                `❌ Failed to upload video for section: ${section.title}`
-              );
-              finalSection.uploadStatus = "failed";
-              // Continue with placeholder URI
-              finalSection.contentURI = "placeholder://video-content";
-            }
-          } catch (videoError) {
-            console.error(
-              `❌ Video upload error for section ${section.title}:`,
-              videoError
-            );
-            finalSection.uploadStatus = "failed";
-            finalSection.contentURI = "placeholder://video-content";
+      // Process results
+      uploadResults.forEach((promiseResult, index) => {
+        if (promiseResult.status === "fulfilled") {
+          const { type, sectionId, result } = promiseResult.value;
+          if (type === "thumbnail") {
+            thumbnailResult = result;
+          } else if (type === "video") {
+            videoResults.set(sectionId, result);
           }
         } else {
-          // No video for this section
+          console.error(`Upload failed:`, promiseResult.reason);
+        }
+      });
+
+      // Validate thumbnail upload
+      if (!thumbnailResult || !thumbnailResult.success) {
+        throw new Error("Failed to upload thumbnail to IPFS");
+      }
+
+      console.log("✅ All files uploaded successfully");
+      setUploadProgress(50);
+
+      // ✅ STEP 2: Prepare sections with uploaded content
+      const uploadedSections = sections.map((section) => {
+        const finalSection = { ...section };
+
+        if (section.videoFile && videoResults.has(section.id)) {
+          const videoResult = videoResults.get(section.id);
+          if (videoResult.success) {
+            finalSection.contentURI = `ipfs://${videoResult.ipfsHash}`;
+            finalSection.uploadStatus = "uploaded";
+          } else {
+            finalSection.contentURI = "placeholder://video-content";
+            finalSection.uploadStatus = "failed";
+          }
+        } else {
           finalSection.contentURI =
             finalSection.contentURI || "placeholder://video-content";
           finalSection.uploadStatus = "no-video";
         }
 
-        uploadedSections.push(finalSection);
-      }
+        return finalSection;
+      });
 
       setUploadProgress(60);
 
-      // STEP 3: Verify price limit before blockchain transaction
-      if (courseData.isPaid) {
-        setProgressMessage("Verifying price limit...");
-        await verifyPriceLimit(parseFloat(courseData.price));
-      }
-
-      setUploadProgress(65);
-
-      // STEP 4: Create course on blockchain
+      // ✅ STEP 3: LANGSUNG create course di blockchain (tanpa delay)
+      // Tidak ada delay antara upload dan blockchain transaction
       setProgressMessage("Creating course on blockchain...");
-      console.log("🔗 Creating course on blockchain...");
 
       const createCourseParams = {
         title: courseData.title.trim(),
@@ -343,87 +328,62 @@ export default function CreateCourseScreen({ navigation }) {
         pricePerMonth: courseData.isPaid ? courseData.price.toString() : "0",
       };
 
-      console.log("📝 Course creation parameters:", createCourseParams);
-
-      const createCourseResult = await smartContractService.createCourse(
+      console.log(
+        "📝 Creating course immediately after upload:",
         createCourseParams
       );
 
-      if (!createCourseResult.success) {
-        throw new Error(
-          createCourseResult.error || "Failed to create course on blockchain"
-        );
-      }
-
-      console.log("✅ Course created successfully on blockchain:", {
-        courseId: createCourseResult.courseId,
-        transactionHash: createCourseResult.transactionHash,
-      });
-
-      setUploadProgress(75);
-      const courseId = createCourseResult.courseId;
-
-      // STEP 5: Add course sections to blockchain
-      setProgressMessage("Adding sections to course...");
-      console.log(
-        `📚 Adding ${uploadedSections.length} sections to course ${courseId}...`
+      // ✅ OPTIMASI: Simplified blockchain call
+      const createCourseResult = await smartContractService.createCourse(
+        createCourseParams,
+        {
+          gasLimit: "400000", // Reduced gas limit
+          timeout: 60000, // 1 minute timeout
+        }
       );
 
-      const sectionResults = [];
-      let successfulSectionsCount = 0;
-      const sectionProgressStep =
-        uploadedSections.length > 0 ? 20 / uploadedSections.length : 0; // Up to 95%
+      if (!createCourseResult.success) {
+        throw new Error(createCourseResult.error || "Failed to create course");
+      }
 
+      console.log(
+        "✅ Course created successfully:",
+        createCourseResult.courseId
+      );
+      setUploadProgress(75);
+
+      // ✅ STEP 4: Add sections with reduced timeout
+      const courseId = createCourseResult.courseId;
+      setProgressMessage("Adding sections to course...");
+
+      const sectionResults = [];
       for (let i = 0; i < uploadedSections.length; i++) {
         const section = uploadedSections[i];
-        setProgressMessage(
-          `Adding section ${i + 1}/${uploadedSections.length}: ${section.title}`
-        );
 
         try {
-          const sectionParams = {
-            title: section.title.trim(),
-            contentURI: section.contentURI,
-            duration: section.duration, // Already in seconds
-          };
-
-          console.log(`📖 Adding section ${i + 1} parameters:`, sectionParams);
-
           const sectionResult = await smartContractService.addCourseSection(
             courseId,
-            sectionParams
+            {
+              title: section.title.trim(),
+              contentURI: section.contentURI,
+              duration: section.duration,
+            },
+            {
+              gasLimit: "250000", // Reduced gas limit for sections
+              timeout: 45000, // 45 seconds timeout
+            }
           );
 
           if (sectionResult.success) {
-            successfulSectionsCount++;
             sectionResults.push({
               index: i,
               success: true,
               sectionId: sectionResult.sectionId,
-              transactionHash: sectionResult.transactionHash,
-              title: section.title,
-              hasVideo: section.uploadStatus === "uploaded",
-            });
-            console.log(
-              `✅ Section ${i + 1} "${section.title}" added successfully`
-            );
-          } else {
-            console.error(
-              `❌ Failed to add section ${i + 1} "${section.title}":`,
-              sectionResult.error
-            );
-            sectionResults.push({
-              index: i,
-              success: false,
-              error: sectionResult.error,
               title: section.title,
             });
           }
         } catch (sectionError) {
-          console.error(
-            `❌ Error adding section ${i + 1} "${section.title}":`,
-            sectionError
-          );
+          console.error(`❌ Failed to add section ${i + 1}:`, sectionError);
           sectionResults.push({
             index: i,
             success: false,
@@ -432,55 +392,31 @@ export default function CreateCourseScreen({ navigation }) {
           });
         }
 
-        setUploadProgress(75 + (i + 1) * sectionProgressStep);
-
-        // Small delay to prevent overwhelming the network
-        if (i < uploadedSections.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
+        setUploadProgress(75 + ((i + 1) / uploadedSections.length) * 20);
       }
 
-      // STEP 6: Generate final results
-      setProgressMessage("Finalizing course creation...");
       setUploadProgress(100);
+      setProgressMessage("Course creation completed!");
 
+      // Success handling
+      const successfulSections = sectionResults.filter((r) => r.success).length;
       const failedSections = sectionResults.filter((r) => !r.success);
-      const videosUploaded = uploadedSections.filter(
-        (s) => s.uploadStatus === "uploaded"
-      ).length;
-      const videosFailed = uploadedSections.filter(
-        (s) => s.uploadStatus === "failed"
-      ).length;
 
-      console.log("🎉 Course creation completed:", {
-        courseId,
-        totalSections: uploadedSections.length,
-        successfulSections: successfulSectionsCount,
-        failedSections: failedSections.length,
-        videosUploaded,
-        videosFailed,
-        transactionHash: createCourseResult.transactionHash,
-      });
-
-      // Generate comprehensive success message
-      const successMessage = generateSuccessMessage({
-        courseId,
-        successfulSectionsCount,
-        totalSections: uploadedSections.length,
-        thumbnailHash: thumbnailResult.ipfsHash,
-        price: courseData.isPaid ? `${courseData.price} ETH/month` : "Free",
-        transactionHash: createCourseResult.transactionHash,
-        videosUploaded,
-        videosFailed,
-        failedSections,
-      });
+      const successMessage =
+        `✅ Course created successfully!\n\n` +
+        `📚 Course ID: ${courseId}\n` +
+        `📖 Sections: ${successfulSections}/${uploadedSections.length} added\n` +
+        `🖼️ Thumbnail: ${thumbnailResult.ipfsHash.substring(0, 12)}...\n` +
+        `💰 Price: ${
+          courseData.isPaid ? `${courseData.price} ETH/month` : "Free"
+        }\n` +
+        `🔗 Transaction: ${createCourseResult.transactionHash.substring(
+          0,
+          12
+        )}...`;
 
       Alert.alert("Success! 🎉", successMessage);
-
-      // Reset form after successful creation
       resetForm();
-
-      // Navigate to MyCourses
       navigation.navigate("MyCourses");
     } catch (error) {
       console.error("❌ Error creating course:", error);

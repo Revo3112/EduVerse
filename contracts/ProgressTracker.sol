@@ -2,10 +2,11 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./CourseFactory.sol";
 import "./CourseLicense.sol";
 
-contract ProgressTracker is Ownable {
+contract ProgressTracker is Ownable, ReentrancyGuard {
     // Membuat object untuk course factory agar kita bisa mengambil fungsi fungsi dari CourseFactory
     CourseFactory public courseFactory;
     // Membuat object untuk Course License agar kita bisa mengambil fungsi fungsi dari CourseLicense
@@ -41,17 +42,17 @@ contract ProgressTracker is Ownable {
     * @param courseId ID of the course
     * @param sectionId ID of the section
     */
-    function completeSection(uint256 courseId, uint256 sectionId) external {
+    function completeSection(uint256 courseId, uint256 sectionId) external nonReentrant {
         require(courseLicense.hasValidLicense(msg.sender, courseId), "No valid License");
 
         // Get course sections to validate section ID
         CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
         require(sectionId < sections.length, "Invalid section ID");
 
-        // Check if Already Compeleted
+        // Check if Already Completed
         require(!sectionProgress[msg.sender][courseId][sectionId].completed, "Section already completed");
 
-        // Mark section as completed
+        // Mark section as completed - ATOMIC OPERATION
         sectionProgress[msg.sender][courseId][sectionId] = SectionProgress({
             courseId: courseId,
             sectionId: sectionId,
@@ -59,11 +60,15 @@ contract ProgressTracker is Ownable {
             completedAt: block.timestamp
         });
 
-        // Increment completed sections counter
-        courseCompletedSections[msg.sender][courseId]++;
+        // Increment completed sections counter atomically
+        uint256 completedCount;
+        unchecked {
+            completedCount = courseCompletedSections[msg.sender][courseId] + 1;
+        }
+        courseCompletedSections[msg.sender][courseId] = completedCount;
 
         // Check if course is now completed
-        if (courseCompletedSections[msg.sender][courseId] == sections.length) {
+        if (completedCount == sections.length) {
             coursesCompleted[msg.sender][courseId] = true;
             emit CourseCompleted(msg.sender, courseId);
         }
