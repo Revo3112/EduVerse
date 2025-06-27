@@ -753,3 +753,92 @@ export const useBlockchain = () => {
     error: smartContractData.error,
   };
 };
+
+// ✅ NEW: Hook for checking if course is completed
+export const useCourseCompletion = (courseId) => {
+  const { address } = useAccount();
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const { isInitialized } = useSmartContract();
+
+  const checkCompletion = useCallback(async () => {
+    if (!isInitialized || !address || !courseId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`🏁 Checking completion for course ${courseId}`);
+
+      const completed =
+        await SmartContractService.contracts.progressTracker.isCourseCompleted(
+          address,
+          courseId
+        );
+
+      setIsCompleted(completed);
+      console.log(`✅ Course ${courseId} completion status: ${completed}`);
+    } catch (err) {
+      console.error("Error checking course completion:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, address, courseId]);
+
+  useEffect(() => {
+    checkCompletion();
+  }, [checkCompletion]);
+
+  return {
+    isCompleted,
+    loading,
+    error,
+    refetch: checkCompletion,
+  };
+};
+
+// ✅ NEW: Hook for getting user progress with detailed section info
+export const useUserProgress = (courseId) => {
+  const { address } = useAccount();
+  const [progress, setProgress] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const { isInitialized } = useSmartContract();
+
+  const fetchProgress = useCallback(async () => {
+    if (!isInitialized || !address || !courseId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`📊 Fetching progress for course ${courseId}`);
+
+      const progressData = await SmartContractService.getUserProgress(
+        address,
+        courseId
+      );
+
+      setProgress(progressData);
+      console.log(`✅ Progress fetched for course ${courseId}:`, progressData);
+    } catch (err) {
+      console.error("Error fetching user progress:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, address, courseId]);
+
+  useEffect(() => {
+    fetchProgress();
+  }, [fetchProgress]);
+
+  return {
+    progress,
+    loading,
+    error,
+    refetch: fetchProgress,
+  };
+};

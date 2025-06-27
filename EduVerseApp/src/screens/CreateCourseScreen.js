@@ -220,7 +220,7 @@ export default function CreateCourseScreen({ navigation }) {
     try {
       console.log("🚀 Starting course creation process...");
 
-      // ✅ STEP 1: Upload semua file secara PARALLEL (lebih cepat)
+      // ✅ STEP 1: Upload semua file secara PARALLEL
       setProgressMessage("Uploading files to IPFS...");
       setUploadProgress(10);
 
@@ -265,13 +265,13 @@ export default function CreateCourseScreen({ navigation }) {
         `📤 Starting parallel upload of ${uploadPromises.length} files...`
       );
 
-      // ✅ Upload semua file secara bersamaan (PARALLEL)
+      // Upload semua file secara bersamaan
       const uploadResults = await Promise.allSettled(uploadPromises);
 
       let thumbnailResult = null;
       const videoResults = new Map();
 
-      // Process results
+      // Process upload results
       uploadResults.forEach((promiseResult, index) => {
         if (promiseResult.status === "fulfilled") {
           const { type, sectionId, result } = promiseResult.value;
@@ -291,54 +291,50 @@ export default function CreateCourseScreen({ navigation }) {
       }
 
       console.log("✅ All files uploaded successfully");
-      setUploadProgress(50);
+      setUploadProgress(40);
 
-      // ✅ STEP 2: Prepare sections with uploaded content
+      // ✅ STEP 2: Prepare sections with uploaded CIDs
       const uploadedSections = sections.map((section) => {
         const finalSection = { ...section };
 
         if (section.videoFile && videoResults.has(section.id)) {
           const videoResult = videoResults.get(section.id);
           if (videoResult.success) {
-            finalSection.contentURI = `ipfs://${videoResult.ipfsHash}`;
+            // ✅ Extract CID from IPFS hash (remove 'ipfs://' prefix if present)
+            const contentCID = videoResult.ipfsHash.replace("ipfs://", "");
+            finalSection.contentCID = contentCID;
             finalSection.uploadStatus = "uploaded";
           } else {
-            finalSection.contentURI = "placeholder://video-content";
+            finalSection.contentCID = "placeholder-video-content";
             finalSection.uploadStatus = "failed";
           }
         } else {
-          finalSection.contentURI =
-            finalSection.contentURI || "placeholder://video-content";
+          finalSection.contentCID = "placeholder-video-content";
           finalSection.uploadStatus = "no-video";
         }
 
         return finalSection;
       });
 
-      setUploadProgress(60);
+      setUploadProgress(50);
 
-      // ✅ STEP 3: LANGSUNG create course di blockchain (tanpa delay)
-      // Tidak ada delay antara upload dan blockchain transaction
+      // ✅ STEP 3: Create course on blockchain
       setProgressMessage("Creating course on blockchain...");
 
       const createCourseParams = {
         title: courseData.title.trim(),
         description: courseData.description.trim(),
-        thumbnailURI: thumbnailResult.ipfsHash, // ✅ HANYA CID
+        thumbnailCID: thumbnailResult.ipfsHash.replace("ipfs://", ""), // ✅ Extract CID only
         pricePerMonth: courseData.isPaid ? courseData.price.toString() : "0",
       };
 
-      console.log(
-        "📝 Creating course immediately after upload:",
-        createCourseParams
-      );
+      console.log("📝 Creating course with params:", createCourseParams);
 
-      // ✅ OPTIMASI: Simplified blockchain call
       const createCourseResult = await smartContractService.createCourse(
         createCourseParams,
         {
-          gasLimit: "400000", // Reduced gas limit
-          timeout: 60000, // 1 minute timeout
+          gasLimit: "300000",
+          timeout: 60000,
         }
       );
 
@@ -350,27 +346,74 @@ export default function CreateCourseScreen({ navigation }) {
         "✅ Course created successfully:",
         createCourseResult.courseId
       );
-      setUploadProgress(75);
+      setUploadProgress(60);
 
-      // ✅ STEP 4: Add sections with reduced timeout
+      // ✅ STEP 4: Add sections ONE BY ONE dengan proper MetaMask handling
       const courseId = createCourseResult.courseId;
       setProgressMessage("Adding sections to course...");
 
+      // ✅ PERBAIKAN UTAMA: Sequential section addition dengan user confirmation
       const sectionResults = [];
+      let userWantsToSkip = false;
+
       for (let i = 0; i < uploadedSections.length; i++) {
         const section = uploadedSections[i];
+        const sectionNumber = i + 1;
+        const totalSections = uploadedSections.length;
 
         try {
+          setProgressMessage(
+            `Adding section ${sectionNumber}/${totalSections}: "${section.title}"`
+          );
+
+          // ✅ Show confirmation dialog for each section (except first)
+          if (i > 0 && !userWantsToSkip) {
+            const userChoice = await new Promise((resolve) => {
+              Alert.alert(
+                "Add Next Section",
+                `Ready to add section ${sectionNumber}/${totalSections}:\n"${section.title}"\n\nThis will require MetaMask approval.`,
+                [
+                  {
+                    text: "Skip Remaining",
+                    style: "destructive",
+                    onPress: () => resolve("skip"),
+                  },
+                  {
+                    text: "Cancel",
+                    style: "cancel",
+                    onPress: () => resolve("cancel"),
+                  },
+                  {
+                    text: "Continue",
+                    onPress: () => resolve("continue"),
+                  },
+                ]
+              );
+            });
+
+            if (userChoice === "cancel") {
+              throw new Error("Section addition cancelled by user");
+            } else if (userChoice === "skip") {
+              userWantsToSkip = true;
+              console.log("User chose to skip remaining sections");
+              break;
+            }
+          }
+
+          console.log(`📖 Adding section ${sectionNumber}: ${section.title}`);
+          console.log(`Content CID: ${section.contentCID}`);
+
+          // ✅ Add section dengan CID parameter yang benar
           const sectionResult = await smartContractService.addCourseSection(
             courseId,
             {
               title: section.title.trim(),
-              contentURI: section.contentURI,
+              contentCID: section.contentCID, // ✅ Use CID instead of URI
               duration: section.duration,
             },
             {
-              gasLimit: "250000", // Reduced gas limit for sections
-              timeout: 45000, // 45 seconds timeout
+              gasLimit: "200000",
+              timeout: 45000,
             }
           );
 
@@ -380,40 +423,101 @@ export default function CreateCourseScreen({ navigation }) {
               success: true,
               sectionId: sectionResult.sectionId,
               title: section.title,
+              transactionHash: sectionResult.transactionHash,
+            });
+            console.log(`✅ Section ${sectionNumber} added successfully`);
+          } else {
+            console.error(
+              `❌ Failed to add section ${sectionNumber}:`,
+              sectionResult.error
+            );
+            sectionResults.push({
+              index: i,
+              success: false,
+              error: sectionResult.error,
+              title: section.title,
             });
           }
         } catch (sectionError) {
-          console.error(`❌ Failed to add section ${i + 1}:`, sectionError);
-          sectionResults.push({
-            index: i,
-            success: false,
-            error: sectionError.message,
-            title: section.title,
-          });
+          console.error(
+            `❌ Failed to add section ${sectionNumber}:`,
+            sectionError
+          );
+
+          // ✅ Handle user rejection gracefully
+          if (
+            sectionError.message.includes("user rejected") ||
+            sectionError.message.includes("User denied") ||
+            sectionError.message.includes("cancelled")
+          ) {
+            sectionResults.push({
+              index: i,
+              success: false,
+              error: "User cancelled transaction",
+              title: section.title,
+            });
+
+            // Ask if user wants to continue with remaining sections
+            const continueChoice = await new Promise((resolve) => {
+              Alert.alert(
+                "Transaction Rejected",
+                `Section "${section.title}" was not added because the transaction was rejected.\n\nDo you want to continue adding the remaining sections?`,
+                [
+                  {
+                    text: "Stop Adding",
+                    style: "destructive",
+                    onPress: () => resolve(false),
+                  },
+                  {
+                    text: "Continue",
+                    onPress: () => resolve(true),
+                  },
+                ]
+              );
+            });
+
+            if (!continueChoice) {
+              console.log("User chose to stop adding sections after rejection");
+              break;
+            }
+          } else {
+            // Other errors
+            sectionResults.push({
+              index: i,
+              success: false,
+              error: sectionError.message,
+              title: section.title,
+            });
+          }
         }
 
-        setUploadProgress(75 + ((i + 1) / uploadedSections.length) * 20);
+        // Update progress
+        const progressIncrement = 35 / uploadedSections.length;
+        setUploadProgress(60 + (i + 1) * progressIncrement);
       }
 
       setUploadProgress(100);
       setProgressMessage("Course creation completed!");
 
-      // Success handling
+      // ✅ PERBAIKAN: Generate success message dengan parameter yang benar
       const successfulSections = sectionResults.filter((r) => r.success).length;
       const failedSections = sectionResults.filter((r) => !r.success);
+      const videosUploaded = sections.filter((s) => s.videoFile).length;
+      const videosFailed = sections.filter(
+        (s) => s.videoFile && videoResults.get(s.id)?.success !== true
+      ).length;
 
-      const successMessage =
-        `✅ Course created successfully!\n\n` +
-        `📚 Course ID: ${courseId}\n` +
-        `📖 Sections: ${successfulSections}/${uploadedSections.length} added\n` +
-        `🖼️ Thumbnail: ${thumbnailResult.ipfsHash.substring(0, 12)}...\n` +
-        `💰 Price: ${
-          courseData.isPaid ? `${courseData.price} ETH/month` : "Free"
-        }\n` +
-        `🔗 Transaction: ${createCourseResult.transactionHash.substring(
-          0,
-          12
-        )}...`;
+      const successMessage = generateSuccessMessage({
+        courseId,
+        successfulSections: successfulSections, // ✅ Fixed: menggunakan successfulSections
+        totalSections: uploadedSections.length,
+        thumbnailHash: thumbnailResult.ipfsHash,
+        price: courseData.isPaid ? `${courseData.price} ETH/month` : "Free",
+        transactionHash: createCourseResult.transactionHash,
+        videosUploaded,
+        videosFailed,
+        failedSections,
+      });
 
       Alert.alert("Success! 🎉", successMessage);
       resetForm();
@@ -430,6 +534,7 @@ export default function CreateCourseScreen({ navigation }) {
 
   // Helper function to validate course data
   const validateCourseData = () => {
+    // Title validation - sesuai smart contract (max 200 chars)
     if (!courseData.title.trim()) {
       Alert.alert("Error", "Please enter a course title");
       return false;
@@ -438,10 +543,13 @@ export default function CreateCourseScreen({ navigation }) {
       Alert.alert("Error", "Course title must be at least 3 characters long");
       return false;
     }
-    if (courseData.title.trim().length > 100) {
-      Alert.alert("Error", "Course title cannot exceed 100 characters");
+    if (courseData.title.trim().length > 200) {
+      // ✅ Fixed: sesuai smart contract limit
+      Alert.alert("Error", "Course title cannot exceed 200 characters");
       return false;
     }
+
+    // Description validation - sesuai smart contract (max 1000 chars)
     if (!courseData.description.trim()) {
       Alert.alert("Error", "Please enter a course description");
       return false;
@@ -454,9 +562,12 @@ export default function CreateCourseScreen({ navigation }) {
       return false;
     }
     if (courseData.description.trim().length > 1000) {
+      // ✅ Already correct
       Alert.alert("Error", "Course description cannot exceed 1000 characters");
       return false;
     }
+
+    // Price validation
     if (courseData.isPaid) {
       if (!courseData.price.trim()) {
         Alert.alert("Error", "Please enter a price for paid course");
@@ -479,10 +590,14 @@ export default function CreateCourseScreen({ navigation }) {
         return false;
       }
     }
+
+    // Thumbnail validation
     if (!courseData.thumbnailFile) {
       Alert.alert("Error", "Please select a thumbnail image");
       return false;
     }
+
+    // Sections validation
     if (sections.length === 0) {
       Alert.alert("Error", "Please add at least one course section");
       return false;
@@ -492,9 +607,11 @@ export default function CreateCourseScreen({ navigation }) {
       return false;
     }
 
-    // Validate sections
+    // ✅ PERBAIKAN: Validate sections sesuai smart contract limits
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i];
+
+      // Section title validation - sesuai smart contract (max 200 chars)
       if (!section.title.trim()) {
         Alert.alert("Error", `Section ${i + 1} must have a title`);
         return false;
@@ -506,21 +623,25 @@ export default function CreateCourseScreen({ navigation }) {
         );
         return false;
       }
-      if (section.title.trim().length > 100) {
+      if (section.title.trim().length > 200) {
+        // ✅ Fixed: sesuai smart contract limit
         Alert.alert(
           "Error",
-          `Section ${i + 1} title cannot exceed 100 characters`
+          `Section ${i + 1} title cannot exceed 200 characters`
         );
         return false;
       }
+
+      // Duration validation - sesuai smart contract (max 86400 seconds = 24 hours)
       if (!section.duration || section.duration <= 0) {
         Alert.alert("Error", `Section ${i + 1} must have a valid duration`);
         return false;
       }
-      if (section.duration > 36000) {
+      if (section.duration > 86400) {
+        // ✅ Fixed: sesuai smart contract limit (24 hours)
         Alert.alert(
           "Error",
-          `Section ${i + 1} duration cannot exceed 600 minutes (10 hours)`
+          `Section ${i + 1} duration cannot exceed 24 hours (86400 seconds)`
         );
         return false;
       }
@@ -628,7 +749,7 @@ export default function CreateCourseScreen({ navigation }) {
   // Helper function to generate success message
   const generateSuccessMessage = ({
     courseId,
-    successfulSectionsCount,
+    successfulSections, // ✅ Fixed: changed from successfulSectionsCount
     totalSections,
     thumbnailHash,
     price,
@@ -639,7 +760,7 @@ export default function CreateCourseScreen({ navigation }) {
   }) => {
     let message = `✅ Course created successfully!\n\n`;
     message += `📚 Course ID: ${courseId}\n`;
-    message += `📖 Sections: ${successfulSectionsCount}/${totalSections} added\n`;
+    message += `📖 Sections: ${successfulSections}/${totalSections} added\n`; // ✅ Fixed
     message += `🖼️ Thumbnail: ${thumbnailHash.substring(0, 12)}...\n`;
     message += `🎬 Videos: ${videosUploaded} uploaded`;
     if (videosFailed > 0) {

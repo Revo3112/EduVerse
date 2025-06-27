@@ -682,7 +682,7 @@ class SmartContractService {
       // Ensure courseId is string for consistency
       const courseIdStr = courseId.toString();
 
-      // ✅ Try using smart contract's hasValidLicense method if available
+      // ✅ Use the hasValidLicense method from CourseLicense contract
       try {
         const isValid = await this.contracts.courseLicense.hasValidLicense(
           userAddress,
@@ -697,7 +697,8 @@ class SmartContractService {
         return isValid;
       } catch (directMethodError) {
         console.log(
-          "Direct hasValidLicense not available, using fallback method"
+          "Direct hasValidLicense failed, using balance check method:",
+          directMethodError.message
         );
 
         // Fallback to balance check method
@@ -809,13 +810,17 @@ class SmartContractService {
   async getUserProgress(userAddress, courseId) {
     this.ensureInitialized();
     try {
+      // ✅ Use the correct method names from ProgressTracker ABI
       const sectionsProgress =
         await this.contracts.progressTracker.getCourseSectionsProgress(
           userAddress,
           courseId
         );
+
+      // Count completed sections
       const completedSections = sectionsProgress.filter((p) => p).length;
 
+      // ✅ Use the correct method name
       const progressPercentage =
         await this.contracts.progressTracker.getCourseProgressPercentage(
           userAddress,
@@ -827,6 +832,7 @@ class SmartContractService {
         completedSections: completedSections,
         totalSections: sectionsProgress.length,
         progressPercentage: Number(progressPercentage),
+        sectionsProgress: sectionsProgress, // ✅ Add detailed section progress
       };
     } catch (error) {
       console.error(
@@ -838,6 +844,7 @@ class SmartContractService {
         completedSections: 0,
         totalSections: 0,
         progressPercentage: 0,
+        sectionsProgress: [],
       };
     }
   }
@@ -902,22 +909,28 @@ class SmartContractService {
     }
   }
 
-  // ✅ NEW: Get user certificates
   async getUserCertificates(userAddress) {
     this.ensureInitialized();
     try {
-      // This would need to be implemented based on your certificate tracking needs
-      // For now, we'll check certificates for all courses the user has licenses for
+      // ✅ Since there's no direct method to get all user certificates,
+      // we need to check certificates for courses the user has licenses for
       const licenses = await this.getUserLicenses(userAddress);
       const certificates = [];
 
       for (const license of licenses) {
-        const cert = await this.getCertificateForCourse(
-          userAddress,
-          license.courseId
-        );
-        if (cert) {
-          certificates.push(cert);
+        try {
+          const cert = await this.getCertificateForCourse(
+            userAddress,
+            license.courseId
+          );
+          if (cert) {
+            certificates.push(cert);
+          }
+        } catch (certError) {
+          console.warn(
+            `Failed to get certificate for course ${license.courseId}:`,
+            certError
+          );
         }
       }
 
@@ -925,6 +938,45 @@ class SmartContractService {
     } catch (error) {
       console.error("Error fetching user certificates:", error);
       return [];
+    }
+  }
+
+  async getCertificateForCourse(userAddress, courseId) {
+    this.ensureInitialized();
+    try {
+      // ✅ Use the correct method from CertificateManager
+      const certificateId =
+        await this.contracts.certificateManager.getStudentCertificate(
+          userAddress,
+          courseId
+        );
+
+      if (Number(certificateId) === 0) {
+        return null; // No certificate found
+      }
+
+      const cert = await this.contracts.certificateManager.getCertificate(
+        certificateId
+      );
+
+      if (!cert.isValid) {
+        return null; // Certificate is revoked
+      }
+
+      return {
+        id: cert.certificateId.toString(),
+        courseId: cert.courseId.toString(),
+        student: cert.student,
+        studentName: cert.studentName,
+        issuedAt: new Date(Number(cert.issuedAt) * 1000),
+        isValid: cert.isValid,
+      };
+    } catch (error) {
+      console.error(
+        `Error fetching certificate for course ${courseId}:`,
+        error
+      );
+      return null;
     }
   }
 
