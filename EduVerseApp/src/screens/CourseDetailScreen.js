@@ -1,3 +1,4 @@
+// src/screens/CourseDetailScreen.js - Enhanced with latest SmartContract integration
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -25,7 +26,8 @@ export default function CourseDetailScreen({ route, navigation }) {
   const [hasValidLicense, setHasValidLicense] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // useEffect dengan dependency yang lebih spesifik dan logging
+
+  // ✅ ENHANCED: Enhanced useEffect sesuai dengan pattern initialization terbaru
   useEffect(() => {
     console.log("CourseDetailScreen useEffect triggered:", {
       courseId,
@@ -34,7 +36,7 @@ export default function CourseDetailScreen({ route, navigation }) {
       smartContractServiceAvailable: !!smartContractService,
     });
 
-    // Hanya load data jika semua kondisi terpenuhi
+    // Load data hanya jika semua kondisi terpenuhi
     if (courseId && address && isInitialized && smartContractService) {
       loadCourseData();
     } else {
@@ -42,6 +44,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     }
   }, [courseId, address, isInitialized, smartContractService]);
 
+  // ✅ ENHANCED: Load course data dengan SmartContractService terbaru
   const loadCourseData = async () => {
     try {
       setLoading(true);
@@ -64,12 +67,12 @@ export default function CourseDetailScreen({ route, navigation }) {
         return;
       }
 
-      // Load course details dengan error handling yang lebih baik
+      // ✅ Load course details menggunakan method terbaru
       const courseData = await smartContractService.getCourse(courseId);
       console.log("Course data loaded:", courseData?.title || "No title");
       setCourse(courseData);
 
-      // Load course sections
+      // ✅ Load course sections dengan URL support
       const sectionsData = await smartContractService.getCourseSections(
         courseId
       );
@@ -77,7 +80,7 @@ export default function CourseDetailScreen({ route, navigation }) {
       setSections(sectionsData);
 
       if (address) {
-        // Check license validity dengan retry logic untuk ethers v6
+        // ✅ Check license validity dengan caching mechanism
         console.log(
           "Checking license validity for address:",
           address,
@@ -85,7 +88,6 @@ export default function CourseDetailScreen({ route, navigation }) {
           courseId
         );
         try {
-          // Check license (now with caching for better performance)
           const licenseValid = await smartContractService.hasValidLicense(
             address,
             courseId
@@ -94,11 +96,10 @@ export default function CourseDetailScreen({ route, navigation }) {
           setHasValidLicense(licenseValid);
         } catch (licenseError) {
           console.error("Error checking license:", licenseError);
-          // Set false sebagai fallback tapi tidak throw error
           setHasValidLicense(false);
         }
 
-        // Get user progress
+        // ✅ Get user progress dengan enhanced structure
         try {
           const userProgress = await smartContractService.getUserProgress(
             address,
@@ -108,12 +109,12 @@ export default function CourseDetailScreen({ route, navigation }) {
           setProgress(userProgress);
         } catch (progressError) {
           console.error("Error loading user progress:", progressError);
-          // Set default progress jika error
           setProgress({
             courseId: courseId.toString(),
             completedSections: 0,
             totalSections: 0,
             progressPercentage: 0,
+            sectionsProgress: [],
           });
         }
       }
@@ -124,17 +125,17 @@ export default function CourseDetailScreen({ route, navigation }) {
       setLoading(false);
     }
   };
+
+  // ✅ ENHANCED: Refresh handler
   const handleRefresh = async () => {
     console.log("Manual refresh triggered");
     setRefreshing(true);
-
-    // Reset license state before reload untuk memastikan fresh check
-    setHasValidLicense(false);
-
+    setHasValidLicense(false); // Reset license state
     await loadCourseData();
     setRefreshing(false);
   };
 
+  // ✅ ENHANCED: Section press handler dengan real-time license check
   const handleSectionPress = (section, index) => {
     console.log("Section pressed:", {
       sectionId: section.id,
@@ -142,14 +143,12 @@ export default function CourseDetailScreen({ route, navigation }) {
       address,
     });
 
-    // Double check license sebelum navigasi untuk memastikan akses
     if (!hasValidLicense) {
-      // Coba check license sekali lagi secara real-time
       checkLicenseRealTime(section, index);
       return;
     }
 
-    // Jika license valid, navigasi ke section detail
+    // Navigate to section detail
     navigation.navigate("SectionDetail", {
       courseId: courseId,
       sectionId: section.id,
@@ -158,19 +157,17 @@ export default function CourseDetailScreen({ route, navigation }) {
     });
   };
 
-  // Fungsi untuk check license secara real-time sebelum akses section
+  // ✅ ENHANCED: Real-time license check
   const checkLicenseRealTime = async (section, index) => {
     try {
       if (!address || !smartContractService) {
         Alert.alert("Error", "Wallet not connected or service not available");
         return;
       }
-      console.log("Real-time license check for section access...");
 
-      // Set loading state
+      console.log("Real-time license check for section access...");
       setLoading(true);
 
-      // Check license immediately (caching will handle performance)
       const licenseValid = await smartContractService.hasValidLicense(
         address,
         courseId
@@ -180,7 +177,6 @@ export default function CourseDetailScreen({ route, navigation }) {
       setLoading(false);
 
       if (licenseValid) {
-        // Update state dan navigasi
         setHasValidLicense(true);
         navigation.navigate("SectionDetail", {
           courseId: courseId,
@@ -194,10 +190,7 @@ export default function CourseDetailScreen({ route, navigation }) {
           "You need a valid license for this course to access sections.",
           [
             { text: "Cancel", style: "cancel" },
-            {
-              text: "Refresh",
-              onPress: () => handleRefresh(),
-            },
+            { text: "Refresh", onPress: () => handleRefresh() },
             {
               text: "Get License",
               onPress: () => navigation.getParent()?.navigate("Dashboard"),
@@ -212,14 +205,22 @@ export default function CourseDetailScreen({ route, navigation }) {
     }
   };
 
+  // ✅ Utility functions
   const formatDuration = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
+  // ✅ ENHANCED: Check if section is completed using progress data
+  const isSectionCompleted = (sectionIndex) => {
+    if (!progress || !progress.sectionsProgress) return false;
+    return progress.sectionsProgress[sectionIndex] === true;
+  };
+
+  // ✅ ENHANCED: Render section item dengan completion status
   const renderSectionItem = ({ item, index }) => {
-    const isCompleted = false; // You would implement logic to check if this specific section is completed
+    const isCompleted = isSectionCompleted(index);
 
     return (
       <TouchableOpacity
@@ -284,6 +285,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     );
   };
 
+  // ✅ ENHANCED: Header dengan course information
   const renderHeader = () => (
     <View style={styles.headerContent}>
       {/* Course Info */}
@@ -303,6 +305,14 @@ export default function CourseDetailScreen({ route, navigation }) {
             <Ionicons name="list-outline" size={16} color="#666" />
             <Text style={styles.statText}>{sections.length} sections</Text>
           </View>
+          {course?.creator && (
+            <View style={styles.statItem}>
+              <Ionicons name="person-outline" size={16} color="#666" />
+              <Text style={styles.statText}>
+                {`${course.creator.slice(0, 6)}...${course.creator.slice(-4)}`}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -361,6 +371,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     </View>
   );
 
+  // ✅ Loading state
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -482,6 +493,7 @@ const styles = StyleSheet.create({
   },
   courseStats: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 20,
   },
   statItem: {

@@ -1,4 +1,4 @@
-// src/screens/MyCoursesScreen.js - Fixed Text Component Issues
+// src/screens/MyCoursesScreen.js - Fixed with latest SmartContract integration
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -15,75 +15,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
 import CourseCard from "../components/CourseCard";
-import {
-  useSmartContract,
-  useUserCourses,
-  useCreatorCourses,
-} from "../hooks/useBlockchain";
-
-// Mock data sebagai fallback jika terjadi error blockchain
-const mockEnrolledCourses = [
-  {
-    id: 1,
-    title: "Introduction to Blockchain",
-    description: "Learn the fundamentals of blockchain technology",
-    instructor: "John Doe",
-    progress: 75,
-    totalLessons: 20,
-    completedLessons: 15,
-    thumbnailURI: "https://picsum.photos/400/250?random=1",
-    thumbnail: "https://picsum.photos/400/250?random=1",
-    category: "Blockchain",
-    enrolled: "2024-01-15",
-    creator: "0x1234567890abcdef1234567890abcdef12345678",
-    pricePerMonth: "0.01",
-    isActive: true,
-    createdAt: "2024-01-15T10:00:00.000Z",
-    sectionsCount: 20,
-  },
-];
-
-const mockCreatedCourses = [
-  {
-    id: 1,
-    title: "React Native for Beginners",
-    description: "Learn React Native development from scratch",
-    students: 42,
-    revenue: "0.15",
-    status: "Published",
-    thumbnailURI: "https://picsum.photos/400/250?random=5",
-    thumbnail: "https://picsum.photos/400/250?random=5",
-    category: "Mobile Development",
-    created: "2024-01-10",
-    creator: "0x1111222233334444555566667777888899990000",
-    pricePerMonth: "0.005",
-    isActive: true,
-    createdAt: "2024-01-10T10:00:00.000Z",
-    sectionsCount: 15,
-  },
-  {
-    id: 2,
-    title: "Blockchain Development Masterclass",
-    description: "Master blockchain development with Solidity and Web3",
-    students: 28,
-    revenue: "0.084",
-    status: "Published",
-    thumbnailURI: "https://picsum.photos/400/250?random=6",
-    thumbnail: "https://picsum.photos/400/250?random=6",
-    category: "Blockchain",
-    created: "2024-01-05",
-    creator: "0x1111222233334444555566667777888899990000",
-    pricePerMonth: "0.003",
-    isActive: true,
-    createdAt: "2024-01-05T10:00:00.000Z",
-    sectionsCount: 25,
-  },
-];
+import { useSmartContract } from "../hooks/useBlockchain";
 
 export default function MyCoursesScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { smartContractService, isInitialized } = useSmartContract();
+
   const [activeTab, setActiveTab] = useState("enrolled");
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [createdCourses, setCreatedCourses] = useState([]);
@@ -92,11 +30,11 @@ export default function MyCoursesScreen({ navigation }) {
   const [navigating, setNavigating] = useState(false);
   const navigationTimeoutRef = useRef(null);
 
-  // State untuk kurs ETH -> IDR (sama seperti di Dashboard)
+  // State untuk kurs ETH -> IDR
   const [ethToIdrRate, setEthToIdrRate] = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
 
-  // Helper untuk format Rupiah (sama seperti di Dashboard)
+  // Helper untuk format Rupiah
   const formatRupiah = (number) => {
     if (typeof number !== "number" || isNaN(number)) return "Rp 0";
     return new Intl.NumberFormat("id-ID", {
@@ -106,7 +44,7 @@ export default function MyCoursesScreen({ navigation }) {
     }).format(number);
   };
 
-  // Helper function to format price in IDR (konsisten dengan Dashboard)
+  // Helper function to format price in IDR
   const formatPriceInIDR = (priceInETH) => {
     if (!priceInETH || priceInETH === "0" || parseFloat(priceInETH) === 0) {
       return "Gratis";
@@ -118,22 +56,36 @@ export default function MyCoursesScreen({ navigation }) {
     return formatRupiah(priceInIdr);
   };
 
-  // Fetch ETH to IDR rate (sama seperti di Dashboard)
-  const fetchEthPriceInIdr = useCallback(async () => {
+  // ✅ FIXED: Enhanced ETH price fetching sesuai dengan DashboardScreen
+  const fetchEthPriceInIdr = useCallback(async (retries = 3) => {
     try {
       setRateLoading(true);
       const response = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr"
+        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr",
+        { timeout: 10000 }
       );
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
       const data = await response.json();
       if (data?.ethereum?.idr) {
         setEthToIdrRate(data.ethereum.idr);
+        console.log("✅ ETH price updated:", data.ethereum.idr);
       } else {
-        setEthToIdrRate(55000000); // Fallback
+        throw new Error("Invalid price data");
       }
     } catch (error) {
       console.error("Failed to fetch ETH to IDR rate:", error);
-      setEthToIdrRate(55000000); // Fallback on error
+
+      if (retries > 0) {
+        console.log(`Retrying price fetch... (${retries} attempts left)`);
+        setTimeout(() => fetchEthPriceInIdr(retries - 1), 2000);
+        return;
+      }
+
+      // Fallback price
+      setEthToIdrRate(55000000);
+      console.log("Using fallback ETH price");
     } finally {
       setRateLoading(false);
     }
@@ -147,7 +99,6 @@ export default function MyCoursesScreen({ navigation }) {
         setNavigating(false);
       }
 
-      // Clear any pending navigation timeout
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);
         navigationTimeoutRef.current = null;
@@ -156,42 +107,101 @@ export default function MyCoursesScreen({ navigation }) {
   );
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
-  // Load user's courses from blockchain dengan optimization
+
+  // ✅ ENHANCED: Load enrolled courses menggunakan SmartContractService terbaru
   const loadEnrolledCourses = async () => {
     try {
-      if (!smartContractService) {
-        console.log("SmartContractService not available");
+      if (!smartContractService || !address) {
+        console.log("SmartContractService not available or no address");
         return;
       }
 
-      if (!address) {
-        console.log("Address not available");
-        return;
-      }
+      console.log("📚 Fetching enrolled courses for address:", address);
 
-      console.log("Fetching enrolled courses for address:", address);
-
-      // Tambahkan timeout untuk prevent hanging
+      // ✅ Get user licenses first
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Request timeout after 10 seconds")),
-          10000
-        )
+        setTimeout(() => reject(new Error("Request timeout")), 45000)
       );
 
-      const userEnrolledCourses = await Promise.race([
-        smartContractService.getUserEnrolledCourses(address),
+      const userLicenses = await Promise.race([
+        smartContractService.getUserLicenses(address),
         timeoutPromise,
       ]);
 
-      console.log("Enrolled courses fetched:", userEnrolledCourses.length);
-      setEnrolledCourses(userEnrolledCourses);
+      console.log("✅ User licenses fetched:", userLicenses.length);
+
+      const coursesWithProgress = [];
+
+      // ✅ Process licenses in batches
+      const batchSize = 3;
+      for (let i = 0; i < userLicenses.length; i += batchSize) {
+        const batch = userLicenses.slice(i, i + batchSize);
+
+        const batchResults = await Promise.all(
+          batch.map(async (license) => {
+            try {
+              // Get course details
+              const course = await smartContractService.getCourse(
+                license.courseId
+              );
+
+              if (course && course.isActive) {
+                // Get progress for this course
+                let progress = null;
+                try {
+                  progress = await smartContractService.getUserProgress(
+                    address,
+                    license.courseId
+                  );
+                } catch (progressError) {
+                  console.warn(
+                    `Progress not available for course ${license.courseId}:`,
+                    progressError
+                  );
+                }
+
+                return {
+                  ...course,
+                  license,
+                  progress: progress?.progressPercentage || 0,
+                  completedSections: progress?.completedSections || 0,
+                  totalSections:
+                    progress?.totalSections || course.sectionsCount || 0,
+                  enrolled: license.expiryTimestamp
+                    ? new Date(license.expiryTimestamp)
+                        .toISOString()
+                        .split("T")[0]
+                    : new Date().toISOString().split("T")[0],
+                  instructor: `${course.creator.slice(
+                    0,
+                    6
+                  )}...${course.creator.slice(-4)}`,
+                  category: "Blockchain",
+                };
+              }
+              return null;
+            } catch (err) {
+              console.warn(
+                `Failed to fetch course details for license ${license.courseId}:`,
+                err
+              );
+              return null;
+            }
+          })
+        );
+
+        coursesWithProgress.push(...batchResults.filter(Boolean));
+      }
+
+      console.log("✅ Enrolled courses processed:", coursesWithProgress.length);
+      setEnrolledCourses(coursesWithProgress);
     } catch (error) {
-      console.error("Error loading enrolled courses:", error);
-      // Fallback to mock data if there's an error
-      setEnrolledCourses(mockEnrolledCourses);
+      console.error("❌ Error loading enrolled courses:", error);
+      setEnrolledCourses([]); // Clear on error
     }
   };
+
+  // ✅ ENHANCED: Load created courses menggunakan SmartContractService terbaru
   const loadCreatedCourses = async () => {
     try {
       if (!smartContractService || !address) {
@@ -199,12 +209,10 @@ export default function MyCoursesScreen({ navigation }) {
         return;
       }
 
-      // Tambahkan timeout untuk prevent hanging
+      console.log("👨‍🏫 Fetching created courses for address:", address);
+
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Request timeout after 10 seconds")),
-          10000
-        )
+        setTimeout(() => reject(new Error("Request timeout")), 30000)
       );
 
       const userCreatedCourses = await Promise.race([
@@ -212,13 +220,15 @@ export default function MyCoursesScreen({ navigation }) {
         timeoutPromise,
       ]);
 
+      console.log("✅ Created courses fetched:", userCreatedCourses.length);
       setCreatedCourses(userCreatedCourses);
     } catch (error) {
-      console.error("Error loading created courses:", error);
-      // Fallback to mock data if there's an error
-      setCreatedCourses(mockCreatedCourses);
+      console.error("❌ Error loading created courses:", error);
+      setCreatedCourses([]); // Clear on error
     }
   };
+
+  // ✅ ENHANCED: Load all courses with better error handling
   const loadAllCourses = async () => {
     if (loading) {
       console.log("Loading already in progress, skipping");
@@ -227,36 +237,50 @@ export default function MyCoursesScreen({ navigation }) {
 
     setLoading(true);
 
-    // Use Promise.allSettled untuk better error handling
-    const results = await Promise.allSettled([
-      loadEnrolledCourses(),
-      loadCreatedCourses(),
-    ]);
+    try {
+      // Use Promise.allSettled for better error handling
+      const results = await Promise.allSettled([
+        loadEnrolledCourses(),
+        loadCreatedCourses(),
+      ]);
 
-    // Log failed operations
-    results.forEach((result, index) => {
-      if (result.status === "rejected") {
-        console.error(
-          `Failed to load ${index === 0 ? "enrolled" : "created"} courses:`,
-          result.reason
-        );
-      }
-    });
-
-    setLoading(false);
+      // Log failed operations
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          console.error(
+            `Failed to load ${index === 0 ? "enrolled" : "created"} courses:`,
+            result.reason
+          );
+        }
+      });
+    } catch (error) {
+      console.error("❌ Error in loadAllCourses:", error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // ✅ ENHANCED: Enhanced useEffect sesuai dengan pattern terbaru
   useEffect(() => {
-    console.log("MyCoursesScreen mount");
-    console.log("Wallet connected:", isConnected);
-    console.log("On Manta Network:", isOnMantaNetwork);
-    console.log("Address:", address);
-    console.log("SmartContract initialized:", isInitialized);
-    console.log("SmartContractService available:", !!smartContractService);
+    console.log("MyCoursesScreen mounted with:", {
+      isConnected,
+      isOnMantaNetwork,
+      address,
+      isInitialized,
+      smartContractServiceAvailable: !!smartContractService,
+    });
 
     // Fetch ETH rate
     fetchEthPriceInIdr();
 
-    if (isConnected && isOnMantaNetwork && address && isInitialized) {
+    // Load courses hanya jika semua kondisi terpenuhi
+    if (
+      isConnected &&
+      isOnMantaNetwork &&
+      address &&
+      isInitialized &&
+      smartContractService
+    ) {
       loadAllCourses();
     }
   }, [
@@ -265,7 +289,6 @@ export default function MyCoursesScreen({ navigation }) {
     address,
     isInitialized,
     smartContractService,
-    fetchEthPriceInIdr,
   ]);
 
   // Cleanup timeout when component unmounts
@@ -276,11 +299,15 @@ export default function MyCoursesScreen({ navigation }) {
       }
     };
   }, []);
+
+  // ✅ ENHANCED: Refresh handler
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadAllCourses(), fetchEthPriceInIdr()]);
+    await Promise.allSettled([loadAllCourses(), fetchEthPriceInIdr()]);
     setRefreshing(false);
   };
+
+  // ✅ ENHANCED: Course press handler dengan debouncing
   const handleCoursePress = (course) => {
     if (navigating) {
       console.log("Navigation already in progress, preventing duplicate press");
@@ -290,12 +317,10 @@ export default function MyCoursesScreen({ navigation }) {
     console.log("Navigating to course detail:", course.id);
     setNavigating(true);
 
-    // Clear any existing timeout
     if (navigationTimeoutRef.current) {
       clearTimeout(navigationTimeoutRef.current);
     }
 
-    // Navigate immediately untuk improve responsiveness
     try {
       navigation.navigate("CourseDetail", {
         courseId: course.id,
@@ -307,13 +332,13 @@ export default function MyCoursesScreen({ navigation }) {
       return;
     }
 
-    // Reset navigating state dengan timeout yang lebih pendek
     navigationTimeoutRef.current = setTimeout(() => {
       setNavigating(false);
       navigationTimeoutRef.current = null;
-    }, 500); // Reduced from 1000ms to 500ms
+    }, 500);
   };
 
+  // ✅ ENHANCED: Tab button component
   const TabButton = ({ title, isActive, onPress, count = 0 }) => (
     <TouchableOpacity
       style={[styles.tabButton, isActive && styles.activeTab]}
@@ -334,6 +359,7 @@ export default function MyCoursesScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  // ✅ ENHANCED: Empty state component
   const EmptyState = ({ type }) => (
     <View style={styles.emptyState}>
       <Ionicons
@@ -353,10 +379,8 @@ export default function MyCoursesScreen({ navigation }) {
         style={styles.emptyActionButton}
         onPress={() => {
           if (type === "enrolled") {
-            // Navigate to Dashboard tab
             navigation.getParent()?.navigate("Dashboard");
           } else {
-            // Navigate to Create Course tab
             navigation.getParent()?.navigate("Create Course");
           }
         }}
@@ -368,6 +392,7 @@ export default function MyCoursesScreen({ navigation }) {
     </View>
   );
 
+  // ✅ Connection state components
   const NotConnectedState = () => (
     <View style={styles.centeredContent}>
       <Ionicons name="wallet-outline" size={64} color="#ccc" />
@@ -388,6 +413,7 @@ export default function MyCoursesScreen({ navigation }) {
     </View>
   );
 
+  // ✅ Early returns untuk connection states
   if (!isConnected) {
     return (
       <SafeAreaView style={styles.container}>
@@ -411,6 +437,7 @@ export default function MyCoursesScreen({ navigation }) {
         <Text style={styles.title}>My Courses</Text>
         <Text style={styles.subtitle}>Track your learning journey</Text>
       </View>
+
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
         <TabButton
@@ -426,6 +453,7 @@ export default function MyCoursesScreen({ navigation }) {
           count={createdCourses.length}
         />
       </View>
+
       {/* Content */}
       <ScrollView
         style={styles.content}
@@ -450,17 +478,15 @@ export default function MyCoursesScreen({ navigation }) {
             </View>
           ) : enrolledCourses.length > 0 ? (
             <>
-              {/* Learning Progress Stats - Moved to top */}
+              {/* ✅ ENHANCED: Learning Progress Stats */}
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryTitle}>Learning Progress</Text>
                 <View style={styles.summaryStats}>
                   <View style={styles.summaryItem}>
                     <Text style={styles.summaryNumber}>
                       {
-                        enrolledCourses.filter((c) => {
-                          const progress = c.progress || 0;
-                          return progress === 100;
-                        }).length
+                        enrolledCourses.filter((c) => (c.progress || 0) === 100)
+                          .length
                       }
                     </Text>
                     <Text style={styles.summaryLabel}>Completed</Text>
@@ -480,10 +506,10 @@ export default function MyCoursesScreen({ navigation }) {
                     <Text style={styles.summaryNumber}>
                       {enrolledCourses.length > 0
                         ? Math.round(
-                            enrolledCourses.reduce((acc, c) => {
-                              const progress = c.progress || 0;
-                              return acc + progress;
-                            }, 0) / enrolledCourses.length
+                            enrolledCourses.reduce(
+                              (acc, c) => acc + (c.progress || 0),
+                              0
+                            ) / enrolledCourses.length
                           )
                         : 0}
                       %
@@ -492,6 +518,7 @@ export default function MyCoursesScreen({ navigation }) {
                   </View>
                 </View>
               </View>
+
               {/* Enrolled Courses List */}
               <View style={styles.coursesContainer}>
                 {enrolledCourses.map((course) => (
@@ -517,29 +544,22 @@ export default function MyCoursesScreen({ navigation }) {
           </View>
         ) : createdCourses.length > 0 ? (
           <>
-            {/* Creator Stats - Moved to top */}
+            {/* ✅ ENHANCED: Creator Stats */}
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Creator Stats</Text>
               <View style={styles.summaryStats}>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryNumber}>
-                    {createdCourses.reduce((acc, c) => {
-                      // Karena students belum diimplementasi di smart contract,
-                      // gunakan fallback ke mock data atau 0
-                      const students = c.students || 0;
-                      return acc + students;
-                    }, 0)}
+                    {createdCourses.reduce(
+                      (acc, c) => acc + (c.students || 0),
+                      0
+                    )}
                   </Text>
                   <Text style={styles.summaryLabel}>Total Students</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryNumber}>
-                    {
-                      createdCourses.filter((c) => {
-                        // Data isActive berasal dari smart contract
-                        return c.isActive === true;
-                      }).length
-                    }
+                    {createdCourses.filter((c) => c.isActive === true).length}
                   </Text>
                   <Text style={styles.summaryLabel}>Published</Text>
                 </View>
@@ -547,13 +567,9 @@ export default function MyCoursesScreen({ navigation }) {
                   <Text style={styles.summaryNumber}>
                     {createdCourses
                       .reduce((acc, c) => {
-                        // Karena revenue belum diimplementasi di smart contract,
-                        // hitung estimasi berdasarkan pricePerMonth * students
-                        let estimatedRevenue = 0;
                         const pricePerMonth = parseFloat(c.pricePerMonth) || 0;
                         const students = c.students || 0;
-                        estimatedRevenue = pricePerMonth * students;
-                        return acc + estimatedRevenue;
+                        return acc + pricePerMonth * students;
                       }, 0)
                       .toFixed(4)}{" "}
                     ETH
@@ -562,6 +578,7 @@ export default function MyCoursesScreen({ navigation }) {
                 </View>
               </View>
             </View>
+
             {/* Created Courses List */}
             <View style={styles.coursesContainer}>
               {createdCourses.map((course) => (
@@ -656,10 +673,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 4,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
@@ -749,10 +763,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 12,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
