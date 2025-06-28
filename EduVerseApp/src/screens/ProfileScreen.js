@@ -1,4 +1,4 @@
-// src/screens/ProfileScreen.js - FIXED: Remove modal triggers
+// src/screens/ProfileScreen.js - PRODUCTION READY
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -13,7 +13,7 @@ import { useAccount, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import { AppKitButton, useAppKit } from "@reown/appkit-wagmi-react-native";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
-import { useWeb3 } from "../contexts/Web3Context"; // ✅ Import Web3Context
+import { useSmartContract } from "../hooks/useBlockchain";
 
 export default function ProfileScreen({ navigation }) {
   const { address, isConnected, connector } = useAccount();
@@ -23,7 +23,7 @@ export default function ProfileScreen({ navigation }) {
   const { open } = useAppKit();
 
   // ✅ Get modal prevention status
-  const { modalPreventionActive } = useWeb3();
+  const { modalPreventionActive, isInitialized } = useSmartContract();
 
   // User stats state
   const [userStats, setUserStats] = useState({
@@ -40,6 +40,7 @@ export default function ProfileScreen({ navigation }) {
 
   const fetchUserStats = async () => {
     try {
+      // Mock data - replace with actual blockchain calls
       setUserStats({
         coursesEnrolled: 5,
         coursesCreated: 2,
@@ -51,6 +52,15 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const handleSwitchToManta = async () => {
+    if (modalPreventionActive) {
+      Alert.alert(
+        "Please Wait",
+        "System is initializing. Please try again in a moment.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     try {
       if (switchChain) {
         await switchChain({ chainId: mantaPacificTestnet.id });
@@ -80,18 +90,24 @@ export default function ProfileScreen({ navigation }) {
     );
   };
 
-  // ✅ FIXED: Safe manual wallet modal trigger
+  // ✅ Safe manual wallet modal trigger
   const handleOpenWalletModal = () => {
     if (modalPreventionActive) {
-      console.log("🚫 Modal opening prevented during contract initialization");
+      console.log("🚫 Modal opening prevented during initialization");
+      Alert.alert(
+        "Please Wait",
+        "System is initializing. Please try again in a moment.",
+        [{ text: "OK" }]
+      );
       return;
     }
+
     open();
   };
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
-  // Simplified menu item component
+  // Menu item component
   const MenuItem = ({
     icon,
     title,
@@ -124,7 +140,12 @@ export default function ProfileScreen({ navigation }) {
             Connect your wallet to access your profile
           </Text>
           <View style={styles.connectButtonContainer}>
-            <AppKitButton label="Connect Wallet" size="md" balance="hide" />
+            <AppKitButton
+              label="Connect Wallet"
+              size="md"
+              balance="hide"
+              disabled={modalPreventionActive}
+            />
           </View>
         </View>
       </SafeAreaView>
@@ -141,7 +162,7 @@ export default function ProfileScreen({ navigation }) {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
       >
-        {/* Simple Profile Header */}
+        {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatar}>
             <Ionicons name="person" size={24} color="#007AFF" />
@@ -154,7 +175,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Quick Stats - Simple Row */}
+        {/* Quick Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statNumber}>{userStats.coursesEnrolled}</Text>
@@ -172,7 +193,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* ✅ FIXED: Manual Wallet Buttons - No auto-triggers */}
+        {/* Wallet Control Buttons */}
         <View style={styles.walletButtons}>
           <TouchableOpacity
             style={styles.manualWalletButton}
@@ -188,7 +209,7 @@ export default function ProfileScreen({ navigation }) {
           <TouchableOpacity
             style={styles.manualNetworkButton}
             onPress={handleSwitchToManta}
-            disabled={isPending}
+            disabled={isPending || modalPreventionActive}
           >
             <Ionicons name="globe-outline" size={20} color="#007AFF" />
             <Text style={styles.manualNetworkButtonText}>
@@ -197,7 +218,7 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Network Status - Improved Layout */}
+        {/* Network Status */}
         {!isOnMantaNetwork && (
           <View style={styles.networkStatusCard}>
             <View style={styles.networkStatusHeader}>
@@ -206,13 +227,12 @@ export default function ProfileScreen({ navigation }) {
             </View>
             <Text style={styles.networkStatusDescription}>
               You're currently connected to a different network. Switch to Manta
-              Pacific Testnet to access all EduVerse features and get the best
-              experience.
+              Pacific Testnet to access all EduVerse features.
             </Text>
             <TouchableOpacity
               style={styles.switchNetworkButton}
               onPress={handleSwitchToManta}
-              disabled={isPending}
+              disabled={isPending || modalPreventionActive}
             >
               <Ionicons
                 name="swap-horizontal"
@@ -240,13 +260,38 @@ export default function ProfileScreen({ navigation }) {
               </Text>
             </View>
             <Text style={styles.networkStatusDescriptionSuccess}>
-              You're connected to the correct network. All EduVerse features are
+              You're connected to the correct network. All features are
               available.
             </Text>
           </View>
         )}
 
-        {/* Simple Menu List */}
+        {/* System Status */}
+        <View style={styles.systemStatusCard}>
+          <Text style={styles.systemStatusTitle}>System Status</Text>
+          <View style={styles.systemStatusItem}>
+            <Ionicons
+              name={isInitialized ? "checkmark-circle" : "time-outline"}
+              size={16}
+              color={isInitialized ? "#34C759" : "#FF9500"}
+            />
+            <Text style={styles.systemStatusText}>
+              Smart Contracts: {isInitialized ? "Ready" : "Initializing..."}
+            </Text>
+          </View>
+          <View style={styles.systemStatusItem}>
+            <Ionicons
+              name={isOnMantaNetwork ? "checkmark-circle" : "warning-outline"}
+              size={16}
+              color={isOnMantaNetwork ? "#34C759" : "#FF9500"}
+            />
+            <Text style={styles.systemStatusText}>
+              Network: {isOnMantaNetwork ? "Connected" : "Switch Required"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Menu */}
         <View style={styles.menuSection}>
           <MenuItem
             icon="settings-outline"
@@ -275,7 +320,7 @@ export default function ProfileScreen({ navigation }) {
           />
         </View>
 
-        {/* Disconnect Button - Separate Section */}
+        {/* Disconnect Button */}
         <View style={styles.disconnectSection}>
           <TouchableOpacity
             style={styles.disconnectButton}
@@ -286,7 +331,7 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Simple Footer */}
+        {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>EduVerse v1.0.0</Text>
         </View>
@@ -349,7 +394,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
 
-  // Connected State - Simplified
+  // Connected State
   profileHeader: {
     backgroundColor: "white",
     marginTop: 16,
@@ -383,7 +428,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Simple Stats Row
+  // Stats
   statsRow: {
     flexDirection: "row",
     backgroundColor: "white",
@@ -407,7 +452,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ✅ FIXED: Manual Wallet Buttons
+  // Wallet Buttons
   walletButtons: {
     flexDirection: "row",
     backgroundColor: "white",
@@ -450,7 +495,7 @@ const styles = StyleSheet.create({
     color: "#007AFF",
   },
 
-  // Network Status Cards (unchanged)
+  // Network Status
   networkStatusCard: {
     backgroundColor: "white",
     marginTop: 16,
@@ -521,7 +566,32 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // Menu (unchanged)
+  // System Status
+  systemStatusCard: {
+    backgroundColor: "white",
+    marginTop: 8,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+  },
+  systemStatusTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 12,
+  },
+  systemStatusItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  systemStatusText: {
+    fontSize: 13,
+    color: "#8E8E93",
+    marginLeft: 8,
+  },
+
+  // Menu
   menuSection: {
     backgroundColor: "white",
     marginTop: 16,
@@ -547,7 +617,7 @@ const styles = StyleSheet.create({
     color: "#FF3B30",
   },
 
-  // Disconnect Section (unchanged)
+  // Disconnect
   disconnectSection: {
     backgroundColor: "white",
     marginTop: 16,
@@ -569,7 +639,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // Footer (unchanged)
+  // Footer
   footer: {
     alignItems: "center",
     paddingVertical: 24,

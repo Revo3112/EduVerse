@@ -1,4 +1,4 @@
-// src/screens/CreateCourseScreen.js - Updated with Web3Context
+// src/screens/CreateCourseScreen.js - PRODUCTION READY
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
@@ -10,7 +10,6 @@ import {
   Alert,
   Switch,
   SafeAreaView,
-  Modal,
   ActivityIndicator,
   Image,
 } from "react-native";
@@ -20,17 +19,24 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { pinataService } from "../services/PinataService";
 import { videoService } from "../services/VideoService";
-import { useCreateCourse, useETHPrice } from "../hooks/useBlockchain";
+import {
+  useCreateCourse,
+  useETHPrice,
+  useSmartContract,
+} from "../hooks/useBlockchain";
 import AddSectionModal from "../components/AddSectionModal";
 
 export default function CreateCourseScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const { isInitialized, modalPreventionActive } = useSmartContract();
+
   const {
     createCourse,
     loading: isCreatingCourse,
     progress: createProgress,
   } = useCreateCourse();
+
   const { maxPriceETH } = useETHPrice();
 
   // Course data state
@@ -46,25 +52,13 @@ export default function CreateCourseScreen({ navigation }) {
   const [sections, setSections] = useState([]);
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
 
-  // Upload process state
-  const [currentPhase, setCurrentPhase] = useState(0);
+  // Upload state
   const [uploadProgress, setUploadProgress] = useState({
     phase: 0,
     percentage: 0,
     message: "",
     completedFiles: 0,
     totalFiles: 0,
-    completedSections: 0,
-    totalSections: 0,
-  });
-
-  // Upload results state
-  const [uploadResults, setUploadResults] = useState({
-    thumbnailCID: null,
-    videoCIDs: new Map(),
-    courseId: null,
-    sectionIds: [],
-    transactionHashes: [],
   });
 
   // Validation state
@@ -137,6 +131,7 @@ export default function CreateCourseScreen({ navigation }) {
         (section) =>
           section.title.toLowerCase().trim() === sectionData.title.toLowerCase()
       );
+
       if (duplicateTitle) {
         Alert.alert("Error", "Section title already exists");
         return;
@@ -171,7 +166,7 @@ export default function CreateCourseScreen({ navigation }) {
     ]);
   }, []);
 
-  // Validation functions
+  // Validation
   const validateCourseData = () => {
     // Title validation
     if (!courseData.title.trim()) {
@@ -225,48 +220,16 @@ export default function CreateCourseScreen({ navigation }) {
       return false;
     }
 
-    // Validate each section
-    for (let i = 0; i < sections.length; i++) {
-      const section = sections[i];
-
-      if (!section.title.trim() || section.title.trim().length > 200) {
-        Alert.alert("Error", `Section ${i + 1} title invalid (max 200 chars)`);
-        return false;
-      }
-
-      if (
-        !section.duration ||
-        section.duration <= 0 ||
-        section.duration > 86400
-      ) {
-        Alert.alert(
-          "Error",
-          `Section ${i + 1} duration invalid (max 24 hours)`
-        );
-        return false;
-      }
-    }
-
     return true;
   };
 
-  // Phase 1: Upload all files to IPFS
-  const executePhase1_UploadFiles = async () => {
-    console.log("🚀 PHASE 1: Starting file uploads to IPFS");
-    setCurrentPhase(1);
-    setUploadProgress({
-      phase: 1,
-      percentage: 0,
-      message: "Uploading files to IPFS...",
-      completedFiles: 0,
-      totalFiles: 0,
-      completedSections: 0,
-      totalSections: sections.length,
-    });
+  // Upload files to IPFS
+  const uploadFilesToIPFS = async () => {
+    console.log("🚀 Starting file uploads to IPFS");
 
     const filesToUpload = [];
 
-    // Add thumbnail to upload queue
+    // Add thumbnail
     if (courseData.thumbnailFile) {
       filesToUpload.push({
         type: "thumbnail",
@@ -275,7 +238,7 @@ export default function CreateCourseScreen({ navigation }) {
       });
     }
 
-    // Add videos to upload queue
+    // Add videos
     sections.forEach((section) => {
       if (section.videoFile) {
         filesToUpload.push({
@@ -288,21 +251,23 @@ export default function CreateCourseScreen({ navigation }) {
     });
 
     const totalFiles = filesToUpload.length;
-    setUploadProgress((prev) => ({ ...prev, totalFiles }));
+    setUploadProgress({
+      phase: 1,
+      percentage: 0,
+      message: "Uploading files to IPFS...",
+      completedFiles: 0,
+      totalFiles,
+    });
 
-    console.log(`📤 Uploading ${totalFiles} files to IPFS...`);
-
-    let completedFiles = 0;
     const results = {
       thumbnailCID: null,
       videoCIDs: new Map(),
     };
 
-    // Upload files sequentially
+    let completedFiles = 0;
+
     for (const fileItem of filesToUpload) {
       try {
-        console.log(`📁 Uploading ${fileItem.type}: ${fileItem.file.name}`);
-
         setUploadProgress((prev) => ({
           ...prev,
           message: `Uploading ${fileItem.type}: ${fileItem.file.name}`,
@@ -368,19 +333,26 @@ export default function CreateCourseScreen({ navigation }) {
       }
     }
 
-    console.log("✅ PHASE 1 COMPLETED: All files uploaded to IPFS");
-    setUploadResults((prev) => ({
-      ...prev,
-      thumbnailCID: results.thumbnailCID,
-      videoCIDs: results.videoCIDs,
-    }));
-
+    console.log("✅ All files uploaded to IPFS");
     return results;
   };
 
-  // Main course creation orchestrator
+  // Main course creation
   const handleCreateCourse = async () => {
     if (!validateCourseData()) return;
+
+    if (!isInitialized) {
+      Alert.alert("Not Ready", "Smart contracts are still initializing.");
+      return;
+    }
+
+    if (modalPreventionActive) {
+      Alert.alert(
+        "Please Wait",
+        "System is initializing. Try again in a moment."
+      );
+      return;
+    }
 
     if (isCreatingCourse) {
       Alert.alert("Please wait", "Course creation already in progress");
@@ -396,7 +368,6 @@ export default function CreateCourseScreen({ navigation }) {
         `Title: ${courseData.title}\n` +
         `Price: ${courseData.isPaid ? `${courseData.price} ETH` : "Free"}\n` +
         `Files to upload: ${totalFiles}\n\n` +
-        `Process:\n1. Upload files to IPFS\n2. Create course on blockchain\n3. Add sections\n\n` +
         `Continue?`,
       [
         { text: "Cancel", style: "cancel" },
@@ -409,8 +380,8 @@ export default function CreateCourseScreen({ navigation }) {
     try {
       console.log("🚀 Starting course creation process");
 
-      // Phase 1: Upload all files to IPFS
-      const uploadedFiles = await executePhase1_UploadFiles();
+      // Phase 1: Upload files to IPFS
+      const uploadedFiles = await uploadFilesToIPFS();
 
       // Prepare sections with CIDs
       const sectionsWithCIDs = sections.map((section) => ({
@@ -435,53 +406,43 @@ export default function CreateCourseScreen({ navigation }) {
       if (courseResult.success) {
         Alert.alert(
           "Success! 🎉",
-          `✅ Course created successfully!\n\n` +
-            `📚 Course ID: ${courseResult.courseId}\n` +
-            `📖 Sections: ${courseResult.sectionsAdded}/${courseResult.totalSections} added\n` +
-            `🖼️ Thumbnail: ${uploadedFiles.thumbnailCID.substring(
-              0,
-              12
-            )}...\n` +
-            `🎬 Videos: ${uploadedFiles.videoCIDs.size} uploaded\n` +
-            `💰 Price: ${
-              courseData.isPaid ? `${courseData.price} ETH/month` : "Free"
-            }`
+          `Course created successfully!\n\nCourse ID: ${courseResult.courseId}`,
+          [
+            {
+              text: "View My Courses",
+              onPress: () => navigation.navigate("MyCourses"),
+            },
+            { text: "OK", style: "default" },
+          ]
         );
 
         resetForm();
-        navigation.navigate("MyCourses");
       } else {
         throw new Error(courseResult.error || "Failed to create course");
       }
     } catch (error) {
       console.error("❌ Course creation failed:", error);
-      handleCreateCourseError(error);
+
+      let errorMessage = "Failed to create course.";
+
+      if (
+        error.message.includes("user rejected") ||
+        error.message.includes("User denied")
+      ) {
+        errorMessage = "Transaction was rejected by user.";
+      } else if (error.message.includes("insufficient funds")) {
+        errorMessage = "Insufficient funds for transaction fees.";
+      } else if (
+        error.message.includes("IPFS") ||
+        error.message.includes("upload")
+      ) {
+        errorMessage = `File upload failed: ${error.message}`;
+      } else {
+        errorMessage = `Failed to create course: ${error.message}`;
+      }
+
+      Alert.alert("Error", errorMessage);
     }
-  };
-
-  // Helper functions
-  const handleCreateCourseError = (error) => {
-    let errorMessage = "Failed to create course.";
-
-    if (
-      error.message.includes("user rejected") ||
-      error.message.includes("User denied")
-    ) {
-      errorMessage = "Transaction was rejected by user.";
-    } else if (error.message.includes("insufficient funds")) {
-      errorMessage = "Insufficient funds for transaction fees.";
-    } else if (error.message.includes("timeout")) {
-      errorMessage = "Process timed out. Please try again.";
-    } else if (
-      error.message.includes("IPFS") ||
-      error.message.includes("upload")
-    ) {
-      errorMessage = `File upload failed: ${error.message}`;
-    } else {
-      errorMessage = `Failed to create course: ${error.message}`;
-    }
-
-    Alert.alert("Error", errorMessage);
   };
 
   const resetForm = () => {
@@ -494,16 +455,16 @@ export default function CreateCourseScreen({ navigation }) {
       thumbnailUrl: "",
     });
     setSections([]);
-    setUploadResults({
-      thumbnailCID: null,
-      videoCIDs: new Map(),
-      courseId: null,
-      sectionIds: [],
-      transactionHashes: [],
+    setUploadProgress({
+      phase: 0,
+      percentage: 0,
+      message: "",
+      completedFiles: 0,
+      totalFiles: 0,
     });
   };
 
-  // Price validation effects
+  // Price validation
   useEffect(() => {
     if (maxPriceETH) {
       setCurrentMaxPrice(parseFloat(maxPriceETH));
@@ -559,7 +520,6 @@ export default function CreateCourseScreen({ navigation }) {
     );
   }
 
-  // Calculate totals for UI
   const videosToUpload = sections.filter((s) => s.videoFile).length;
   const totalFiles = videosToUpload + (courseData.thumbnailFile ? 1 : 0);
 
@@ -570,7 +530,7 @@ export default function CreateCourseScreen({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.title}>Create New Course</Text>
           <Text style={styles.subtitle}>
-            3-Phase Upload: Files → Course → Sections
+            Share your knowledge on blockchain
           </Text>
         </View>
 
@@ -754,32 +714,6 @@ export default function CreateCourseScreen({ navigation }) {
             )}
           </View>
 
-          {/* Upload Summary */}
-          {totalFiles > 0 && (
-            <View style={styles.uploadSummary}>
-              <Text style={styles.uploadSummaryTitle}>📤 Upload Process</Text>
-              <Text style={styles.uploadSummaryText}>
-                3-Phase Creation Process:
-              </Text>
-              <View style={styles.phasesList}>
-                <Text style={styles.phaseItem}>
-                  📁 Phase 1: Upload {totalFiles} file
-                  {totalFiles !== 1 ? "s" : ""} to IPFS
-                </Text>
-                <Text style={styles.phaseItem}>
-                  🔗 Phase 2: Create course on blockchain
-                </Text>
-                <Text style={styles.phaseItem}>
-                  📚 Phase 3: Add {sections.length} section
-                  {sections.length !== 1 ? "s" : ""}
-                </Text>
-              </View>
-              <Text style={styles.uploadSummaryNote}>
-                💡 Each phase waits for completion before proceeding
-              </Text>
-            </View>
-          )}
-
           {/* Create Button */}
           <TouchableOpacity
             style={[
@@ -787,6 +721,8 @@ export default function CreateCourseScreen({ navigation }) {
               (sections.length === 0 ||
                 isCreatingCourse ||
                 !courseData.thumbnailFile ||
+                !isInitialized ||
+                modalPreventionActive ||
                 priceValidationError) &&
                 styles.disabledButton,
             ]}
@@ -795,6 +731,8 @@ export default function CreateCourseScreen({ navigation }) {
               sections.length === 0 ||
               isCreatingCourse ||
               !courseData.thumbnailFile ||
+              !isInitialized ||
+              modalPreventionActive ||
               !!priceValidationError
             }
           >
@@ -818,22 +756,12 @@ export default function CreateCourseScreen({ navigation }) {
           {/* Progress Display */}
           {isCreatingCourse && (
             <View style={styles.progressContainer}>
-              <View style={styles.phaseIndicator}>
-                <Text style={styles.phaseText}>
-                  {uploadProgress.phase === 1
-                    ? "Phase 1/2: Uploading Files"
-                    : "Phase 2/2: Creating Course"}
-                </Text>
-              </View>
-
               <View style={styles.progressBar}>
                 <View
                   style={[styles.progressFill, { width: `${createProgress}%` }]}
                 />
               </View>
-
               <Text style={styles.progressText}>{uploadProgress.message}</Text>
-
               <View style={styles.progressStats}>
                 <Text style={styles.progressStat}>{createProgress}%</Text>
                 {uploadProgress.phase === 1 && (
@@ -845,22 +773,6 @@ export default function CreateCourseScreen({ navigation }) {
               </View>
             </View>
           )}
-
-          {/* Info Cards */}
-          <View style={styles.infoCard}>
-            <Ionicons
-              name="information-circle-outline"
-              size={20}
-              color="#9747FF"
-            />
-            <Text style={styles.infoText}>
-              <Text style={styles.infoTextBold}>Smart Contract Process:</Text>
-              {"\n"}• Files uploaded to IPFS for decentralized storage
-              {"\n"}• Course created on Manta Pacific blockchain
-              {"\n"}• Sections added with IPFS content references
-              {"\n"}• No timeout issues with sequential processing
-            </Text>
-          </View>
         </View>
       </ScrollView>
 
@@ -1210,41 +1122,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  // Upload summary styles
-  uploadSummary: {
-    backgroundColor: "#f0f8ff",
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#b3d9ff",
-    marginBottom: 20,
-  },
-  uploadSummaryTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  uploadSummaryText: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 12,
-  },
-  phasesList: {
-    marginBottom: 12,
-  },
-  phaseItem: {
-    fontSize: 14,
-    color: "#333",
-    marginBottom: 4,
-    paddingLeft: 8,
-  },
-  uploadSummaryNote: {
-    fontSize: 12,
-    color: "#4a90e2",
-    fontStyle: "italic",
-  },
-
   // Button styles
   createButton: {
     backgroundColor: "#9747FF",
@@ -1278,18 +1155,6 @@ const styles = StyleSheet.create({
   progressContainer: {
     marginBottom: 20,
   },
-  phaseIndicator: {
-    backgroundColor: "#e3f2fd",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  phaseText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1565c0",
-    textAlign: "center",
-  },
   progressBar: {
     height: 8,
     backgroundColor: "#e0e0e0",
@@ -1317,27 +1182,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#9747FF",
     fontWeight: "600",
-  },
-
-  // Info card styles
-  infoCard: {
-    flexDirection: "row",
-    backgroundColor: "#e3f2fd",
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: "#9747FF",
-    marginBottom: 15,
-  },
-  infoText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: "#1565c0",
-    flex: 1,
-    lineHeight: 20,
-  },
-  infoTextBold: {
-    fontWeight: "600",
-    color: "#0d47a1",
   },
 });

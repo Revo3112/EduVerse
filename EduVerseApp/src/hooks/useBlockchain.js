@@ -1,27 +1,37 @@
-// src/hooks/useBlockchain.js - UPDATED
+// src/hooks/useBlockchain.js - PRODUCTION READY: Complete Wagmi v2 Hooks
 import { useWeb3 } from "../contexts/Web3Context";
-import { useAccount } from "wagmi";
-import { useState, useEffect, useCallback } from "react";
+import { useAccount, useChainId } from "wagmi";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { mantaPacificTestnet } from "../constants/blockchain";
+
+// ==================== CONTRACT STATUS HOOKS ====================
 
 export const useSmartContract = () => {
-  const { isInitialized, initError } = useWeb3();
+  const { isInitialized, initError, modalPreventionActive } = useWeb3();
 
   return {
     isInitialized,
     error: initError,
     hasEverInitialized: isInitialized,
+    modalPreventionActive,
   };
 };
 
 export const useBlockchain = () => {
   const web3Context = useWeb3();
+  const { isConnected } = useAccount();
+  const chainId = useChainId();
 
   return {
     smartContractService: web3Context.isInitialized ? web3Context : null,
     isInitialized: web3Context.isInitialized,
     error: web3Context.initError,
+    isConnected,
+    isCorrectNetwork: chainId === mantaPacificTestnet.id,
   };
 };
+
+// ==================== COURSE HOOKS ====================
 
 export const useCourses = (offset = 0, limit = 20) => {
   const { getAllCourses, isInitialized } = useWeb3();
@@ -29,11 +39,18 @@ export const useCourses = (offset = 0, limit = 20) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(true);
-  const [totalCourses, setTotalCourses] = useState(0);
+  const abortControllerRef = useRef(null);
 
   const fetchCourses = useCallback(
     async (reset = false) => {
       if (!isInitialized) return;
+
+      // Cancel previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      abortControllerRef.current = new AbortController();
 
       setLoading(true);
       setError(null);
@@ -42,18 +59,24 @@ export const useCourses = (offset = 0, limit = 20) => {
         const currentOffset = reset ? 0 : offset;
         const coursesData = await getAllCourses(currentOffset, limit);
 
-        if (reset) {
-          setCourses(coursesData);
-        } else {
-          setCourses((prev) => [...prev, ...coursesData]);
-        }
+        if (!abortControllerRef.current.signal.aborted) {
+          if (reset) {
+            setCourses(coursesData);
+          } else {
+            setCourses((prev) => [...prev, ...coursesData]);
+          }
 
-        setHasMore(coursesData.length === limit);
+          setHasMore(coursesData.length === limit);
+        }
       } catch (err) {
-        console.error("Error fetching courses:", err);
-        setError(err.message);
+        if (!abortControllerRef.current.signal.aborted) {
+          console.error("Error fetching courses:", err);
+          setError(err.message);
+        }
       } finally {
-        setLoading(false);
+        if (!abortControllerRef.current.signal.aborted) {
+          setLoading(false);
+        }
       }
     },
     [getAllCourses, isInitialized, offset, limit]
@@ -63,6 +86,12 @@ export const useCourses = (offset = 0, limit = 20) => {
     if (isInitialized) {
       fetchCourses(true);
     }
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [isInitialized]);
 
   return {
@@ -70,7 +99,6 @@ export const useCourses = (offset = 0, limit = 20) => {
     loading,
     error,
     hasMore,
-    totalCourses,
     refetch: () => fetchCourses(true),
     loadMore: () => fetchCourses(false),
   };
@@ -83,6 +111,7 @@ export const useUserCourses = () => {
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const isMountedRef = useRef(true);
 
   const fetchUserCourses = useCallback(async () => {
     if (!isInitialized || !address) return;
@@ -92,45 +121,58 @@ export const useUserCourses = () => {
 
     try {
       const licenses = await getUserLicenses(address);
+
+      if (!isMountedRef.current) return;
+
       const coursesWithProgress = [];
 
       for (const license of licenses) {
         try {
-          const course = await getCourse(license.courseId);
-          if (course) {
-            const progress = await getUserProgress(address, license.courseId);
+          const [course, progress] = await Promise.all([
+            getCourse(license.courseId),
+            getUserProgress(address, license.courseId),
+          ]);
 
+          if (isMountedRef.current && course) {
             coursesWithProgress.push({
               ...course,
               license,
               progress: progress?.progressPercentage || 0,
               completedSections: progress?.completedSections || 0,
-              totalSections:
-                progress?.totalSections || course.sectionsCount || 0,
+              totalSections: progress?.totalSections || 0,
             });
           }
         } catch (err) {
-          console.warn(
-            `Failed to fetch course details for license ${license.courseId}:`,
-            err
-          );
+          console.warn(`Failed to fetch course ${license.courseId}:`, err);
         }
       }
 
-      setEnrolledCourses(coursesWithProgress);
+      if (isMountedRef.current) {
+        setEnrolledCourses(coursesWithProgress);
+      }
     } catch (err) {
-      console.error("Error fetching user courses:", err);
-      setError(err.message);
+      if (isMountedRef.current) {
+        console.error("Error fetching user courses:", err);
+        setError(err.message);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [isInitialized, address, getUserLicenses, getCourse, getUserProgress]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     if (isInitialized && address) {
       fetchUserCourses();
     }
-  }, [fetchUserCourses]);
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [isInitialized, address]);
 
   return {
     enrolledCourses,
@@ -168,7 +210,7 @@ export const useCreatorCourses = () => {
     if (isInitialized && address) {
       fetchCreatorCourses();
     }
-  }, [fetchCreatorCourses]);
+  }, [isInitialized, address]);
 
   return {
     createdCourses,
@@ -206,7 +248,7 @@ export const useCreateCourse = () => {
         const courseId = courseResult.courseId;
         setProgress(40);
 
-        // Add sections
+        // Add sections sequentially
         const sectionResults = [];
         for (let i = 0; i < sections.length; i++) {
           const section = sections[i];
@@ -264,13 +306,19 @@ export const useCreateCourse = () => {
   };
 };
 
+// ==================== LICENSE HOOKS ====================
+
 export const useMintLicense = () => {
-  const { mintLicense } = useWeb3();
+  const { mintLicense, isInitialized } = useWeb3();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const mint = useCallback(
     async (courseId, duration = 1) => {
+      if (!isInitialized) {
+        throw new Error("Not initialized");
+      }
+
       setLoading(true);
       setError(null);
 
@@ -284,128 +332,13 @@ export const useMintLicense = () => {
         setLoading(false);
       }
     },
-    [mintLicense]
+    [mintLicense, isInitialized]
   );
 
   return {
     mintLicense: mint,
     loading,
     error,
-  };
-};
-
-export const useUpdateProgress = () => {
-  const { completeSection } = useWeb3();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const updateProgress = useCallback(
-    async (courseId, sectionId) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result = await completeSection(courseId, sectionId);
-        return result;
-      } catch (err) {
-        setError(err.message);
-        return { success: false, error: err.message };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [completeSection]
-  );
-
-  return {
-    updateProgress,
-    loading,
-    error,
-  };
-};
-
-export const useUserCertificates = () => {
-  const { address } = useAccount();
-  const { getUserCertificates, isInitialized } = useWeb3();
-  const [certificates, setCertificates] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const fetchCertificates = useCallback(async () => {
-    if (!isInitialized || !address) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const certs = await getUserCertificates(address);
-      setCertificates(certs);
-    } catch (err) {
-      console.error("Error fetching certificates:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [isInitialized, address, getUserCertificates]);
-
-  useEffect(() => {
-    if (isInitialized && address) {
-      fetchCertificates();
-    }
-  }, [fetchCertificates]);
-
-  return {
-    certificates,
-    loading,
-    error,
-    refetch: fetchCertificates,
-  };
-};
-
-export const useETHPrice = () => {
-  const { getETHPrice, getMaxPriceInETH, isInitialized } = useWeb3();
-  const [price, setPrice] = useState("0");
-  const [maxPriceETH, setMaxPriceETH] = useState("0");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const fetchPriceData = useCallback(async () => {
-    if (!isInitialized) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const [ethPrice, maxPrice] = await Promise.all([
-        getETHPrice(),
-        getMaxPriceInETH(),
-      ]);
-
-      setPrice(ethPrice);
-      setMaxPriceETH(maxPrice);
-    } catch (err) {
-      console.error("Error fetching ETH price:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [isInitialized, getETHPrice, getMaxPriceInETH]);
-
-  useEffect(() => {
-    if (isInitialized) {
-      fetchPriceData();
-
-      const interval = setInterval(fetchPriceData, 2 * 60 * 1000);
-      return () => clearInterval(interval);
-    }
-  }, [isInitialized, fetchPriceData]);
-
-  return {
-    price,
-    maxPriceETH,
-    loading,
-    error,
-    refetch: fetchPriceData,
   };
 };
 
@@ -464,6 +397,242 @@ export const useHasActiveLicense = (courseId) => {
     loading,
     error,
     refetch: checkLicense,
+  };
+};
+
+// ==================== PROGRESS HOOKS ====================
+
+export const useUpdateProgress = () => {
+  const { completeSection, isInitialized } = useWeb3();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const updateProgress = useCallback(
+    async (courseId, sectionId) => {
+      if (!isInitialized) {
+        throw new Error("Not initialized");
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const result = await completeSection(courseId, sectionId);
+        return result;
+      } catch (err) {
+        setError(err.message);
+        return { success: false, error: err.message };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [completeSection, isInitialized]
+  );
+
+  return {
+    updateProgress,
+    loading,
+    error,
+  };
+};
+
+export const useUserProgress = (courseId) => {
+  const { address } = useAccount();
+  const { getUserProgress, isInitialized } = useWeb3();
+  const [progress, setProgress] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchProgress = useCallback(async () => {
+    if (!isInitialized || !address || !courseId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const progressData = await getUserProgress(address, courseId);
+      setProgress(progressData);
+    } catch (err) {
+      console.error("Error fetching user progress:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, address, courseId, getUserProgress]);
+
+  useEffect(() => {
+    if (isInitialized && address && courseId) {
+      fetchProgress();
+    }
+  }, [fetchProgress]);
+
+  return {
+    progress,
+    loading,
+    error,
+    refetch: fetchProgress,
+  };
+};
+
+export const useCourseCompletion = (courseId) => {
+  const { address } = useAccount();
+  const { isCourseCompleted, isInitialized } = useWeb3();
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const checkCompletion = useCallback(async () => {
+    if (!isInitialized || !address || !courseId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const completed = await isCourseCompleted(address, courseId);
+      setIsCompleted(completed);
+    } catch (err) {
+      console.error("Error checking course completion:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, address, courseId, isCourseCompleted]);
+
+  useEffect(() => {
+    if (isInitialized && address && courseId) {
+      checkCompletion();
+    }
+  }, [checkCompletion]);
+
+  return {
+    isCompleted,
+    loading,
+    error,
+    refetch: checkCompletion,
+  };
+};
+
+// ==================== CERTIFICATE HOOKS ====================
+
+export const useUserCertificates = () => {
+  const { address } = useAccount();
+  const { getUserCertificates, isInitialized } = useWeb3();
+  const [certificates, setCertificates] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchCertificates = useCallback(async () => {
+    if (!isInitialized || !address) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const certs = await getUserCertificates(address);
+      setCertificates(certs);
+    } catch (err) {
+      console.error("Error fetching certificates:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, address, getUserCertificates]);
+
+  useEffect(() => {
+    if (isInitialized && address) {
+      fetchCertificates();
+    }
+  }, [fetchCertificates]);
+
+  return {
+    certificates,
+    loading,
+    error,
+    refetch: fetchCertificates,
+  };
+};
+
+export const useIssueCertificate = () => {
+  const { issueCertificate, isInitialized } = useWeb3();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const issue = useCallback(
+    async (courseId, studentName) => {
+      if (!isInitialized) {
+        throw new Error("Not initialized");
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const result = await issueCertificate(courseId, studentName);
+        return result;
+      } catch (err) {
+        setError(err.message);
+        return { success: false, error: err.message };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [issueCertificate, isInitialized]
+  );
+
+  return {
+    issueCertificate: issue,
+    loading,
+    error,
+  };
+};
+
+// ==================== UTILITY HOOKS ====================
+
+export const useETHPrice = () => {
+  const { getETHPrice, getMaxPriceInETH, isInitialized } = useWeb3();
+  const [price, setPrice] = useState("0");
+  const [maxPriceETH, setMaxPriceETH] = useState("0");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchPriceData = useCallback(async () => {
+    if (!isInitialized) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [ethPrice, maxPrice] = await Promise.all([
+        getETHPrice(),
+        getMaxPriceInETH(),
+      ]);
+
+      setPrice(ethPrice);
+      setMaxPriceETH(maxPrice);
+    } catch (err) {
+      console.error("Error fetching ETH price:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, getETHPrice, getMaxPriceInETH]);
+
+  useEffect(() => {
+    if (isInitialized) {
+      fetchPriceData();
+
+      // Update price every 2 minutes
+      const interval = setInterval(fetchPriceData, 2 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isInitialized, fetchPriceData]);
+
+  return {
+    price,
+    maxPriceETH,
+    loading,
+    error,
+    refetch: fetchPriceData,
   };
 };
 
@@ -549,115 +718,10 @@ export const useCourseSections = (courseId) => {
   };
 };
 
-export const useCourseCompletion = (courseId) => {
-  const { address } = useAccount();
-  const { isCourseCompleted, isInitialized } = useWeb3();
-  const [isCompleted, setIsCompleted] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const checkCompletion = useCallback(async () => {
-    if (!isInitialized || !address || !courseId) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const completed = await isCourseCompleted(address, courseId);
-      setIsCompleted(completed);
-    } catch (err) {
-      console.error("Error checking course completion:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [isInitialized, address, courseId, isCourseCompleted]);
-
-  useEffect(() => {
-    if (isInitialized && address && courseId) {
-      checkCompletion();
-    }
-  }, [checkCompletion]);
-
-  return {
-    isCompleted,
-    loading,
-    error,
-    refetch: checkCompletion,
-  };
-};
-
-export const useUserProgress = (courseId) => {
-  const { address } = useAccount();
-  const { getUserProgress, isInitialized } = useWeb3();
-  const [progress, setProgress] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const fetchProgress = useCallback(async () => {
-    if (!isInitialized || !address || !courseId) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const progressData = await getUserProgress(address, courseId);
-      setProgress(progressData);
-    } catch (err) {
-      console.error("Error fetching user progress:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [isInitialized, address, courseId, getUserProgress]);
-
-  useEffect(() => {
-    if (isInitialized && address && courseId) {
-      fetchProgress();
-    }
-  }, [fetchProgress]);
-
-  return {
-    progress,
-    loading,
-    error,
-    refetch: fetchProgress,
-  };
-};
-
-export const useIssueCertificate = () => {
-  const { issueCertificate } = useWeb3();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const issue = useCallback(
-    async (courseId, studentName) => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result = await issueCertificate(courseId, studentName);
-        return result;
-      } catch (err) {
-        setError(err.message);
-        return { success: false, error: err.message };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [issueCertificate]
-  );
-
-  return {
-    issueCertificate: issue,
-    loading,
-    error,
-  };
-};
-
 // Export all hooks
 export default {
   useSmartContract,
+  useBlockchain,
   useCourses,
   useUserCourses,
   useCreatorCourses,
@@ -669,7 +733,6 @@ export default {
   useHasActiveLicense,
   useCourseMetadata,
   useCourseSections,
-  useBlockchain,
   useCourseCompletion,
   useUserProgress,
   useIssueCertificate,

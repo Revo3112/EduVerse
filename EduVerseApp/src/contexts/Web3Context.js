@@ -1,5 +1,5 @@
-// src/contexts/Web3Context.js - MASTER LEVEL: Complete & Fixed
-import {
+// src/contexts/Web3Context.js - PRODUCTION READY: Pure Wagmi v2 Implementation
+import React, {
   createContext,
   useContext,
   useState,
@@ -8,9 +8,20 @@ import {
   useRef,
   useMemo,
 } from "react";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
-import { ethers } from "ethers";
+import {
+  useAccount,
+  usePublicClient,
+  useWalletClient,
+  useChainId,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useReadContract,
+  useReadContracts,
+} from "wagmi";
+import { parseEther, formatEther, formatUnits } from "viem";
 import { BLOCKCHAIN_CONFIG } from "../constants/blockchain";
+
+// Import ABIs
 import CourseFactoryABI from "../constants/abi/CourseFactory.json";
 import CourseLicenseABI from "../constants/abi/CourseLicense.json";
 import ProgressTrackerABI from "../constants/abi/ProgressTracker.json";
@@ -26,428 +37,230 @@ export const useWeb3 = () => {
   return context;
 };
 
-// ✅ MASTER: Stable helper function outside component
-function publicClientToProvider(publicClient) {
-  const { chain, transport } = publicClient;
-
-  if (transport.type === "fallback") {
-    const firstTransport = transport.transports[0];
-    return new ethers.JsonRpcProvider(
-      firstTransport.value?.url || firstTransport.value,
-      {
-        chainId: chain.id,
-        name: chain.name,
-      }
-    );
-  }
-
-  return new ethers.JsonRpcProvider(transport.url, {
-    chainId: chain.id,
-    name: chain.name,
-  });
-}
-
 export function Web3Provider({ children }) {
   const { address, isConnected, status } = useAccount();
+  const chainId = useChainId();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
 
-  // ✅ MASTER: Atomic state management
-  const [provider, setProvider] = useState(null);
-  const [signer, setSigner] = useState(null);
-  const [contracts, setContracts] = useState({});
+  // ✅ PRODUCTION: State management
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState(null);
+  const [modalPreventionActive, setModalPreventionActive] = useState(false);
 
-  // ✅ MASTER: Advanced cache system
-  const licenseCache = useRef(new Map());
-  const progressCache = useRef(new Map());
-  const cacheExpiry = 30000;
-
-  // ✅ MASTER: Prevent render loops with stable refs
-  const stableRefs = useRef({
-    lastPublicClientKey: null,
-    lastWalletClientKey: null,
-    lastSignerAddress: null,
-    isInitializing: false,
-    initializationPromise: null,
-    hasEverInitialized: false,
-    modalPreventionActive: false, // ✅ NEW: Prevent modal triggers
+  // ✅ PRODUCTION: Cache management
+  const cacheRef = useRef({
+    licenses: new Map(),
+    progress: new Map(),
+    courses: new Map(),
+    cacheExpiry: 30000, // 30 seconds
   });
 
-  // ✅ MASTER: Memoized client keys for stable comparison
-  const publicClientKey = useMemo(() => {
-    if (!publicClient) return null;
-    return `${publicClient.chain?.id}-${publicClient.transport?.url}-${publicClient.transport?.type}`;
-  }, [publicClient]);
+  // ✅ PRODUCTION: Contract addresses
+  const contractAddresses = useMemo(
+    () => ({
+      courseFactory: BLOCKCHAIN_CONFIG.CONTRACTS.courseFactory,
+      courseLicense: BLOCKCHAIN_CONFIG.CONTRACTS.courseLicense,
+      progressTracker: BLOCKCHAIN_CONFIG.CONTRACTS.progressTracker,
+      certificateManager: BLOCKCHAIN_CONFIG.CONTRACTS.certificateManager,
+    }),
+    []
+  );
 
-  const walletClientKey = useMemo(() => {
-    if (!walletClient) return null;
-    return `${walletClient.account?.address}-${walletClient.transport?.type}`;
-  }, [walletClient]);
-
-  // ✅ MASTER: Provider initialization with strict change detection
+  // ✅ PRODUCTION: Initialization effect
   useEffect(() => {
-    if (!publicClient) {
-      setProvider(null);
-      stableRefs.current.lastPublicClientKey = null;
-      return;
-    }
-
-    // ✅ CRITICAL: Only initialize if client ACTUALLY changed
-    if (stableRefs.current.lastPublicClientKey === publicClientKey) {
-      return; // Same client, skip completely
-    }
-
-    try {
-      console.log("Initializing provider...");
-      const ethersProvider = publicClientToProvider(publicClient);
-      setProvider(ethersProvider);
-      stableRefs.current.lastPublicClientKey = publicClientKey;
-      console.log("Provider initialized successfully");
-    } catch (error) {
-      console.error("Failed to initialize provider:", error);
-      setInitError(error.message);
-      setProvider(null);
-    }
-  }, [publicClientKey]);
-
-  // ✅ MASTER: Signer initialization with connection state validation
-  useEffect(() => {
-    // ✅ CRITICAL: Only process on stable connection states
-    if (status === "connecting" || status === "reconnecting") {
-      return; // Wait for stability
-    }
-
-    // ✅ Clear signer if disconnected
-    if (!walletClient || !isConnected || status !== "connected") {
-      if (signer) {
-        console.log("Wallet disconnected, clearing signer");
-        setSigner(null);
-      }
-      stableRefs.current.lastWalletClientKey = null;
-      stableRefs.current.lastSignerAddress = null;
-      return;
-    }
-
-    // ✅ CRITICAL: Only initialize if wallet ACTUALLY changed
-    if (stableRefs.current.lastWalletClientKey === walletClientKey) {
-      return; // Same wallet, skip completely
-    }
-
-    const initializeSigner = async () => {
+    const checkInitialization = async () => {
       try {
-        console.log("Initializing signer...");
-        const ethersSigner = await new ethers.BrowserProvider(
-          walletClient.transport
-        ).getSigner();
+        setModalPreventionActive(true);
 
-        setSigner(ethersSigner);
-        stableRefs.current.lastWalletClientKey = walletClientKey;
-        stableRefs.current.lastSignerAddress = ethersSigner.address;
-        console.log("Signer initialized successfully");
-      } catch (error) {
-        console.error("Failed to initialize signer:", error);
-        setInitError(error.message);
-        setSigner(null);
-      }
-    };
-
-    initializeSigner();
-  }, [walletClientKey, isConnected, status]);
-
-  // ✅ MASTER: Advanced contract initialization with promise caching
-  useEffect(() => {
-    if (!provider || !signer) {
-      if (Object.keys(contracts).length > 0) {
-        setContracts({});
-        setIsInitialized(false);
-      }
-      return;
-    }
-
-    const currentSignerAddress = signer.address;
-
-    // ✅ CRITICAL: Check if already initialized for this exact signer
-    if (
-      isInitialized &&
-      contracts.courseFactory &&
-      stableRefs.current.lastSignerAddress === currentSignerAddress &&
-      stableRefs.current.hasEverInitialized
-    ) {
-      console.log("✅ Contracts already initialized for this signer, skipping");
-      return;
-    }
-
-    // ✅ CRITICAL: Prevent multiple simultaneous initializations
-    if (stableRefs.current.isInitializing) {
-      console.log("🔄 Contract initialization already in progress, waiting...");
-      return;
-    }
-
-    if (stableRefs.current.initializationPromise) {
-      console.log("⏳ Using existing initialization promise...");
-      return;
-    }
-
-    const initializeContracts = async () => {
-      try {
-        console.log("Initializing contracts...");
-        stableRefs.current.isInitializing = true;
-        stableRefs.current.modalPreventionActive = true; // ✅ Prevent modal triggers
-
-        const addresses = BLOCKCHAIN_CONFIG.CONTRACTS;
-
-        if (!addresses.courseFactory) {
-          throw new Error("Contract addresses not configured");
+        if (!publicClient) {
+          setIsInitialized(false);
+          return;
         }
 
-        const contractInstances = {
-          courseFactory: new ethers.Contract(
-            addresses.courseFactory,
-            CourseFactoryABI,
-            signer
-          ),
-          courseLicense: new ethers.Contract(
-            addresses.courseLicense,
-            CourseLicenseABI,
-            signer
-          ),
-          progressTracker: new ethers.Contract(
-            addresses.progressTracker,
-            ProgressTrackerABI,
-            signer
-          ),
-          certificateManager: new ethers.Contract(
-            addresses.certificateManager,
-            CertificateManagerABI,
-            signer
-          ),
-        };
-
-        const verifyPromises = Object.entries(contractInstances).map(
-          async ([name, contract]) => {
-            const code = await provider.getCode(contract.target);
-            if (code === "0x") {
-              throw new Error(
-                `${name} contract not deployed at ${contract.target}`
-              );
-            }
-            return { name, verified: true };
-          }
+        // Verify contract deployments
+        const verifications = await Promise.all(
+          Object.entries(contractAddresses).map(async ([name, address]) => {
+            if (!address) return { name, valid: false };
+            const code = await publicClient.getBytecode({ address });
+            return { name, valid: code && code !== "0x" };
+          })
         );
 
-        await Promise.all(verifyPromises);
+        const allValid = verifications.every((v) => v.valid);
 
-        // ✅ CRITICAL: Set state atomically to prevent multiple renders
-        setContracts(contractInstances);
-        setIsInitialized(true);
-        setInitError(null);
-
-        stableRefs.current.lastSignerAddress = currentSignerAddress;
-        stableRefs.current.hasEverInitialized = true;
-
-        console.log("All contracts initialized successfully");
-
-        // ✅ CRITICAL: Delay before allowing modal triggers again
-        setTimeout(() => {
-          stableRefs.current.modalPreventionActive = false;
-        }, 3000);
-
-        stableRefs.current.initializationPromise = null;
+        if (allValid) {
+          console.log("✅ All contracts verified");
+          setIsInitialized(true);
+          setInitError(null);
+        } else {
+          const invalid = verifications
+            .filter((v) => !v.valid)
+            .map((v) => v.name);
+          throw new Error(`Invalid contracts: ${invalid.join(", ")}`);
+        }
       } catch (error) {
-        console.error("Failed to initialize contracts:", error);
+        console.error("❌ Initialization error:", error);
         setInitError(error.message);
         setIsInitialized(false);
-        setContracts({});
-        stableRefs.current.initializationPromise = null;
-        stableRefs.current.modalPreventionActive = false;
       } finally {
-        stableRefs.current.isInitializing = false;
+        // Delay to prevent modal triggers
+        setTimeout(() => {
+          setModalPreventionActive(false);
+        }, 2000);
       }
     };
 
-    stableRefs.current.initializationPromise = initializeContracts();
-
-    const timeoutId = setTimeout(() => {
-      stableRefs.current.initializationPromise;
-    }, 2000);
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [provider, signer]);
-
-  // ✅ MASTER: Cleanup on disconnect
-  useEffect(() => {
-    if (!isConnected && stableRefs.current.hasEverInitialized) {
-      console.log("Caches cleared due to disconnect");
-
-      licenseCache.current.clear();
-      progressCache.current.clear();
-      setContracts({});
-      setIsInitialized(false);
-      setInitError(null);
-
-      stableRefs.current = {
-        lastPublicClientKey: null,
-        lastWalletClientKey: null,
-        lastSignerAddress: null,
-        isInitializing: false,
-        initializationPromise: null,
-        hasEverInitialized: false,
-        modalPreventionActive: false,
-      };
+    if (publicClient) {
+      checkInitialization();
     }
-  }, [isConnected]);
+  }, [publicClient, contractAddresses]);
 
-  // ✅ MASTER: All contract methods with stable callbacks
-  const retryOperation = useCallback(async (operation, maxRetries = 3) => {
-    let lastError;
+  // ==================== COURSE FACTORY FUNCTIONS ====================
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await operation();
-      } catch (error) {
-        lastError = error;
-
-        if (
-          error.message?.includes("user rejected") ||
-          error.message?.includes("insufficient funds")
-        ) {
-          throw error;
-        }
-
-        if (attempt < maxRetries) {
-          console.log(`Retry attempt ${attempt}/${maxRetries}`);
-          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
-        }
-      }
-    }
-
-    throw lastError;
-  }, []);
-
-  // ✅ KEEP ALL YOUR EXISTING CONTRACT METHODS HERE
   const createCourse = useCallback(
     async (courseData) => {
-      if (!isInitialized || !contracts.courseFactory) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized || !walletClient) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        const { title, description, thumbnailCID, pricePerMonth } = courseData;
-        const priceInWei = ethers.parseEther(pricePerMonth.toString());
+      const { title, description, thumbnailCID, pricePerMonth } = courseData;
+      const priceInWei = parseEther(pricePerMonth.toString());
 
-        const tx = await contracts.courseFactory.createCourse(
-          title.trim(),
-          description.trim(),
-          thumbnailCID.trim(),
-          priceInWei
+      const { writeContract, data: hash } = useWriteContract();
+
+      try {
+        await writeContract({
+          address: contractAddresses.courseFactory,
+          abi: CourseFactoryABI,
+          functionName: "createCourse",
+          args: [
+            title.trim(),
+            description.trim(),
+            thumbnailCID.trim(),
+            priceInWei,
+          ],
+        });
+
+        // Wait for transaction
+        const receipt = await waitForTransaction(hash);
+
+        // Parse event logs
+        const event = parseEventLogs(
+          receipt,
+          CourseFactoryABI,
+          "CourseCreated"
         );
-
-        const receipt = await tx.wait();
-
-        const event = receipt.logs
-          .map((log) => {
-            try {
-              return contracts.courseFactory.interface.parseLog(log);
-            } catch {
-              return null;
-            }
-          })
-          .find((parsed) => parsed?.name === "CourseCreated");
 
         return {
           success: true,
-          courseId: event.args.courseId.toString(),
-          transactionHash: receipt.hash,
+          courseId: event?.args?.courseId?.toString(),
+          transactionHash: receipt.transactionHash,
         };
-      });
+      } catch (error) {
+        console.error("Create course error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, retryOperation]
+    [isInitialized, walletClient, contractAddresses]
   );
 
   const getAllCourses = useCallback(
     async (offset = 0, limit = 20) => {
-      if (!isInitialized || !contracts.courseFactory) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        let coursesData;
+      try {
+        const data = await publicClient.readContract({
+          address: contractAddresses.courseFactory,
+          abi: CourseFactoryABI,
+          functionName: "getAllCourses",
+          args: [BigInt(offset), BigInt(limit)],
+        });
 
-        try {
-          coursesData = await contracts.courseFactory.getAllCourses(
-            offset,
-            limit
-          );
-        } catch (error) {
-          const total = await contracts.courseFactory.getTotalCourses();
-          const start = offset + 1;
-          const end = Math.min(Number(total), offset + limit);
-
-          const promises = [];
-          for (let i = start; i <= end; i++) {
-            promises.push(contracts.courseFactory.getCourse(i));
-          }
-
-          coursesData = await Promise.all(promises);
-        }
-
-        return coursesData
-          .filter((course) => course?.isActive)
-          .map((course) => ({
-            id: course.id.toString(),
-            title: course.title,
-            description: course.description,
-            thumbnailCID: course.thumbnailCID,
-            creator: course.creator,
-            pricePerMonth: ethers.formatEther(course.pricePerMonth),
-            pricePerMonthWei: course.pricePerMonth.toString(),
-            isActive: course.isActive,
-            createdAt: new Date(Number(course.createdAt) * 1000),
-          }));
-      });
-    },
-    [contracts, isInitialized, retryOperation]
-  );
-
-  const getCourse = useCallback(
-    async (courseId) => {
-      if (!isInitialized || !contracts.courseFactory) {
-        throw new Error("Contracts not initialized");
-      }
-
-      return retryOperation(async () => {
-        const course = await contracts.courseFactory.getCourse(courseId);
-
-        return {
+        return data.map((course) => ({
           id: course.id.toString(),
           title: course.title,
           description: course.description,
           thumbnailCID: course.thumbnailCID,
           creator: course.creator,
-          pricePerMonth: ethers.formatEther(course.pricePerMonth),
+          pricePerMonth: formatEther(course.pricePerMonth),
+          pricePerMonthWei: course.pricePerMonth.toString(),
+          isActive: course.isActive,
+          createdAt: new Date(Number(course.createdAt) * 1000),
+        }));
+      } catch (error) {
+        console.error("Get all courses error:", error);
+        throw error;
+      }
+    },
+    [isInitialized, publicClient, contractAddresses]
+  );
+
+  const getCourse = useCallback(
+    async (courseId) => {
+      if (!isInitialized) {
+        throw new Error("Not initialized");
+      }
+
+      const cacheKey = `course_${courseId}`;
+      const cached = cacheRef.current.courses.get(cacheKey);
+
+      if (
+        cached &&
+        Date.now() - cached.timestamp < cacheRef.current.cacheExpiry
+      ) {
+        return cached.data;
+      }
+
+      try {
+        const course = await publicClient.readContract({
+          address: contractAddresses.courseFactory,
+          abi: CourseFactoryABI,
+          functionName: "getCourse",
+          args: [BigInt(courseId)],
+        });
+
+        const formattedCourse = {
+          id: course.id.toString(),
+          title: course.title,
+          description: course.description,
+          thumbnailCID: course.thumbnailCID,
+          creator: course.creator,
+          pricePerMonth: formatEther(course.pricePerMonth),
           pricePerMonthWei: course.pricePerMonth.toString(),
           isActive: course.isActive,
           createdAt: new Date(Number(course.createdAt) * 1000),
         };
-      });
+
+        cacheRef.current.courses.set(cacheKey, {
+          data: formattedCourse,
+          timestamp: Date.now(),
+        });
+
+        return formattedCourse;
+      } catch (error) {
+        console.error("Get course error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, retryOperation]
+    [isInitialized, publicClient, contractAddresses]
   );
 
   const getCourseSections = useCallback(
     async (courseId) => {
-      if (!isInitialized || !contracts.courseFactory) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        const sections = await contracts.courseFactory.getCourseSections(
-          courseId
-        );
+      try {
+        const sections = await publicClient.readContract({
+          address: contractAddresses.courseFactory,
+          abi: CourseFactoryABI,
+          functionName: "getCourseSections",
+          args: [BigInt(courseId)],
+        });
 
         return sections.map((section) => ({
           id: section.id.toString(),
@@ -457,170 +270,231 @@ export function Web3Provider({ children }) {
           duration: Number(section.duration),
           orderId: Number(section.orderId),
         }));
-      });
+      } catch (error) {
+        console.error("Get course sections error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, retryOperation]
+    [isInitialized, publicClient, contractAddresses]
   );
 
   const addCourseSection = useCallback(
     async (courseId, sectionData) => {
-      if (!isInitialized || !contracts.courseFactory) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized || !walletClient) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        const { title, contentCID, duration } = sectionData;
+      const { title, contentCID, duration } = sectionData;
 
-        const tx = await contracts.courseFactory.addCourseSection(
-          courseId,
-          title.trim(),
-          contentCID.trim(),
-          duration
-        );
+      try {
+        const { hash } = await walletClient.writeContract({
+          address: contractAddresses.courseFactory,
+          abi: CourseFactoryABI,
+          functionName: "addCourseSection",
+          args: [
+            BigInt(courseId),
+            title.trim(),
+            contentCID.trim(),
+            BigInt(duration),
+          ],
+        });
 
-        const receipt = await tx.wait();
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
         return {
           success: true,
-          transactionHash: receipt.hash,
+          transactionHash: receipt.transactionHash,
         };
-      });
+      } catch (error) {
+        console.error("Add course section error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, retryOperation]
+    [isInitialized, walletClient, publicClient, contractAddresses]
   );
 
   const getCreatorCourses = useCallback(
     async (creatorAddress) => {
-      if (!isInitialized || !contracts.courseFactory) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        const courseIds = await contracts.courseFactory.getCreatorCourses(
-          creatorAddress
-        );
+      try {
+        const courseIds = await publicClient.readContract({
+          address: contractAddresses.courseFactory,
+          abi: CourseFactoryABI,
+          functionName: "getCreatorCourses",
+          args: [creatorAddress],
+        });
 
         const courses = await Promise.all(
-          courseIds.map(async (id) => {
-            const course = await getCourse(id.toString());
-            return course;
-          })
+          courseIds.map((id) => getCourse(id.toString()))
         );
 
         return courses.filter((course) => course !== null);
-      });
+      } catch (error) {
+        console.error("Get creator courses error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, getCourse, retryOperation]
+    [isInitialized, publicClient, contractAddresses, getCourse]
   );
 
   const getTotalCourses = useCallback(async () => {
-    if (!isInitialized || !contracts.courseFactory) {
-      throw new Error("Contracts not initialized");
+    if (!isInitialized) {
+      throw new Error("Not initialized");
     }
 
-    return retryOperation(async () => {
-      const total = await contracts.courseFactory.getTotalCourses();
+    try {
+      const total = await publicClient.readContract({
+        address: contractAddresses.courseFactory,
+        abi: CourseFactoryABI,
+        functionName: "getTotalCourses",
+      });
+
       return Number(total);
-    });
-  }, [contracts, isInitialized, retryOperation]);
+    } catch (error) {
+      console.error("Get total courses error:", error);
+      throw error;
+    }
+  }, [isInitialized, publicClient, contractAddresses]);
 
   const getETHPrice = useCallback(async () => {
-    if (!isInitialized || !contracts.courseFactory) {
-      throw new Error("Contracts not initialized");
+    if (!isInitialized) {
+      throw new Error("Not initialized");
     }
 
-    return retryOperation(async () => {
-      const price = await contracts.courseFactory.getETHPrice();
-      return ethers.formatUnits(price, 8);
-    });
-  }, [contracts, isInitialized, retryOperation]);
+    try {
+      const price = await publicClient.readContract({
+        address: contractAddresses.courseFactory,
+        abi: CourseFactoryABI,
+        functionName: "getETHPrice",
+      });
+
+      return formatUnits(price, 8);
+    } catch (error) {
+      console.error("Get ETH price error:", error);
+      throw error;
+    }
+  }, [isInitialized, publicClient, contractAddresses]);
 
   const getMaxPriceInETH = useCallback(async () => {
-    if (!isInitialized || !contracts.courseFactory) {
-      throw new Error("Contracts not initialized");
+    if (!isInitialized) {
+      throw new Error("Not initialized");
     }
 
-    return retryOperation(async () => {
-      const maxPrice = await contracts.courseFactory.getMaxPriceInETH();
-      return ethers.formatEther(maxPrice);
-    });
-  }, [contracts, isInitialized, retryOperation]);
+    try {
+      const maxPrice = await publicClient.readContract({
+        address: contractAddresses.courseFactory,
+        abi: CourseFactoryABI,
+        functionName: "getMaxPriceInETH",
+      });
 
-  // License Methods
+      return formatEther(maxPrice);
+    } catch (error) {
+      console.error("Get max price error:", error);
+      throw error;
+    }
+  }, [isInitialized, publicClient, contractAddresses]);
+
+  // ==================== COURSE LICENSE FUNCTIONS ====================
+
   const mintLicense = useCallback(
     async (courseId, duration = 1) => {
-      if (!isInitialized || !contracts.courseLicense) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized || !walletClient) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
+      try {
+        // Get course to calculate price
         const course = await getCourse(courseId);
         const pricePerMonthInWei = BigInt(course.pricePerMonthWei);
         const totalPrice = pricePerMonthInWei * BigInt(duration);
 
-        const tx = await contracts.courseLicense.mintLicense(
-          courseId,
-          duration,
-          {
-            value: totalPrice,
-          }
-        );
+        const { hash } = await walletClient.writeContract({
+          address: contractAddresses.courseLicense,
+          abi: CourseLicenseABI,
+          functionName: "mintLicense",
+          args: [BigInt(courseId), BigInt(duration)],
+          value: totalPrice,
+        });
 
-        const receipt = await tx.wait();
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
+        // Clear cache
         const cacheKey = `${address}-${courseId}`;
-        licenseCache.current.delete(cacheKey);
+        cacheRef.current.licenses.delete(cacheKey);
 
         return {
           success: true,
-          transactionHash: receipt.hash,
+          transactionHash: receipt.transactionHash,
         };
-      });
+      } catch (error) {
+        console.error("Mint license error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, address, getCourse, retryOperation]
+    [
+      isInitialized,
+      walletClient,
+      publicClient,
+      contractAddresses,
+      address,
+      getCourse,
+    ]
   );
 
   const hasValidLicense = useCallback(
     async (userAddress, courseId) => {
-      if (!isInitialized || !contracts.courseLicense) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
       const cacheKey = `${userAddress}-${courseId}`;
-      const cached = licenseCache.current.get(cacheKey);
+      const cached = cacheRef.current.licenses.get(cacheKey);
 
-      if (cached && Date.now() - cached.timestamp < cacheExpiry) {
+      if (
+        cached &&
+        Date.now() - cached.timestamp < cacheRef.current.cacheExpiry
+      ) {
         return cached.result;
       }
 
-      return retryOperation(async () => {
-        const isValid = await contracts.courseLicense.hasValidLicense(
-          userAddress,
-          courseId
-        );
+      try {
+        const isValid = await publicClient.readContract({
+          address: contractAddresses.courseLicense,
+          abi: CourseLicenseABI,
+          functionName: "hasValidLicense",
+          args: [userAddress, BigInt(courseId)],
+        });
 
-        licenseCache.current.set(cacheKey, {
+        cacheRef.current.licenses.set(cacheKey, {
           result: isValid,
           timestamp: Date.now(),
         });
 
         return isValid;
-      });
+      } catch (error) {
+        console.error("Check valid license error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, cacheExpiry, retryOperation]
+    [isInitialized, publicClient, contractAddresses]
   );
 
   const getLicense = useCallback(
     async (userAddress, courseId) => {
-      if (!isInitialized || !contracts.courseLicense) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        const licenseData = await contracts.courseLicense.getLicense(
-          userAddress,
-          courseId
-        );
+      try {
+        const licenseData = await publicClient.readContract({
+          address: contractAddresses.courseLicense,
+          abi: CourseLicenseABI,
+          functionName: "getLicense",
+          args: [userAddress, BigInt(courseId)],
+        });
 
         return {
           courseId: licenseData.courseId.toString(),
@@ -629,235 +503,263 @@ export function Web3Provider({ children }) {
           expiryTimestamp: new Date(Number(licenseData.expiryTimestamp) * 1000),
           isActive: licenseData.isActive,
         };
-      });
+      } catch (error) {
+        console.error("Get license error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, retryOperation]
+    [isInitialized, publicClient, contractAddresses]
   );
 
   const getUserLicenses = useCallback(
     async (userAddress) => {
-      if (!isInitialized || !contracts.courseLicense) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
+      try {
         const totalCourses = await getTotalCourses();
         const licenses = [];
 
-        for (let courseId = 1; courseId <= totalCourses; courseId++) {
-          try {
-            const balance = await contracts.courseLicense.balanceOf(
-              userAddress,
-              courseId
-            );
+        // Batch read licenses
+        const courseIds = Array.from({ length: totalCourses }, (_, i) => i + 1);
 
-            if (Number(balance) > 0) {
+        for (const courseId of courseIds) {
+          try {
+            const hasLicense = await hasValidLicense(userAddress, courseId);
+            if (hasLicense) {
               const licenseData = await getLicense(userAddress, courseId);
-              if (licenseData.isActive) {
-                licenses.push({
-                  ...licenseData,
-                  courseId: courseId.toString(),
-                });
-              }
+              licenses.push({
+                ...licenseData,
+                courseId: courseId.toString(),
+              });
             }
           } catch (error) {
             console.warn(
               `Failed to check license for course ${courseId}:`,
-              error.message
+              error
             );
           }
         }
 
         return licenses;
-      });
+      } catch (error) {
+        console.error("Get user licenses error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, getTotalCourses, getLicense, retryOperation]
+    [isInitialized, getTotalCourses, hasValidLicense, getLicense]
   );
 
-  // Progress Tracker Methods
+  // ==================== PROGRESS TRACKER FUNCTIONS ====================
+
   const completeSection = useCallback(
     async (courseId, sectionId) => {
-      if (!isInitialized || !contracts.progressTracker) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized || !walletClient) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        const tx = await contracts.progressTracker.completeSection(
-          courseId,
-          sectionId
-        );
-        const receipt = await tx.wait();
+      try {
+        const { hash } = await walletClient.writeContract({
+          address: contractAddresses.progressTracker,
+          abi: ProgressTrackerABI,
+          functionName: "completeSection",
+          args: [BigInt(courseId), BigInt(sectionId)],
+        });
 
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+        // Clear cache
         const cacheKey = `progress_${address}_${courseId}`;
-        progressCache.current.delete(cacheKey);
+        cacheRef.current.progress.delete(cacheKey);
 
         return {
           success: true,
-          transactionHash: receipt.hash,
+          transactionHash: receipt.transactionHash,
         };
-      });
+      } catch (error) {
+        console.error("Complete section error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, address, retryOperation]
+    [isInitialized, walletClient, publicClient, contractAddresses, address]
   );
 
   const getUserProgress = useCallback(
     async (userAddress, courseId) => {
-      if (!isInitialized || !contracts.progressTracker) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
       const cacheKey = `progress_${userAddress}_${courseId}`;
-      const cached = progressCache.current.get(cacheKey);
+      const cached = cacheRef.current.progress.get(cacheKey);
 
-      if (cached && Date.now() - cached.timestamp < cacheExpiry) {
+      if (
+        cached &&
+        Date.now() - cached.timestamp < cacheRef.current.cacheExpiry
+      ) {
         return cached.progress;
       }
 
-      return retryOperation(async () => {
-        try {
-          const sectionsProgress =
-            await contracts.progressTracker.getCourseSectionsProgress(
-              userAddress,
-              courseId
-            );
+      try {
+        const [sectionsProgress, progressPercentage] = await Promise.all([
+          publicClient.readContract({
+            address: contractAddresses.progressTracker,
+            abi: ProgressTrackerABI,
+            functionName: "getCourseSectionsProgress",
+            args: [userAddress, BigInt(courseId)],
+          }),
+          publicClient.readContract({
+            address: contractAddresses.progressTracker,
+            abi: ProgressTrackerABI,
+            functionName: "getCourseProgressPercentage",
+            args: [userAddress, BigInt(courseId)],
+          }),
+        ]);
 
-          const completedSections = sectionsProgress.filter((p) => p).length;
-          const progressPercentage =
-            await contracts.progressTracker.getCourseProgressPercentage(
-              userAddress,
-              courseId
-            );
+        const completedSections = sectionsProgress.filter((p) => p).length;
 
-          const progress = {
-            courseId: courseId.toString(),
-            completedSections,
-            totalSections: sectionsProgress.length,
-            progressPercentage: Number(progressPercentage),
-            sectionsProgress,
-          };
+        const progress = {
+          courseId: courseId.toString(),
+          completedSections,
+          totalSections: sectionsProgress.length,
+          progressPercentage: Number(progressPercentage),
+          sectionsProgress,
+        };
 
-          progressCache.current.set(cacheKey, {
-            progress,
-            timestamp: Date.now(),
-          });
+        cacheRef.current.progress.set(cacheKey, {
+          progress,
+          timestamp: Date.now(),
+        });
 
-          return progress;
-        } catch (error) {
-          console.error(`Error fetching user progress:`, error.message);
+        return progress;
+      } catch (error) {
+        console.error("Get user progress error:", error);
 
-          const defaultProgress = {
-            courseId: courseId.toString(),
-            completedSections: 0,
-            totalSections: 0,
-            progressPercentage: 0,
-            sectionsProgress: [],
-          };
-
-          progressCache.current.set(cacheKey, {
-            progress: defaultProgress,
-            timestamp: Date.now(),
-          });
-
-          return defaultProgress;
-        }
-      });
+        // Return default progress on error
+        return {
+          courseId: courseId.toString(),
+          completedSections: 0,
+          totalSections: 0,
+          progressPercentage: 0,
+          sectionsProgress: [],
+        };
+      }
     },
-    [contracts, isInitialized, cacheExpiry, retryOperation]
+    [isInitialized, publicClient, contractAddresses]
   );
 
   const isCourseCompleted = useCallback(
     async (userAddress, courseId) => {
-      if (!isInitialized || !contracts.progressTracker) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        return await contracts.progressTracker.isCourseCompleted(
-          userAddress,
-          courseId
-        );
-      });
+      try {
+        return await publicClient.readContract({
+          address: contractAddresses.progressTracker,
+          abi: ProgressTrackerABI,
+          functionName: "isCourseCompleted",
+          args: [userAddress, BigInt(courseId)],
+        });
+      } catch (error) {
+        console.error("Check course completed error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, retryOperation]
+    [isInitialized, publicClient, contractAddresses]
   );
 
-  // Certificate Methods
+  // ==================== CERTIFICATE FUNCTIONS ====================
+
   const issueCertificate = useCallback(
     async (courseId, studentName) => {
-      if (!isInitialized || !contracts.certificateManager) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized || !walletClient) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        const fee = await contracts.certificateManager.certificateFee();
+      try {
+        // Get certificate fee
+        const fee = await publicClient.readContract({
+          address: contractAddresses.certificateManager,
+          abi: CertificateManagerABI,
+          functionName: "certificateFee",
+        });
 
-        const tx = await contracts.certificateManager.issueCertificate(
-          courseId,
-          studentName.trim(),
-          { value: fee }
-        );
+        const { hash } = await walletClient.writeContract({
+          address: contractAddresses.certificateManager,
+          abi: CertificateManagerABI,
+          functionName: "issueCertificate",
+          args: [BigInt(courseId), studentName.trim()],
+          value: fee,
+        });
 
-        const receipt = await tx.wait();
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
         return {
           success: true,
-          transactionHash: receipt.hash,
+          transactionHash: receipt.transactionHash,
         };
-      });
+      } catch (error) {
+        console.error("Issue certificate error:", error);
+        throw error;
+      }
     },
-    [contracts, isInitialized, retryOperation]
+    [isInitialized, walletClient, publicClient, contractAddresses]
   );
 
   const getCertificateForCourse = useCallback(
     async (userAddress, courseId) => {
-      if (!isInitialized || !contracts.certificateManager) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
-        try {
-          const certificateId =
-            await contracts.certificateManager.getStudentCertificate(
-              userAddress,
-              courseId
-            );
+      try {
+        const certificateId = await publicClient.readContract({
+          address: contractAddresses.certificateManager,
+          abi: CertificateManagerABI,
+          functionName: "getStudentCertificate",
+          args: [userAddress, BigInt(courseId)],
+        });
 
-          if (Number(certificateId) === 0) {
-            return null;
-          }
-
-          const cert = await contracts.certificateManager.getCertificate(
-            certificateId
-          );
-
-          if (!cert.isValid) {
-            return null;
-          }
-
-          return {
-            id: cert.certificateId.toString(),
-            courseId: cert.courseId.toString(),
-            student: cert.student,
-            studentName: cert.studentName,
-            issuedAt: new Date(Number(cert.issuedAt) * 1000),
-            isValid: cert.isValid,
-          };
-        } catch (error) {
-          console.error(`Error fetching certificate:`, error.message);
+        if (Number(certificateId) === 0) {
           return null;
         }
-      });
+
+        const cert = await publicClient.readContract({
+          address: contractAddresses.certificateManager,
+          abi: CertificateManagerABI,
+          functionName: "getCertificate",
+          args: [certificateId],
+        });
+
+        if (!cert.isValid) {
+          return null;
+        }
+
+        return {
+          id: cert.certificateId.toString(),
+          courseId: cert.courseId.toString(),
+          student: cert.student,
+          studentName: cert.studentName,
+          issuedAt: new Date(Number(cert.issuedAt) * 1000),
+          isValid: cert.isValid,
+        };
+      } catch (error) {
+        console.error("Get certificate error:", error);
+        return null;
+      }
     },
-    [contracts, isInitialized, retryOperation]
+    [isInitialized, publicClient, contractAddresses]
   );
 
   const getUserCertificates = useCallback(
     async (userAddress) => {
-      if (!isInitialized || !contracts.certificateManager) {
-        throw new Error("Contracts not initialized");
+      if (!isInitialized) {
+        throw new Error("Not initialized");
       }
 
-      return retryOperation(async () => {
+      try {
         const licenses = await getUserLicenses(userAddress);
         const certificates = [];
 
@@ -870,38 +772,72 @@ export function Web3Provider({ children }) {
             if (cert) {
               certificates.push(cert);
             }
-          } catch (certError) {
+          } catch (error) {
             console.warn(
               `Failed to get certificate for course ${license.courseId}:`,
-              certError.message
+              error
             );
           }
         }
 
         return certificates;
-      });
+      } catch (error) {
+        console.error("Get user certificates error:", error);
+        throw error;
+      }
     },
-    [
-      contracts,
-      isInitialized,
-      getUserLicenses,
-      getCertificateForCourse,
-      retryOperation,
-    ]
+    [isInitialized, getUserLicenses, getCertificateForCourse]
   );
 
-  // ✅ CRITICAL FIX: Export ALL methods in contextValue
-  const contextValue = useMemo(() => {
-    return {
+  // ==================== HELPER FUNCTIONS ====================
+
+  const waitForTransaction = useCallback(
+    async (hash) => {
+      if (!hash) throw new Error("No transaction hash");
+
+      return await publicClient.waitForTransactionReceipt({
+        hash,
+        confirmations: 1,
+      });
+    },
+    [publicClient]
+  );
+
+  const parseEventLogs = useCallback((receipt, abi, eventName) => {
+    try {
+      const logs = receipt.logs || [];
+      for (const log of logs) {
+        try {
+          const decoded = decodeEventLog({
+            abi,
+            data: log.data,
+            topics: log.topics,
+          });
+          if (decoded.eventName === eventName) {
+            return decoded;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error("Parse event logs error:", error);
+      return null;
+    }
+  }, []);
+
+  // ==================== CONTEXT VALUE ====================
+
+  const contextValue = useMemo(
+    () => ({
       // State
-      contracts: Object.keys(contracts).length > 0 ? contracts : {},
-      provider,
-      signer,
       isInitialized,
       initError,
+      modalPreventionActive,
+      contracts: contractAddresses,
 
-      // ✅ ALL METHODS EXPORTED
-      retryOperation,
+      // Course Factory
       createCourse,
       getAllCourses,
       getCourse,
@@ -912,55 +848,48 @@ export function Web3Provider({ children }) {
       getETHPrice,
       getMaxPriceInETH,
 
-      // License methods
+      // Course License
       mintLicense,
       hasValidLicense,
       getLicense,
       getUserLicenses,
 
-      // Progress methods
+      // Progress Tracker
       completeSection,
       getUserProgress,
       isCourseCompleted,
 
-      // Certificate methods
+      // Certificate Manager
       issueCertificate,
       getCertificateForCourse,
       getUserCertificates,
-
-      // ✅ Modal prevention status
-      modalPreventionActive: stableRefs.current.modalPreventionActive,
-    };
-  }, [
-    // ✅ Stable dependencies
-    Object.keys(contracts).length,
-    Boolean(provider),
-    Boolean(signer),
-    isInitialized,
-    initError,
-
-    // Method dependencies
-    retryOperation,
-    createCourse,
-    getAllCourses,
-    getCourse,
-    getCourseSections,
-    addCourseSection,
-    getCreatorCourses,
-    getTotalCourses,
-    getETHPrice,
-    getMaxPriceInETH,
-    mintLicense,
-    hasValidLicense,
-    getLicense,
-    getUserLicenses,
-    completeSection,
-    getUserProgress,
-    isCourseCompleted,
-    issueCertificate,
-    getCertificateForCourse,
-    getUserCertificates,
-  ]);
+    }),
+    [
+      isInitialized,
+      initError,
+      modalPreventionActive,
+      contractAddresses,
+      createCourse,
+      getAllCourses,
+      getCourse,
+      getCourseSections,
+      addCourseSection,
+      getCreatorCourses,
+      getTotalCourses,
+      getETHPrice,
+      getMaxPriceInETH,
+      mintLicense,
+      hasValidLicense,
+      getLicense,
+      getUserLicenses,
+      completeSection,
+      getUserProgress,
+      isCourseCompleted,
+      issueCertificate,
+      getCertificateForCourse,
+      getUserCertificates,
+    ]
+  );
 
   return (
     <Web3Context.Provider value={contextValue}>{children}</Web3Context.Provider>

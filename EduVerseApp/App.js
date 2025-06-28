@@ -1,4 +1,4 @@
-// src/App.js - MASTER: Complete stability
+// src/App.js - PRODUCTION READY: Zero Race Condition
 import "@walletconnect/react-native-compat";
 import { WagmiProvider } from "wagmi";
 import { sepolia } from "viem/chains";
@@ -32,21 +32,26 @@ LogBox.ignoreLogs([
   "getLoadedFonts is not a function",
   "Duplicate session",
   "Session already exists",
+  "Non-serializable values were found in the navigation state",
 ]);
 
 SplashScreen.preventAutoHideAsync();
 
-// ✅ MASTER: Stable configuration objects
+// ✅ PRODUCTION: Optimized Query Client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
-      staleTime: 120000, // Longer cache
-      gcTime: 300000, // Extended garbage collection
+      retry: false, // Prevent retry to avoid race conditions
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-      refetchOnMount: false,
-      refetchIntervalInBackground: false, // ✅ Prevent background refetch
+      refetchOnMount: "always", // Always refetch on mount for fresh data
+      refetchInterval: false,
+      refetchIntervalInBackground: false,
+    },
+    mutations: {
+      retry: false,
     },
   },
 });
@@ -66,87 +71,130 @@ const metadata = {
 
 const chains = [mantaPacificTestnet, sepolia];
 
-// ✅ MASTER: Ultra-stable wagmi config
+// ✅ PRODUCTION: Wagmi Config with minimal features
 const wagmiConfig = defaultWagmiConfig({
   chains,
   projectId,
   metadata,
-  pollingInterval: 30000, // Much longer polling
-  cacheTime: 300000, // Extended cache
-  batch: {
-    multicall: true,
-  },
-  autoConnect: false, // ✅ Critical: No auto-connect
-  persister: null, // ✅ Disable persistence to prevent state conflicts
+  enableCoinbase: false, // Disable unnecessary features
+  enableInjected: false,
+  enableWalletConnect: true,
 });
 
-// ✅ MASTER: AppKit with minimal features to reduce state changes
-createAppKit({
+// ✅ PRODUCTION: AppKit with controlled features
+const appKit = createAppKit({
   projectId,
   wagmiConfig,
   defaultChain: mantaPacificTestnet,
   enableAnalytics: false,
-  debug: false, // ✅ Disable debug in production
+  debug: false,
   features: {
-    email: true,
-    socials: ["x", "discord", "apple"],
-    emailShowWallets: true,
+    email: false, // Disable email to prevent auto-triggers
+    socials: [], // Disable socials
+    emailShowWallets: false,
     swaps: false,
-    onramp: false, // ✅ Disable features that can cause state changes
+    onramp: false,
+    history: false, // Disable history to prevent state issues
   },
-  themeMode: "light", // ✅ Fixed theme to prevent theme changes
+  themeMode: "light",
   themeVariables: {
-    "--w3m-z-index": 1000, // ✅ Ensure proper z-index
+    "--w3m-z-index": 999,
   },
-  featuredWalletIds: [
-    "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96",
-    "1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369",
-    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0",
+  includeWalletIds: [
+    "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96", // MetaMask
+    "1ae92b26df02f0abca6304df07debccd18262fdf5fe82daa81593582dac9a369", // Rainbow
+    "4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0", // Trust
   ],
 });
 
+// ✅ PRODUCTION: Global error boundary
+const errorHandler = (error, isFatal) => {
+  if (isFatal) {
+    Alert.alert(
+      "Unexpected error occurred",
+      `Error: ${error.message || "Unknown error"}\n\nPlease restart the app.`,
+      [{ text: "OK" }]
+    );
+  }
+  console.error("Global error:", error);
+};
+
+if (ErrorUtils) {
+  ErrorUtils.setGlobalHandler(errorHandler);
+}
+
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
+  const [initError, setInitError] = useState(null);
 
-  // ✅ MASTER: Stable preparation with error handling
+  // ✅ PRODUCTION: Robust initialization
   useEffect(() => {
+    let mounted = true;
+
     async function prepare() {
       try {
-        console.log("🚀 Starting app preparation...");
+        console.log("🚀 Starting EduVerse initialization...");
 
+        // Validate environment
         if (!projectId) {
-          console.error(
-            "Project ID is not configured. Please check your .env file."
-          );
-          Alert.alert(
-            "Configuration Error",
-            "Project ID is missing. Please check your environment configuration."
-          );
+          throw new Error("Project ID is not configured");
         }
 
-        // ✅ Add preparation delay for stability
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Initialize with delay for stability
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
-        console.log("✅ App preparation completed");
-      } catch (e) {
-        console.warn("App preparation error:", e);
-      } finally {
-        setAppIsReady(true);
+        if (mounted) {
+          console.log("✅ EduVerse initialization completed");
+          setAppIsReady(true);
+        }
+      } catch (error) {
+        console.error("❌ Initialization error:", error);
+        if (mounted) {
+          setInitError(error.message);
+          setAppIsReady(true); // Still show app but with error
+        }
       }
     }
 
     prepare();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const onLayoutRootView = useCallback(async () => {
     if (appIsReady) {
-      await SplashScreen.hideAsync();
+      try {
+        await SplashScreen.hideAsync();
+      } catch (error) {
+        console.warn("SplashScreen hide error:", error);
+      }
     }
   }, [appIsReady]);
 
-  // ✅ MASTER: Memoized providers to prevent unnecessary re-renders
-  const providers = useMemo(
-    () => (
+  // ✅ PRODUCTION: Memoized app content
+  const appContent = useMemo(() => {
+    if (!appIsReady) {
+      return null;
+    }
+
+    if (initError) {
+      return (
+        <SafeAreaProvider>
+          <SafeAreaView style={styles.errorContainer}>
+            <Text style={styles.errorText}>
+              Configuration Error: {initError}
+            </Text>
+            <Text style={styles.errorSubtext}>
+              Please check your environment configuration
+            </Text>
+          </SafeAreaView>
+        </SafeAreaProvider>
+      );
+    }
+
+    return (
       <SafeAreaProvider>
         <WagmiProvider config={wagmiConfig}>
           <QueryClientProvider client={queryClient}>
@@ -166,20 +214,34 @@ export default function App() {
           </QueryClientProvider>
         </WagmiProvider>
       </SafeAreaProvider>
-    ),
-    [appIsReady, onLayoutRootView]
-  );
+    );
+  }, [appIsReady, initError, onLayoutRootView]);
 
-  if (!appIsReady) {
-    return null;
-  }
-
-  return providers;
+  return appContent;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#ff0000",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
   },
 });

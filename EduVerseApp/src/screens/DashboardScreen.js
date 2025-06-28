@@ -1,5 +1,11 @@
-// src/screens/DashboardScreen.js - Updated with Web3Context
-import React, { useState, useEffect, useCallback, useRef } from "react";
+// src/screens/DashboardScreen.js - PRODUCTION READY
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import {
   View,
   Text,
@@ -10,6 +16,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  RefreshControl,
 } from "react-native";
 import { useAccount, useChainId } from "wagmi";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +26,7 @@ import {
   useMintLicense,
   useUserCourses,
   useHasActiveLicense,
+  useSmartContract,
 } from "../hooks/useBlockchain";
 import CourseCard from "../components/CourseCard";
 import CourseDetailModal from "../components/CourseDetailModal";
@@ -36,23 +44,17 @@ const formatRupiah = (number) => {
 export default function DashboardScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const { isInitialized, modalPreventionActive } = useSmartContract();
+
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const [modalInteracting, setModalInteracting] = useState(false);
-  const modalTimeoutRef = useRef(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // State untuk kurs ETH -> IDR
   const [ethToIdrRate, setEthToIdrRate] = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
 
-  // Enhanced pagination support
-  const [pagination, setPagination] = useState({
-    offset: 0,
-    limit: 20,
-    hasMore: true,
-  });
-
-  // Blockchain hooks dengan pagination
+  // Blockchain hooks
   const {
     courses,
     loading: coursesLoading,
@@ -60,12 +62,12 @@ export default function DashboardScreen({ navigation }) {
     hasMore,
     refetch: refetchCourses,
     loadMore,
-  } = useCourses(pagination.offset, pagination.limit);
+  } = useCourses(0, 20);
 
   const { mintLicense, loading: mintLoading } = useMintLicense();
   const { refetch: refetchUserCourses } = useUserCourses();
 
-  // Enhanced license checking hook for selected course
+  // License checking for selected course
   const {
     hasLicense,
     licenseData,
@@ -75,13 +77,12 @@ export default function DashboardScreen({ navigation }) {
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
-  // Enhanced ETH price fetching dengan retry mechanism
+  // Fetch ETH price
   const fetchEthPriceInIdr = useCallback(async (retries = 3) => {
     try {
       setRateLoading(true);
       const response = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr",
-        { timeout: 10000 }
+        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr"
       );
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -104,7 +105,6 @@ export default function DashboardScreen({ navigation }) {
 
       // Fallback price
       setEthToIdrRate(55000000);
-      console.log("Using fallback ETH price");
     } finally {
       setRateLoading(false);
     }
@@ -118,97 +118,48 @@ export default function DashboardScreen({ navigation }) {
     return () => clearInterval(priceInterval);
   }, [fetchEthPriceInIdr]);
 
-  // Enhanced refresh with better error handling
+  // Handle refresh
   const handleRefresh = useCallback(async () => {
-    try {
-      console.log("🔄 Refreshing dashboard data...");
+    setRefreshing(true);
 
-      // Reset pagination
-      setPagination({ offset: 0, limit: 20, hasMore: true });
+    await Promise.allSettled([
+      refetchCourses(),
+      fetchEthPriceInIdr(),
+      refetchUserCourses(),
+    ]);
 
-      // Parallel refresh
-      await Promise.allSettled([
-        refetchCourses(),
-        fetchEthPriceInIdr(),
-        refetchUserCourses(),
-      ]);
-
-      console.log("✅ Dashboard refresh completed");
-    } catch (error) {
-      console.error("❌ Dashboard refresh error:", error);
-      Alert.alert("Error", "Gagal memperbarui data. Silakan coba lagi.");
-    }
+    setRefreshing(false);
   }, [refetchCourses, fetchEthPriceInIdr, refetchUserCourses]);
 
-  // Load more courses (pagination)
-  const handleLoadMore = useCallback(async () => {
-    if (!hasMore || coursesLoading) return;
-
-    console.log("📚 Loading more courses...");
-    setPagination((prev) => ({
-      ...prev,
-      offset: prev.offset + prev.limit,
-    }));
-
-    await loadMore();
-  }, [hasMore, coursesLoading, loadMore]);
-
-  // Cleanup timeout when component unmounts
-  useEffect(() => {
-    return () => {
-      if (modalTimeoutRef.current) {
-        clearTimeout(modalTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Enhanced course detail opening dengan preloading
+  // Open course detail
   const handleOpenDetail = useCallback(
-    async (course) => {
-      if (modalInteracting) {
-        console.log("Modal interaction already in progress");
+    (course) => {
+      if (modalPreventionActive) {
+        console.log("Modal interaction prevented during initialization");
         return;
       }
 
-      console.log("🔍 Opening course detail:", course.title);
-      setModalInteracting(true);
-
-      // Clear any existing timeout
-      if (modalTimeoutRef.current) {
-        clearTimeout(modalTimeoutRef.current);
-      }
-
-      // Show modal immediately untuk improve UX
       setSelectedCourse(course);
       setModalVisible(true);
-
-      // Reset interaction state
-      modalTimeoutRef.current = setTimeout(() => {
-        setModalInteracting(false);
-        modalTimeoutRef.current = null;
-      }, 1500);
     },
-    [modalInteracting]
+    [modalPreventionActive]
   );
 
-  // Enhanced mint license dengan proper duration validation
+  // Mint license handler
   const handleMintLicense = async (course, selectedDuration = 1) => {
     if (!isOnMantaNetwork) {
       Alert.alert(
-        "Jaringan Salah",
-        "Silakan pindah ke Manta Pacific Testnet untuk membeli lisensi."
+        "Wrong Network",
+        "Please switch to Manta Pacific Testnet to purchase licenses."
       );
       return;
     }
 
-    // Validate duration according to smart contract (max 12 months)
-    if (selectedDuration <= 0) {
-      Alert.alert("Error", "Durasi harus lebih dari 0 bulan");
-      return;
-    }
-
-    if (selectedDuration > 12) {
-      Alert.alert("Error", "Durasi maksimal 12 bulan per transaksi");
+    if (!isInitialized) {
+      Alert.alert(
+        "Not Ready",
+        "Smart contracts are still initializing. Please wait."
+      );
       return;
     }
 
@@ -217,94 +168,53 @@ export default function DashboardScreen({ navigation }) {
         `🎫 Minting license: Course ${course.id}, Duration: ${selectedDuration} month(s)`
       );
 
-      // Calculate expected price for confirmation
-      const pricePerMonth = parseFloat(course.pricePerMonth);
-      const totalPriceETH = pricePerMonth * selectedDuration;
-      const estimatedPriceIDR = ethToIdrRate ? totalPriceETH * ethToIdrRate : 0;
-
-      console.log("💰 License pricing:", {
-        pricePerMonth: `${pricePerMonth} ETH`,
-        duration: `${selectedDuration} months`,
-        totalETH: `${totalPriceETH} ETH`,
-        estimatedIDR: formatRupiah(estimatedPriceIDR),
-      });
-
       const result = await mintLicense(course.id, selectedDuration);
 
       if (result.success) {
-        const durationText =
-          selectedDuration === 1 ? "1 bulan" : `${selectedDuration} bulan`;
-
         Alert.alert(
-          "Berhasil! 🎉",
-          `Lisensi ${durationText} untuk "${course.title}" berhasil dibeli!` +
-            `\n\n💰 Total: ${totalPriceETH} ETH (≈ ${formatRupiah(
-              estimatedPriceIDR
-            )})` +
-            `\n📋 Transaction: ${result.transactionHash?.slice(0, 10)}...`,
+          "Success! 🎉",
+          `License purchased successfully for "${course.title}"!`,
           [
             {
-              text: "Lihat Kursus Saya",
+              text: "View My Courses",
               onPress: () => navigation.navigate("MyCourses"),
-            },
-            {
-              text: "Mulai Belajar",
-              onPress: () => {
-                navigation.navigate("CourseDetail", {
-                  courseId: course.id,
-                  courseTitle: course.title,
-                });
-              },
             },
             { text: "OK", style: "default" },
           ]
         );
 
-        // Enhanced data refresh
         await Promise.allSettled([refetchUserCourses(), refetchLicense()]);
 
         setModalVisible(false);
       } else {
-        throw new Error(result.error || "Gagal membeli lisensi");
+        throw new Error(result.error || "Failed to mint license");
       }
     } catch (error) {
       console.error("❌ License minting error:", error);
 
-      let errorMessage = "Terjadi kesalahan saat membeli lisensi.";
+      let errorMessage = "Failed to purchase license.";
 
       if (
         error.message.includes("rejected") ||
         error.message.includes("denied")
       ) {
-        errorMessage = "Transaksi dibatalkan oleh pengguna.";
+        errorMessage = "Transaction was rejected by user.";
       } else if (error.message.includes("insufficient")) {
-        errorMessage = "Saldo ETH tidak cukup untuk membeli lisensi.";
-      } else if (error.message.includes("Course not found")) {
-        errorMessage = "Course tidak ditemukan.";
-      } else if (error.message.includes("Course is not active")) {
-        errorMessage = "Course sudah tidak aktif.";
-      } else if (error.message.includes("Duration must be positive")) {
-        errorMessage = "Durasi harus lebih dari 0 bulan.";
-      } else if (error.message.includes("Maximum 12 months")) {
-        errorMessage = "Durasi maksimal 12 bulan per transaksi.";
-      } else if (error.message.includes("No valid License")) {
-        errorMessage = "Anda sudah memiliki lisensi untuk course ini.";
+        errorMessage = "Insufficient ETH balance for purchase.";
       }
 
-      Alert.alert("Gagal", errorMessage);
+      Alert.alert("Error", errorMessage);
     }
   };
 
   const renderHeader = () => (
     <View style={styles.header}>
       <View>
-        <Text style={styles.headerTitle}>Jelajahi Kursus</Text>
-        <Text style={styles.headerSubtitle}>
-          Temukan pengetahuan baru di blockchain
-        </Text>
+        <Text style={styles.headerTitle}>Explore Courses</Text>
+        <Text style={styles.headerSubtitle}>Learn blockchain development</Text>
         {courses.length > 0 && (
           <Text style={styles.coursesCount}>
-            {courses.length} kursus tersedia
+            {courses.length} courses available
           </Text>
         )}
       </View>
@@ -316,10 +226,8 @@ export default function DashboardScreen({ navigation }) {
     </View>
   );
 
-  // Enhanced render item dengan error handling
   const renderItem = ({ item }) => {
     try {
-      // Enhanced price calculation
       const priceInEth = parseFloat(item.pricePerMonth || "0");
       const priceInIdr =
         ethToIdrRate && !rateLoading ? priceInEth * ethToIdrRate : 0;
@@ -329,7 +237,7 @@ export default function DashboardScreen({ navigation }) {
           course={item}
           onDetailPress={handleOpenDetail}
           priceInIdr={formatRupiah(priceInIdr)}
-          priceLoading={rateLoading || modalInteracting}
+          priceLoading={rateLoading}
           hidePrice={false}
         />
       );
@@ -339,7 +247,6 @@ export default function DashboardScreen({ navigation }) {
     }
   };
 
-  // Enhanced empty state
   const renderEmptyState = () => (
     <View style={styles.centered}>
       <Ionicons
@@ -348,49 +255,42 @@ export default function DashboardScreen({ navigation }) {
         color={coursesError ? "#ef4444" : "#cbd5e1"}
       />
       <Text style={styles.emptyTitle}>
-        {coursesError ? "Gagal Memuat Kursus" : "Belum Ada Kursus"}
+        {coursesError ? "Failed to Load Courses" : "No Courses Available"}
       </Text>
       <Text style={styles.emptySubtitle}>
         {coursesError
-          ? "Terjadi kesalahan saat mengambil data dari blockchain"
-          : "Cek kembali nanti untuk kursus baru."}
+          ? "Error loading blockchain data"
+          : "Check back later for new courses."}
       </Text>
       <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
         <Ionicons name="refresh-outline" size={16} color="#8b5cf6" />
-        <Text style={styles.retryText}>Coba Lagi</Text>
+        <Text style={styles.retryText}>Try Again</Text>
       </TouchableOpacity>
     </View>
   );
 
-  // Enhanced footer untuk pagination
   const renderFooter = () => {
     if (!hasMore) return null;
 
     return (
       <View style={styles.footerLoader}>
-        <TouchableOpacity
-          style={styles.loadMoreButton}
-          onPress={handleLoadMore}
-        >
-          <Text style={styles.loadMoreText}>Muat Lebih Banyak</Text>
+        <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
+          <Text style={styles.loadMoreText}>Load More</Text>
           <Ionicons name="chevron-down-outline" size={16} color="#8b5cf6" />
         </TouchableOpacity>
       </View>
     );
   };
 
-  // Enhanced price calculation untuk modal dengan duration support
   const calculateModalPrice = (duration = 1) => {
-    if (!selectedCourse || !ethToIdrRate) return "Menghitung...";
+    if (!selectedCourse || !ethToIdrRate) return "Calculating...";
 
     const priceInEth = parseFloat(selectedCourse.pricePerMonth || "0");
+    if (priceInEth === 0) return "Free";
 
-    if (priceInEth === 0) return "Gratis";
-
-    // Apply discount logic same as CourseDetailModal
     const originalTotal = priceInEth * duration;
 
-    // Discount tiers (same as DURATION_OPTIONS in CourseDetailModal)
+    // Apply discounts
     let discount = 0;
     if (duration === 3) discount = 10;
     else if (duration === 6) discount = 15;
@@ -402,48 +302,53 @@ export default function DashboardScreen({ navigation }) {
     return formatRupiah(totalPriceInIdr);
   };
 
+  // Show loading state
+  if (!isInitialized && coursesLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+        {renderHeader()}
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#8b5cf6" />
+          <Text style={styles.loadingText}>
+            Initializing blockchain connection...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
       {renderHeader()}
 
-      {coursesLoading && !courses.length ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#8b5cf6" />
-          <Text style={styles.loadingText}>
-            Mengambil data dari blockchain...
-          </Text>
-          <Text style={styles.loadingSubtext}>
-            Memproses {pagination.limit} kursus pertama
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={courses?.filter((c) => c.isActive) || []}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={renderEmptyState}
-          ListFooterComponent={renderFooter}
-          onRefresh={handleRefresh}
-          refreshing={coursesLoading}
-          showsVerticalScrollIndicator={false}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={10}
-        />
-      )}
+      <FlatList
+        data={courses?.filter((c) => c.isActive) || []}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={renderFooter}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={["#8b5cf6"]}
+            tintColor="#8b5cf6"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+      />
 
       <CourseDetailModal
         visible={modalVisible}
         course={selectedCourse}
         onClose={() => {
           setModalVisible(false);
-          setModalInteracting(false);
-          if (modalTimeoutRef.current) {
-            clearTimeout(modalTimeoutRef.current);
-            modalTimeoutRef.current = null;
-          }
         }}
         onMintLicense={handleMintLicense}
         isMinting={mintLoading}
@@ -507,11 +412,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748b",
     fontWeight: "500",
-  },
-  loadingSubtext: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#94a3b8",
   },
   emptyTitle: {
     fontSize: 18,

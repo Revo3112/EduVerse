@@ -1,10 +1,10 @@
-// src/components/ActionButtons.js - MASTER: Complete prevention system
+// src/components/ActionButtons.js - PRODUCTION READY: Complete prevention
 import React, { useCallback } from "react";
 import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
 import { useAccount, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import { AppKitButton, useAppKit } from "@reown/appkit-wagmi-react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useWeb3 } from "../contexts/Web3Context"; // ✅ Import Web3Context
+import { useSmartContract } from "../hooks/useBlockchain";
 import { mantaPacificTestnet } from "../constants/blockchain";
 
 export default function ActionButtons({ navigation }) {
@@ -14,12 +14,12 @@ export default function ActionButtons({ navigation }) {
   const chainId = useChainId();
   const { switchChain, isPending: isSwitchPending } = useSwitchChain();
 
-  // ✅ CRITICAL: Get prevention status from Web3Context
-  const { modalPreventionActive, isInitialized } = useWeb3();
+  // ✅ CRITICAL: Get prevention status from hooks
+  const { modalPreventionActive, isInitialized } = useSmartContract();
 
   const isOnCorrectNetwork = chainId === mantaPacificTestnet.id;
 
-  // ✅ MASTER: Safe modal opening with prevention check
+  // ✅ PRODUCTION: Safe modal opening with prevention check
   const handleOpenWalletModal = useCallback(() => {
     if (modalPreventionActive) {
       console.log("🚫 Modal opening prevented during contract initialization");
@@ -132,7 +132,7 @@ export default function ActionButtons({ navigation }) {
     );
   }, [disconnect]);
 
-  // ✅ CRITICAL: Safe connect button - no auto triggers
+  // ✅ PRODUCTION: Safe connect button - no auto triggers
   if (!isConnected) {
     return (
       <View style={styles.container}>
@@ -150,13 +150,17 @@ export default function ActionButtons({ navigation }) {
             <AppKitButton
               label="Connect Wallet"
               size="md"
-              balance="hide" // ✅ Hide balance to prevent state triggers
+              balance="hide"
+              disabled={modalPreventionActive}
             />
           </View>
 
           {/* ✅ Alternative: Manual trigger button */}
           <Pressable
-            style={styles.manualConnectButton}
+            style={[
+              styles.manualConnectButton,
+              modalPreventionActive && styles.disabledButton,
+            ]}
             onPress={handleOpenWalletModal}
             disabled={modalPreventionActive}
           >
@@ -213,7 +217,8 @@ export default function ActionButtons({ navigation }) {
           <Pressable
             style={[
               styles.actionButton,
-              (!isInitialized || !isOnCorrectNetwork) && styles.disabledButton,
+              (!isInitialized || !isOnCorrectNetwork) &&
+                styles.disabledActionButton,
             ]}
             onPress={handleCreateCourse}
             disabled={!isInitialized || !isOnCorrectNetwork}
@@ -225,7 +230,7 @@ export default function ActionButtons({ navigation }) {
           <Pressable
             style={[
               styles.actionButton,
-              !isInitialized && styles.disabledButton,
+              !isInitialized && styles.disabledActionButton,
             ]}
             onPress={handleViewCertificates}
             disabled={!isInitialized}
@@ -237,7 +242,7 @@ export default function ActionButtons({ navigation }) {
           <Pressable
             style={[
               styles.actionButton,
-              modalPreventionActive && styles.disabledButton,
+              modalPreventionActive && styles.disabledActionButton,
             ]}
             onPress={handleOpenWalletModal}
             disabled={modalPreventionActive}
@@ -331,14 +336,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   disconnectedTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#000",
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#333",
+    marginTop: 20,
     marginBottom: 8,
   },
   disconnectedSubtitle: {
-    fontSize: 14,
-    color: "#8E8E93",
+    fontSize: 16,
+    color: "#666",
     textAlign: "center",
     marginBottom: 24,
   },
@@ -457,6 +463,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   disabledButton: {
+    backgroundColor: "#C7C7CC",
+    opacity: 0.6,
+  },
+  disabledActionButton: {
     backgroundColor: "#C7C7CC",
     opacity: 0.6,
   },

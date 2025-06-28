@@ -1,5 +1,5 @@
 // src/screens/CourseDetailScreen.js - Enhanced with latest SmartContract integration
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAccount } from "wagmi";
 import { useSmartContract } from "../hooks/useBlockchain";
 
+// Cache for section data to improve performance
+const sectionCache = new Map();
+
 export default function CourseDetailScreen({ route, navigation }) {
   const { courseId, courseTitle } = route.params;
   const { address } = useAccount();
@@ -26,6 +29,17 @@ export default function CourseDetailScreen({ route, navigation }) {
   const [hasValidLicense, setHasValidLicense] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [licenseChecking, setLicenseChecking] = useState(false);
+
+  // Ref to track if component is mounted
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // ✅ ENHANCED: Enhanced useEffect sesuai dengan pattern initialization terbaru
   useEffect(() => {
@@ -41,11 +55,12 @@ export default function CourseDetailScreen({ route, navigation }) {
       loadCourseData();
     } else {
       console.log("Skipping loadCourseData - conditions not met");
+      setLoading(false);
     }
   }, [courseId, address, isInitialized, smartContractService]);
 
   // ✅ ENHANCED: Load course data dengan SmartContractService terbaru
-  const loadCourseData = async () => {
+  const loadCourseData = useCallback(async () => {
     try {
       setLoading(true);
       console.log(
@@ -70,14 +85,22 @@ export default function CourseDetailScreen({ route, navigation }) {
       // ✅ Load course details menggunakan method terbaru
       const courseData = await smartContractService.getCourse(courseId);
       console.log("Course data loaded:", courseData?.title || "No title");
-      setCourse(courseData);
+
+      if (isMountedRef.current) {
+        setCourse(courseData);
+      }
 
       // ✅ Load course sections dengan URL support
       const sectionsData = await smartContractService.getCourseSections(
         courseId
       );
       console.log("Sections loaded:", sectionsData?.length || 0, "sections");
-      setSections(sectionsData);
+
+      if (isMountedRef.current) {
+        setSections(sectionsData || []);
+        // Cache sections for faster navigation
+        sectionCache.set(courseId, sectionsData);
+      }
 
       if (address) {
         // ✅ Check license validity dengan caching mechanism
@@ -87,16 +110,27 @@ export default function CourseDetailScreen({ route, navigation }) {
           "courseId:",
           courseId
         );
+
+        setLicenseChecking(true);
         try {
           const licenseValid = await smartContractService.hasValidLicense(
             address,
             courseId
           );
           console.log("License check result:", licenseValid);
-          setHasValidLicense(licenseValid);
+
+          if (isMountedRef.current) {
+            setHasValidLicense(licenseValid);
+          }
         } catch (licenseError) {
           console.error("Error checking license:", licenseError);
-          setHasValidLicense(false);
+          if (isMountedRef.current) {
+            setHasValidLicense(false);
+          }
+        } finally {
+          if (isMountedRef.current) {
+            setLicenseChecking(false);
+          }
         }
 
         // ✅ Get user progress dengan enhanced structure
@@ -106,269 +140,403 @@ export default function CourseDetailScreen({ route, navigation }) {
             courseId
           );
           console.log("User progress loaded:", userProgress);
-          setProgress(userProgress);
+
+          if (isMountedRef.current) {
+            setProgress(userProgress);
+          }
         } catch (progressError) {
           console.error("Error loading user progress:", progressError);
-          setProgress({
-            courseId: courseId.toString(),
-            completedSections: 0,
-            totalSections: 0,
-            progressPercentage: 0,
-            sectionsProgress: [],
-          });
+          if (isMountedRef.current) {
+            setProgress({
+              courseId: courseId.toString(),
+              completedSections: 0,
+              totalSections: sectionsData?.length || 0,
+              progressPercentage: 0,
+              sectionsProgress: [],
+            });
+          }
         }
       }
     } catch (error) {
       console.error("Error loading course data:", error);
-      Alert.alert("Error", "Failed to load course data: " + error.message);
+      if (isMountedRef.current) {
+        Alert.alert("Error", "Failed to load course data: " + error.message);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [courseId, address, smartContractService, isInitialized]);
 
   // ✅ ENHANCED: Refresh handler
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     console.log("Manual refresh triggered");
     setRefreshing(true);
-    setHasValidLicense(false); // Reset license state
+
+    // Clear cache for this course
+    sectionCache.delete(courseId);
+
     await loadCourseData();
-    setRefreshing(false);
-  };
+
+    if (isMountedRef.current) {
+      setRefreshing(false);
+    }
+  }, [courseId, loadCourseData]);
 
   // ✅ ENHANCED: Section press handler dengan real-time license check
-  const handleSectionPress = (section, index) => {
-    console.log("Section pressed:", {
-      sectionId: section.id,
-      hasValidLicense,
-      address,
-    });
+  const handleSectionPress = useCallback(
+    async (section, index) => {
+      console.log("Section pressed:", {
+        sectionId: section.id,
+        sectionIndex: index,
+        hasValidLicense,
+        address,
+      });
 
-    if (!hasValidLicense) {
-      checkLicenseRealTime(section, index);
-      return;
-    }
-
-    // Navigate to section detail
-    navigation.navigate("SectionDetail", {
-      courseId: courseId,
-      sectionId: section.id,
-      sectionIndex: index,
-      courseTitle: course?.title || courseTitle,
-    });
-  };
-
-  // ✅ ENHANCED: Real-time license check
-  const checkLicenseRealTime = async (section, index) => {
-    try {
-      if (!address || !smartContractService) {
-        Alert.alert("Error", "Wallet not connected or service not available");
+      if (!hasValidLicense) {
+        await checkLicenseRealTime(section, index);
         return;
       }
 
-      console.log("Real-time license check for section access...");
-      setLoading(true);
+      // Navigate to section detail
+      navigation.navigate("SectionDetail", {
+        courseId: courseId,
+        sectionId: section.id,
+        sectionIndex: index,
+        courseTitle: course?.title || courseTitle,
+        sectionData: section, // Pass section data for faster loading
+      });
+    },
+    [hasValidLicense, courseId, course, courseTitle, navigation, address]
+  );
 
-      const licenseValid = await smartContractService.hasValidLicense(
-        address,
-        courseId
-      );
-      console.log("Real-time license check result:", licenseValid);
+  // ✅ ENHANCED: Real-time license check with better UX
+  const checkLicenseRealTime = useCallback(
+    async (section, index) => {
+      try {
+        if (!address || !smartContractService) {
+          Alert.alert("Error", "Wallet not connected or service not available");
+          return;
+        }
 
-      setLoading(false);
+        console.log("Real-time license check for section access...");
+        setLicenseChecking(true);
 
-      if (licenseValid) {
-        setHasValidLicense(true);
-        navigation.navigate("SectionDetail", {
-          courseId: courseId,
-          sectionId: section.id,
-          sectionIndex: index,
-          courseTitle: course?.title || courseTitle,
-        });
-      } else {
+        const licenseValid = await smartContractService.hasValidLicense(
+          address,
+          courseId
+        );
+        console.log("Real-time license check result:", licenseValid);
+
+        if (isMountedRef.current) {
+          setLicenseChecking(false);
+          setHasValidLicense(licenseValid);
+        }
+
+        if (licenseValid) {
+          // License is valid, navigate to section
+          navigation.navigate("SectionDetail", {
+            courseId: courseId,
+            sectionId: section.id,
+            sectionIndex: index,
+            courseTitle: course?.title || courseTitle,
+            sectionData: section,
+          });
+        } else {
+          Alert.alert(
+            "Access Denied",
+            "You need a valid license for this course to access sections.",
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Refresh", onPress: handleRefresh },
+              {
+                text: "Get License",
+                onPress: () => navigation.getParent()?.navigate("Dashboard"),
+              },
+            ]
+          );
+        }
+      } catch (error) {
+        console.error("Error in real-time license check:", error);
+        if (isMountedRef.current) {
+          setLicenseChecking(false);
+        }
         Alert.alert(
-          "Access Denied",
-          "You need a valid license for this course to access sections.",
-          [
-            { text: "Cancel", style: "cancel" },
-            { text: "Refresh", onPress: () => handleRefresh() },
-            {
-              text: "Get License",
-              onPress: () => navigation.getParent()?.navigate("Dashboard"),
-            },
-          ]
+          "Error",
+          "Failed to verify license. Please try refreshing."
         );
       }
-    } catch (error) {
-      console.error("Error in real-time license check:", error);
-      setLoading(false);
-      Alert.alert("Error", "Failed to verify license. Please try refreshing.");
-    }
-  };
+    },
+    [
+      address,
+      smartContractService,
+      courseId,
+      course,
+      courseTitle,
+      navigation,
+      handleRefresh,
+    ]
+  );
 
   // ✅ Utility functions
-  const formatDuration = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
+  const formatDuration = useCallback((seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
     const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-  };
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${remainingSeconds}s`;
+    } else {
+      return `${remainingSeconds}s`;
+    }
+  }, []);
 
   // ✅ ENHANCED: Check if section is completed using progress data
-  const isSectionCompleted = (sectionIndex) => {
-    if (!progress || !progress.sectionsProgress) return false;
-    return progress.sectionsProgress[sectionIndex] === true;
-  };
+  const isSectionCompleted = useCallback(
+    (sectionIndex) => {
+      if (!progress || !progress.sectionsProgress) return false;
+      return progress.sectionsProgress[sectionIndex] === true;
+    },
+    [progress]
+  );
+
+  // ✅ Calculate total duration
+  const getTotalDuration = useCallback(() => {
+    if (!sections || sections.length === 0) return 0;
+    return sections.reduce(
+      (total, section) => total + (section.duration || 0),
+      0
+    );
+  }, [sections]);
 
   // ✅ ENHANCED: Render section item dengan completion status
-  const renderSectionItem = ({ item, index }) => {
-    const isCompleted = isSectionCompleted(index);
+  const renderSectionItem = useCallback(
+    ({ item, index }) => {
+      const isCompleted = isSectionCompleted(index);
+      const isLocked = !hasValidLicense;
 
-    return (
-      <TouchableOpacity
-        style={[
-          styles.sectionItem,
-          !hasValidLicense && styles.sectionItemLocked,
-        ]}
-        onPress={() => handleSectionPress(item, index)}
-        disabled={!hasValidLicense}
-      >
-        <View style={styles.sectionLeft}>
-          <View
-            style={[
-              styles.sectionNumber,
-              isCompleted && styles.sectionNumberCompleted,
-              !hasValidLicense && styles.sectionNumberLocked,
-            ]}
-          >
-            {isCompleted ? (
-              <Ionicons name="checkmark" size={16} color="#fff" />
-            ) : (
-              <Text
-                style={[
-                  styles.sectionNumberText,
-                  !hasValidLicense && styles.sectionNumberTextLocked,
-                ]}
-              >
-                {index + 1}
-              </Text>
-            )}
-          </View>
-
-          <View style={styles.sectionInfo}>
-            <Text
-              style={[
-                styles.sectionTitle,
-                !hasValidLicense && styles.sectionTitleLocked,
-              ]}
-              numberOfLines={2}
-            >
-              {item.title}
-            </Text>
-            <Text
-              style={[
-                styles.sectionDuration,
-                !hasValidLicense && styles.sectionDurationLocked,
-              ]}
-            >
-              {formatDuration(item.duration)}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.sectionRight}>
-          {!hasValidLicense ? (
-            <Ionicons name="lock-closed" size={20} color="#ccc" />
-          ) : (
-            <Ionicons name="play-circle" size={24} color="#9747FF" />
-          )}
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  // ✅ ENHANCED: Header dengan course information
-  const renderHeader = () => (
-    <View style={styles.headerContent}>
-      {/* Course Info */}
-      <View style={styles.courseInfo}>
-        <Text style={styles.courseTitle}>{course?.title || courseTitle}</Text>
-        <Text style={styles.courseDescription}>{course?.description}</Text>
-
-        <View style={styles.courseStats}>
-          <View style={styles.statItem}>
-            <Ionicons name="time-outline" size={16} color="#666" />
-            <Text style={styles.statText}>
-              {sections.reduce((total, section) => total + section.duration, 0)}{" "}
-              min total
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <Ionicons name="list-outline" size={16} color="#666" />
-            <Text style={styles.statText}>{sections.length} sections</Text>
-          </View>
-          {course?.creator && (
-            <View style={styles.statItem}>
-              <Ionicons name="person-outline" size={16} color="#666" />
-              <Text style={styles.statText}>
-                {`${course.creator.slice(0, 6)}...${course.creator.slice(-4)}`}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Progress Card */}
-      {hasValidLicense && progress && (
-        <View style={styles.progressCard}>
-          <Text style={styles.progressTitle}>Your Progress</Text>
-          <View style={styles.progressBar}>
+      return (
+        <TouchableOpacity
+          style={[
+            styles.sectionItem,
+            isLocked && styles.sectionItemLocked,
+            isCompleted && styles.sectionItemCompleted,
+          ]}
+          onPress={() => handleSectionPress(item, index)}
+          disabled={licenseChecking}
+          activeOpacity={0.7}
+        >
+          <View style={styles.sectionLeft}>
             <View
               style={[
-                styles.progressFill,
-                { width: `${progress.progressPercentage}%` },
+                styles.sectionNumber,
+                isCompleted && styles.sectionNumberCompleted,
+                isLocked && styles.sectionNumberLocked,
               ]}
-            />
-          </View>
-          <Text style={styles.progressText}>
-            {progress.completedSections} of {progress.totalSections} sections
-            completed ({progress.progressPercentage}%)
-          </Text>
-        </View>
-      )}
+            >
+              {isCompleted ? (
+                <Ionicons name="checkmark" size={16} color="#fff" />
+              ) : (
+                <Text
+                  style={[
+                    styles.sectionNumberText,
+                    isLocked && styles.sectionNumberTextLocked,
+                  ]}
+                >
+                  {index + 1}
+                </Text>
+              )}
+            </View>
 
-      {/* License Status */}
-      <View
-        style={[
-          styles.licenseCard,
-          hasValidLicense ? styles.licenseCardValid : styles.licenseCardInvalid,
-        ]}
-      >
-        <Ionicons
-          name={hasValidLicense ? "shield-checkmark" : "shield-outline"}
-          size={20}
-          color={hasValidLicense ? "#4CAF50" : "#ff6b6b"}
-        />
-        <Text
+            <View style={styles.sectionInfo}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  isLocked && styles.sectionTitleLocked,
+                  isCompleted && styles.sectionTitleCompleted,
+                ]}
+                numberOfLines={2}
+              >
+                {item.title}
+              </Text>
+              <View style={styles.sectionMeta}>
+                <Ionicons
+                  name="time-outline"
+                  size={12}
+                  color={isLocked ? "#ccc" : "#94a3b8"}
+                />
+                <Text
+                  style={[
+                    styles.sectionDuration,
+                    isLocked && styles.sectionDurationLocked,
+                  ]}
+                >
+                  {formatDuration(item.duration || 0)}
+                </Text>
+                {item.contentCID &&
+                  item.contentCID !== "placeholder-video-content" && (
+                    <>
+                      <Text style={styles.metaSeparator}>•</Text>
+                      <Ionicons
+                        name="cloud-done-outline"
+                        size={12}
+                        color={isLocked ? "#ccc" : "#8b5cf6"}
+                      />
+                      <Text
+                        style={[
+                          styles.sectionMeta,
+                          isLocked && styles.sectionDurationLocked,
+                        ]}
+                      >
+                        IPFS
+                      </Text>
+                    </>
+                  )}
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.sectionRight}>
+            {licenseChecking ? (
+              <ActivityIndicator size="small" color="#8b5cf6" />
+            ) : isLocked ? (
+              <Ionicons name="lock-closed" size={20} color="#ccc" />
+            ) : (
+              <Ionicons
+                name={isCompleted ? "checkmark-circle" : "play-circle"}
+                size={24}
+                color={isCompleted ? "#4CAF50" : "#8b5cf6"}
+              />
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [
+      hasValidLicense,
+      licenseChecking,
+      formatDuration,
+      handleSectionPress,
+      isSectionCompleted,
+    ]
+  );
+
+  // ✅ ENHANCED: Header dengan course information
+  const renderHeader = useCallback(
+    () => (
+      <View style={styles.headerContent}>
+        {/* Course Info */}
+        <View style={styles.courseInfo}>
+          <Text style={styles.courseTitle}>{course?.title || courseTitle}</Text>
+          {course?.description && (
+            <Text style={styles.courseDescription}>{course.description}</Text>
+          )}
+
+          <View style={styles.courseStats}>
+            <View style={styles.statItem}>
+              <Ionicons name="time-outline" size={16} color="#666" />
+              <Text style={styles.statText}>
+                {formatDuration(getTotalDuration())} total
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="list-outline" size={16} color="#666" />
+              <Text style={styles.statText}>{sections.length} sections</Text>
+            </View>
+            {course?.creator && (
+              <View style={styles.statItem}>
+                <Ionicons name="person-outline" size={16} color="#666" />
+                <Text style={styles.statText}>
+                  {`${course.creator.slice(0, 6)}...${course.creator.slice(
+                    -4
+                  )}`}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Progress Card */}
+        {hasValidLicense && progress && progress.totalSections > 0 && (
+          <View style={styles.progressCard}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressTitle}>Your Progress</Text>
+              <Text style={styles.progressPercentage}>
+                {progress.progressPercentage}%
+              </Text>
+            </View>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${progress.progressPercentage}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressText}>
+              {progress.completedSections} of {progress.totalSections} sections
+              completed
+            </Text>
+          </View>
+        )}
+
+        {/* License Status */}
+        <View
           style={[
-            styles.licenseText,
+            styles.licenseCard,
             hasValidLicense
-              ? styles.licenseTextValid
-              : styles.licenseTextInvalid,
+              ? styles.licenseCardValid
+              : styles.licenseCardInvalid,
           ]}
         >
-          {hasValidLicense ? "Licensed - Full Access" : "No Valid License"}
-        </Text>
-      </View>
+          <Ionicons
+            name={hasValidLicense ? "shield-checkmark" : "shield-outline"}
+            size={20}
+            color={hasValidLicense ? "#4CAF50" : "#ff6b6b"}
+          />
+          <Text
+            style={[
+              styles.licenseText,
+              hasValidLicense
+                ? styles.licenseTextValid
+                : styles.licenseTextInvalid,
+            ]}
+          >
+            {hasValidLicense ? "Licensed - Full Access" : "No Valid License"}
+          </Text>
+          {licenseChecking && (
+            <ActivityIndicator
+              size="small"
+              color={hasValidLicense ? "#4CAF50" : "#ff6b6b"}
+              style={styles.licenseLoader}
+            />
+          )}
+        </View>
 
-      {/* Sections Header */}
-      <View style={styles.sectionsHeader}>
-        <Text style={styles.sectionsTitle}>Course Sections</Text>
-        <Text style={styles.sectionsSubtitle}>
-          {hasValidLicense
-            ? "Tap to start learning"
-            : "Get a license to unlock"}
-        </Text>
+        {/* Sections Header */}
+        <View style={styles.sectionsHeader}>
+          <Text style={styles.sectionsTitle}>Course Sections</Text>
+          <Text style={styles.sectionsSubtitle}>
+            {hasValidLicense
+              ? "Tap any section to start learning"
+              : "Get a license to unlock all content"}
+          </Text>
+        </View>
       </View>
-    </View>
+    ),
+    [
+      course,
+      courseTitle,
+      sections,
+      progress,
+      hasValidLicense,
+      licenseChecking,
+      formatDuration,
+      getTotalDuration,
+    ]
   );
 
   // ✅ Loading state
@@ -383,11 +551,13 @@ export default function CourseDetailScreen({ route, navigation }) {
             <Ionicons name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Course Details</Text>
+          <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#9747FF" />
-          <Text style={styles.loadingText}>Loading course...</Text>
+          <ActivityIndicator size="large" color="#8b5cf6" />
+          <Text style={styles.loadingText}>Loading course details...</Text>
+          <Text style={styles.loadingSubtext}>Fetching from blockchain...</Text>
         </View>
       </SafeAreaView>
     );
@@ -404,6 +574,7 @@ export default function CourseDetailScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Course Details</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
       {/* Content */}
@@ -418,8 +589,10 @@ export default function CourseDetailScreen({ route, navigation }) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={["#9747FF"]}
-            tintColor="#9747FF"
+            colors={["#8b5cf6"]}
+            tintColor="#8b5cf6"
+            title="Pull to refresh"
+            titleColor="#8b5cf6"
           />
         }
         ListEmptyComponent={() => (
@@ -429,6 +602,17 @@ export default function CourseDetailScreen({ route, navigation }) {
             <Text style={styles.emptySubtitle}>
               This course doesn't have any sections yet.
             </Text>
+            {course?.creator === address && (
+              <TouchableOpacity
+                style={styles.addSectionButton}
+                onPress={() =>
+                  navigation.getParent()?.navigate("Create Course")
+                }
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#8b5cf6" />
+                <Text style={styles.addSectionText}>Add Sections</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       />
@@ -458,6 +642,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: "#333",
+    flex: 1,
+    textAlign: "center",
+  },
+  headerSpacer: {
+    width: 40,
   },
   loadingContainer: {
     flex: 1,
@@ -468,6 +657,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: "#666",
+    fontWeight: "500",
+  },
+  loadingSubtext: {
+    marginTop: 4,
+    fontSize: 14,
+    color: "#94a3b8",
   },
   listContent: {
     paddingBottom: 20,
@@ -512,21 +707,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
     borderRadius: 12,
   },
+  progressHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   progressTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 12,
+  },
+  progressPercentage: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#8b5cf6",
   },
   progressBar: {
     height: 8,
     backgroundColor: "#e0e0e0",
     borderRadius: 4,
     marginBottom: 8,
+    overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#9747FF",
+    backgroundColor: "#8b5cf6",
     borderRadius: 4,
   },
   progressText: {
@@ -555,12 +761,16 @@ const styles = StyleSheet.create({
   licenseText: {
     fontSize: 16,
     fontWeight: "500",
+    flex: 1,
   },
   licenseTextValid: {
     color: "#4CAF50",
   },
   licenseTextInvalid: {
     color: "#ff6b6b",
+  },
+  licenseLoader: {
+    marginLeft: "auto",
   },
   sectionsHeader: {
     paddingHorizontal: 20,
@@ -593,6 +803,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9f9f9",
     borderColor: "#e8e8e8",
   },
+  sectionItemCompleted: {
+    borderColor: "#4CAF50",
+    borderWidth: 1,
+  },
   sectionLeft: {
     flex: 1,
     flexDirection: "row",
@@ -602,7 +816,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#9747FF",
+    backgroundColor: "#8b5cf6",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -633,12 +847,25 @@ const styles = StyleSheet.create({
   sectionTitleLocked: {
     color: "#999",
   },
+  sectionTitleCompleted: {
+    color: "#4CAF50",
+  },
+  sectionMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   sectionDuration: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 12,
+    color: "#94a3b8",
   },
   sectionDurationLocked: {
     color: "#ccc",
+  },
+  metaSeparator: {
+    fontSize: 12,
+    color: "#94a3b8",
+    marginHorizontal: 4,
   },
   sectionRight: {
     marginLeft: 12,
@@ -660,5 +887,20 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
     lineHeight: 20,
+    marginBottom: 24,
+  },
+  addSectionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#ede9fe",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  addSectionText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#8b5cf6",
   },
 });

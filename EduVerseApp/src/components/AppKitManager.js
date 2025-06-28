@@ -1,16 +1,16 @@
-// src/components/AppKitManager.js - MASTER: Complete prevention
+// src/components/AppKitManager.js - PRODUCTION READY: Zero auto-triggers
 import { useEffect, useRef } from "react";
 import { useAppKit, useAppKitState } from "@reown/appkit-wagmi-react-native";
 import { useAccount } from "wagmi";
-import { useWeb3 } from "../contexts/Web3Context";
+import { useSmartContract } from "../hooks/useBlockchain";
 
 export function AppKitManager() {
   const { open } = useAppKit();
   const { selectedNetworkId } = useAppKitState();
   const { isConnected, status } = useAccount();
-  const { modalPreventionActive } = useWeb3();
+  const { modalPreventionActive } = useSmartContract();
 
-  // ✅ MASTER: Track modal state to prevent auto-opening
+  // ✅ PRODUCTION: Track modal state to prevent auto-opening
   const modalStateRef = useRef({
     hasOpenedManually: false,
     lastConnectionStatus: null,
@@ -18,12 +18,13 @@ export function AppKitManager() {
     preventionTimeout: null,
   });
 
-  // ✅ CRITICAL: Override AppKit's auto-open behavior
+  // ✅ PRODUCTION: Extended initialization period
   useEffect(() => {
     if (modalStateRef.current.isInitializing) {
       modalStateRef.current.preventionTimeout = setTimeout(() => {
         modalStateRef.current.isInitializing = false;
-      }, 5000); // Extended initialization period
+        console.log("✅ AppKit initialization period completed");
+      }, 5000);
     }
 
     return () => {
@@ -33,14 +34,11 @@ export function AppKitManager() {
     };
   }, []);
 
-  // ✅ MASTER: Monitor connection changes without triggering modal
+  // ✅ PRODUCTION: Monitor connection changes without triggering modal
   useEffect(() => {
     const currentStatus = status;
-    const wasConnected =
-      modalStateRef.current.lastConnectionStatus === "connected";
-    const isNowConnected = currentStatus === "connected";
 
-    // ✅ Only log significant state changes
+    // Only log significant state changes
     if (modalStateRef.current.lastConnectionStatus !== currentStatus) {
       console.log(
         `🔗 Connection status: ${modalStateRef.current.lastConnectionStatus} → ${currentStatus}`
@@ -48,16 +46,17 @@ export function AppKitManager() {
       modalStateRef.current.lastConnectionStatus = currentStatus;
     }
 
-    // ✅ CRITICAL: NEVER auto-open modal during contract initialization
+    // ✅ CRITICAL: NEVER auto-open modal
+    // All modal opening should be user-initiated through buttons
+  }, [status, isConnected]);
+
+  // ✅ PRODUCTION: Monitor prevention state
+  useEffect(() => {
     if (modalPreventionActive) {
-      console.log("🚫 Modal auto-opening prevented during initialization");
-      return;
+      console.log("🚫 Modal prevention is active");
     }
+  }, [modalPreventionActive]);
 
-    // ✅ CRITICAL: Do NOT auto-open modal on connection changes
-    // Let user manually open modal via buttons ONLY
-  }, [status, isConnected, modalPreventionActive]);
-
-  // ✅ Don't render anything - this is just a state manager
+  // Don't render anything - this is just a state manager
   return null;
 }

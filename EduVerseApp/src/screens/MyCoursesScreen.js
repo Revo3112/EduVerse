@@ -1,4 +1,4 @@
-// src/screens/MyCoursesScreen.js - Updated with Web3Context
+// src/screens/MyCoursesScreen.js - PRODUCTION READY
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -15,11 +15,16 @@ import { useFocusEffect } from "@react-navigation/native";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
 import CourseCard from "../components/CourseCard";
-import { useUserCourses, useCreatorCourses } from "../hooks/useBlockchain";
+import {
+  useUserCourses,
+  useCreatorCourses,
+  useSmartContract,
+} from "../hooks/useBlockchain";
 
 export default function MyCoursesScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const { isInitialized, modalPreventionActive } = useSmartContract();
 
   const [activeTab, setActiveTab] = useState("enrolled");
   const [refreshing, setRefreshing] = useState(false);
@@ -37,6 +42,7 @@ export default function MyCoursesScreen({ navigation }) {
     error: enrolledError,
     refetch: refetchEnrolled,
   } = useUserCourses();
+
   const {
     createdCourses,
     loading: createdLoading,
@@ -57,22 +63,21 @@ export default function MyCoursesScreen({ navigation }) {
   // Helper function to format price in IDR
   const formatPriceInIDR = (priceInETH) => {
     if (!priceInETH || priceInETH === "0" || parseFloat(priceInETH) === 0) {
-      return "Gratis";
+      return "Free";
     }
-    if (!ethToIdrRate) return "Menghitung...";
+    if (!ethToIdrRate) return "Loading...";
 
     const priceInEth = parseFloat(priceInETH);
     const priceInIdr = priceInEth * ethToIdrRate;
     return formatRupiah(priceInIdr);
   };
 
-  // Enhanced ETH price fetching
+  // Fetch ETH price
   const fetchEthPriceInIdr = useCallback(async (retries = 3) => {
     try {
       setRateLoading(true);
       const response = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr",
-        { timeout: 10000 }
+        "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr"
       );
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -95,7 +100,6 @@ export default function MyCoursesScreen({ navigation }) {
 
       // Fallback price
       setEthToIdrRate(55000000);
-      console.log("Using fallback ETH price");
     } finally {
       setRateLoading(false);
     }
@@ -142,10 +146,10 @@ export default function MyCoursesScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  // Course press handler with debouncing
+  // Course press handler
   const handleCoursePress = (course) => {
-    if (navigating) {
-      console.log("Navigation already in progress, preventing duplicate press");
+    if (navigating || modalPreventionActive) {
+      console.log("Navigation prevented");
       return;
     }
 
@@ -248,7 +252,7 @@ export default function MyCoursesScreen({ navigation }) {
     </View>
   );
 
-  // Early returns for connection states
+  // Early returns
   if (!isConnected) {
     return (
       <SafeAreaView style={styles.container}>
@@ -261,6 +265,19 @@ export default function MyCoursesScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <WrongNetworkState />
+      </SafeAreaView>
+    );
+  }
+
+  if (!isInitialized) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centeredContent}>
+          <ActivityIndicator size="large" color="#9747FF" />
+          <Text style={styles.loadingText}>
+            Initializing smart contracts...
+          </Text>
+        </View>
       </SafeAreaView>
     );
   }
