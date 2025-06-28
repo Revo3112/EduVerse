@@ -1,4 +1,3 @@
-// src/screens/CreateCourseScreen.js - Improved Create Course with IPFS and Smart Contract Integration
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
@@ -29,28 +28,48 @@ export default function CreateCourseScreen({ navigation }) {
   const chainId = useChainId();
   const { smartContractService, isInitialized } = useBlockchain();
 
+  // ✅ COURSE DATA STATE
   const [courseData, setCourseData] = useState({
     title: "",
     description: "",
     price: "",
     isPaid: false,
-    thumbnailURI: "",
-    thumbnailCID: "", // Store IPFS CID separately
-    thumbnailUrl: "", // Store accessible URL separately
-    thumbnailFile: null, // Store selected thumbnail file for later upload
+    thumbnailFile: null,
+    thumbnailUrl: "",
   });
 
   const [sections, setSections] = useState([]);
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
 
+  // ✅ UPLOAD PROCESS STATE
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [currentPhase, setCurrentPhase] = useState(0); // 0: idle, 1: files, 2: course, 3: sections
+  const [uploadProgress, setUploadProgress] = useState({
+    phase: 0,
+    percentage: 0,
+    message: "",
+    completedFiles: 0,
+    totalFiles: 0,
+    completedSections: 0,
+    totalSections: 0,
+  });
+
+  // ✅ UPLOAD RESULTS STATE
+  const [uploadResults, setUploadResults] = useState({
+    thumbnailCID: null,
+    videoCIDs: new Map(), // sectionId -> CID
+    courseId: null,
+    sectionIds: [],
+    transactionHashes: [],
+  });
+
+  // ✅ VALIDATION STATE
   const [currentMaxPrice, setCurrentMaxPrice] = useState(null);
   const [priceValidationError, setPriceValidationError] = useState("");
-  const [progressMessage, setProgressMessage] = useState("");
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
+  // ✅ INPUT HANDLERS
   const handleInputChange = (field, value) => {
     setCourseData((prev) => ({
       ...prev,
@@ -58,17 +77,12 @@ export default function CreateCourseScreen({ navigation }) {
     }));
   };
 
-  // Function to handle thumbnail file selection (not upload yet)
   const handleThumbnailSelect = async () => {
     try {
-      // Request permission for camera roll
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Required",
-          "Sorry, we need camera roll permissions to select images."
-        );
+        Alert.alert("Permission Required", "Camera roll permissions needed.");
         return;
       }
 
@@ -80,19 +94,14 @@ export default function CreateCourseScreen({ navigation }) {
         base64: false,
       });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
+      if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
 
-        // Check file size (max 5MB)
         if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-          Alert.alert(
-            "File Too Large",
-            "Please select an image smaller than 5MB."
-          );
+          Alert.alert("File Too Large", "Please select image < 5MB.");
           return;
         }
 
-        // Store the selected file for later upload
         setCourseData((prev) => ({
           ...prev,
           thumbnailFile: {
@@ -101,469 +110,88 @@ export default function CreateCourseScreen({ navigation }) {
             name: asset.fileName || `thumbnail_${Date.now()}.jpg`,
             size: asset.fileSize,
           },
-          thumbnailUrl: asset.uri, // For preview
+          thumbnailUrl: asset.uri,
         }));
 
-        console.log(
-          "✅ Thumbnail file selected (not uploaded yet):",
-          asset.fileName
-        );
+        console.log("✅ Thumbnail selected:", asset.fileName);
       }
     } catch (error) {
       console.error("Error selecting thumbnail:", error);
-      Alert.alert("Error", "Failed to select image. Please try again.");
+      Alert.alert("Error", "Failed to select image.");
     }
   };
 
-  // Function to handle adding a new section from the modal
+  // ✅ SECTION HANDLERS
   const handleAddSection = useCallback(
     (sectionData) => {
-      // Check for maximum sections limit
       if (sections.length >= 50) {
         Alert.alert("Error", "Maximum 50 sections allowed per course");
         return;
       }
 
-      // Check for duplicate section titles
       const duplicateTitle = sections.find(
         (section) =>
           section.title.toLowerCase().trim() === sectionData.title.toLowerCase()
       );
       if (duplicateTitle) {
-        Alert.alert("Error", "A section with this title already exists");
+        Alert.alert("Error", "Section title already exists");
         return;
       }
 
-      // Create new section object - STORE VIDEO FILE FOR LATER UPLOAD
-      const newSectionObj = {
+      const newSection = {
         id: Date.now() + Math.random(),
         title: sectionData.title,
-        contentURI: sectionData.contentURI, // Temporary URI until upload
-        duration: sectionData.duration, // Duration in SECONDS
-        videoFile: sectionData.videoFile, // Store video file for later upload
-        uploadedVideoData: sectionData.uploadedVideoData, // Store upload metadata
+        duration: sectionData.duration, // Already in seconds from AddSectionModal
+        videoFile: sectionData.videoFile,
         orderId: sections.length,
         createdAt: new Date().toISOString(),
-        // Flag to track upload status
         uploadStatus: sectionData.videoFile ? "pending" : "no-video",
       };
 
-      setSections((prevSections) => [...prevSections, newSectionObj]);
-
-      console.log("✅ Section added (video stored for later upload):", {
-        title: newSectionObj.title,
-        hasVideo: !!newSectionObj.videoFile,
-        videoFileName: newSectionObj.videoFile?.name,
-        durationSeconds: newSectionObj.duration,
-      });
+      setSections((prev) => [...prev, newSection]);
+      console.log("✅ Section added:", newSection.title);
     },
     [sections]
   );
 
   const removeSection = useCallback((sectionId) => {
-    Alert.alert(
-      "Remove Section",
-      "Are you sure you want to remove this section?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setSections((prevSections) =>
-              prevSections.filter((s) => s.id !== sectionId)
-            );
-          },
+    Alert.alert("Remove Section", "Are you sure?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          setSections((prev) => prev.filter((s) => s.id !== sectionId));
         },
-      ]
-    );
+      },
+    ]);
   }, []);
 
-  // Main function to create course - EXECUTE ALL UPLOADS HERE
-  const handleCreateCourse = async () => {
-    // Enhanced validation
-    if (!validateCourseData()) {
-      return;
-    }
-
-    // Check if we're already creating a course (prevent double submission)
-    if (isCreatingCourse) {
-      Alert.alert("Please wait", "Course creation is already in progress");
-      return;
-    }
-
-    Alert.alert(
-      "Create Course",
-      `This will create a new course with ${sections.length} sections on the blockchain.\n\n` +
-        `Title: ${courseData.title}\n` +
-        `Price: ${courseData.isPaid ? `${courseData.price} ETH` : "Free"}\n` +
-        `Sections: ${sections.length}\n` +
-        `Videos to upload: ${sections.filter((s) => s.videoFile).length}\n\n` +
-        `Continue?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Create",
-          onPress: executeCreateCourse,
-        },
-      ]
-    );
-  };
-
-  // Execute the actual course creation with proper upload sequence
-  // ✅ Enhanced executeCreateCourse with retry mechanism
-  const executeCreateCourse = async () => {
-    setIsCreatingCourse(true);
-    setUploadProgress(0);
-    setProgressMessage("Starting course creation...");
-
-    try {
-      console.log("🚀 Starting course creation process...");
-
-      // ✅ STEP 1: Upload semua file secara PARALLEL
-      setProgressMessage("Uploading files to IPFS...");
-      setUploadProgress(10);
-
-      const uploadPromises = [];
-
-      // Upload thumbnail
-      if (courseData.thumbnailFile) {
-        uploadPromises.push(
-          uploadThumbnailToIPFS(courseData.thumbnailFile).then((result) => ({
-            type: "thumbnail",
-            result,
-          }))
-        );
-      }
-
-      // Upload videos secara parallel
-      const sectionsWithVideos = sections.filter(
-        (section) => section.videoFile
-      );
-      sectionsWithVideos.forEach((section, index) => {
-        uploadPromises.push(
-          videoService
-            .uploadVideoPublic(section.videoFile, {
-              courseId: "temp-course",
-              sectionId: section.id.toString(),
-              name: section.videoFile.name,
-              metadata: {
-                uploadSource: "CreateCourseScreen",
-                sectionTitle: section.title,
-                uploadedAt: new Date().toISOString(),
-              },
-            })
-            .then((result) => ({
-              type: "video",
-              sectionId: section.id,
-              result,
-            }))
-        );
-      });
-
-      console.log(
-        `📤 Starting parallel upload of ${uploadPromises.length} files...`
-      );
-
-      // Upload semua file secara bersamaan
-      const uploadResults = await Promise.allSettled(uploadPromises);
-
-      let thumbnailResult = null;
-      const videoResults = new Map();
-
-      // Process upload results
-      uploadResults.forEach((promiseResult, index) => {
-        if (promiseResult.status === "fulfilled") {
-          const { type, sectionId, result } = promiseResult.value;
-          if (type === "thumbnail") {
-            thumbnailResult = result;
-          } else if (type === "video") {
-            videoResults.set(sectionId, result);
-          }
-        } else {
-          console.error(`Upload failed:`, promiseResult.reason);
-        }
-      });
-
-      // Validate thumbnail upload
-      if (!thumbnailResult || !thumbnailResult.success) {
-        throw new Error("Failed to upload thumbnail to IPFS");
-      }
-
-      console.log("✅ All files uploaded successfully");
-      setUploadProgress(40);
-
-      // ✅ STEP 2: Prepare sections with uploaded CIDs
-      const uploadedSections = sections.map((section) => {
-        const finalSection = { ...section };
-
-        if (section.videoFile && videoResults.has(section.id)) {
-          const videoResult = videoResults.get(section.id);
-          if (videoResult.success) {
-            // ✅ Extract CID from IPFS hash (remove 'ipfs://' prefix if present)
-            const contentCID = videoResult.ipfsHash.replace("ipfs://", "");
-            finalSection.contentCID = contentCID;
-            finalSection.uploadStatus = "uploaded";
-          } else {
-            finalSection.contentCID = "placeholder-video-content";
-            finalSection.uploadStatus = "failed";
-          }
-        } else {
-          finalSection.contentCID = "placeholder-video-content";
-          finalSection.uploadStatus = "no-video";
-        }
-
-        return finalSection;
-      });
-
-      setUploadProgress(50);
-
-      // ✅ STEP 3: Create course on blockchain
-      setProgressMessage("Creating course on blockchain...");
-
-      const createCourseParams = {
-        title: courseData.title.trim(),
-        description: courseData.description.trim(),
-        thumbnailCID: thumbnailResult.ipfsHash.replace("ipfs://", ""), // ✅ Extract CID only
-        pricePerMonth: courseData.isPaid ? courseData.price.toString() : "0",
-      };
-
-      console.log("📝 Creating course with params:", createCourseParams);
-
-      const createCourseResult = await smartContractService.createCourse(
-        createCourseParams,
-        {
-          gasLimit: "300000",
-          timeout: 60000,
-        }
-      );
-
-      if (!createCourseResult.success) {
-        throw new Error(createCourseResult.error || "Failed to create course");
-      }
-
-      console.log(
-        "✅ Course created successfully:",
-        createCourseResult.courseId
-      );
-      setUploadProgress(60);
-
-      // ✅ STEP 4: Add sections ONE BY ONE dengan proper MetaMask handling
-      const courseId = createCourseResult.courseId;
-      setProgressMessage("Adding sections to course...");
-
-      // ✅ PERBAIKAN UTAMA: Sequential section addition dengan user confirmation
-      const sectionResults = [];
-      let userWantsToSkip = false;
-
-      for (let i = 0; i < uploadedSections.length; i++) {
-        const section = uploadedSections[i];
-        const sectionNumber = i + 1;
-        const totalSections = uploadedSections.length;
-
-        try {
-          setProgressMessage(
-            `Adding section ${sectionNumber}/${totalSections}: "${section.title}"`
-          );
-
-          // ✅ Show confirmation dialog for each section (except first)
-          if (i > 0 && !userWantsToSkip) {
-            const userChoice = await new Promise((resolve) => {
-              Alert.alert(
-                "Add Next Section",
-                `Ready to add section ${sectionNumber}/${totalSections}:\n"${section.title}"\n\nThis will require MetaMask approval.`,
-                [
-                  {
-                    text: "Skip Remaining",
-                    style: "destructive",
-                    onPress: () => resolve("skip"),
-                  },
-                  {
-                    text: "Cancel",
-                    style: "cancel",
-                    onPress: () => resolve("cancel"),
-                  },
-                  {
-                    text: "Continue",
-                    onPress: () => resolve("continue"),
-                  },
-                ]
-              );
-            });
-
-            if (userChoice === "cancel") {
-              throw new Error("Section addition cancelled by user");
-            } else if (userChoice === "skip") {
-              userWantsToSkip = true;
-              console.log("User chose to skip remaining sections");
-              break;
-            }
-          }
-
-          console.log(`📖 Adding section ${sectionNumber}: ${section.title}`);
-          console.log(`Content CID: ${section.contentCID}`);
-
-          // ✅ Add section dengan CID parameter yang benar
-          const sectionResult = await smartContractService.addCourseSection(
-            courseId,
-            {
-              title: section.title.trim(),
-              contentCID: section.contentCID, // ✅ Use CID instead of URI
-              duration: section.duration,
-            },
-            {
-              gasLimit: "200000",
-              timeout: 45000,
-            }
-          );
-
-          if (sectionResult.success) {
-            sectionResults.push({
-              index: i,
-              success: true,
-              sectionId: sectionResult.sectionId,
-              title: section.title,
-              transactionHash: sectionResult.transactionHash,
-            });
-            console.log(`✅ Section ${sectionNumber} added successfully`);
-          } else {
-            console.error(
-              `❌ Failed to add section ${sectionNumber}:`,
-              sectionResult.error
-            );
-            sectionResults.push({
-              index: i,
-              success: false,
-              error: sectionResult.error,
-              title: section.title,
-            });
-          }
-        } catch (sectionError) {
-          console.error(
-            `❌ Failed to add section ${sectionNumber}:`,
-            sectionError
-          );
-
-          // ✅ Handle user rejection gracefully
-          if (
-            sectionError.message.includes("user rejected") ||
-            sectionError.message.includes("User denied") ||
-            sectionError.message.includes("cancelled")
-          ) {
-            sectionResults.push({
-              index: i,
-              success: false,
-              error: "User cancelled transaction",
-              title: section.title,
-            });
-
-            // Ask if user wants to continue with remaining sections
-            const continueChoice = await new Promise((resolve) => {
-              Alert.alert(
-                "Transaction Rejected",
-                `Section "${section.title}" was not added because the transaction was rejected.\n\nDo you want to continue adding the remaining sections?`,
-                [
-                  {
-                    text: "Stop Adding",
-                    style: "destructive",
-                    onPress: () => resolve(false),
-                  },
-                  {
-                    text: "Continue",
-                    onPress: () => resolve(true),
-                  },
-                ]
-              );
-            });
-
-            if (!continueChoice) {
-              console.log("User chose to stop adding sections after rejection");
-              break;
-            }
-          } else {
-            // Other errors
-            sectionResults.push({
-              index: i,
-              success: false,
-              error: sectionError.message,
-              title: section.title,
-            });
-          }
-        }
-
-        // Update progress
-        const progressIncrement = 35 / uploadedSections.length;
-        setUploadProgress(60 + (i + 1) * progressIncrement);
-      }
-
-      setUploadProgress(100);
-      setProgressMessage("Course creation completed!");
-
-      // ✅ PERBAIKAN: Generate success message dengan parameter yang benar
-      const successfulSections = sectionResults.filter((r) => r.success).length;
-      const failedSections = sectionResults.filter((r) => !r.success);
-      const videosUploaded = sections.filter((s) => s.videoFile).length;
-      const videosFailed = sections.filter(
-        (s) => s.videoFile && videoResults.get(s.id)?.success !== true
-      ).length;
-
-      const successMessage = generateSuccessMessage({
-        courseId,
-        successfulSections: successfulSections, // ✅ Fixed: menggunakan successfulSections
-        totalSections: uploadedSections.length,
-        thumbnailHash: thumbnailResult.ipfsHash,
-        price: courseData.isPaid ? `${courseData.price} ETH/month` : "Free",
-        transactionHash: createCourseResult.transactionHash,
-        videosUploaded,
-        videosFailed,
-        failedSections,
-      });
-
-      Alert.alert("Success! 🎉", successMessage);
-      resetForm();
-      navigation.navigate("MyCourses");
-    } catch (error) {
-      console.error("❌ Error creating course:", error);
-      handleCreateCourseError(error);
-    } finally {
-      setIsCreatingCourse(false);
-      setUploadProgress(0);
-      setProgressMessage("");
-    }
-  };
-
-  // Helper function to validate course data
+  // ✅ VALIDATION FUNCTIONS
   const validateCourseData = () => {
-    // Title validation - sesuai smart contract (max 200 chars)
+    // Title validation (smart contract: max 200 chars)
     if (!courseData.title.trim()) {
-      Alert.alert("Error", "Please enter a course title");
-      return false;
-    }
-    if (courseData.title.trim().length < 3) {
-      Alert.alert("Error", "Course title must be at least 3 characters long");
+      Alert.alert("Error", "Course title is required");
       return false;
     }
     if (courseData.title.trim().length > 200) {
-      // ✅ Fixed: sesuai smart contract limit
-      Alert.alert("Error", "Course title cannot exceed 200 characters");
+      Alert.alert("Error", "Title cannot exceed 200 characters");
       return false;
     }
 
-    // Description validation - sesuai smart contract (max 1000 chars)
+    // Description validation (smart contract: max 1000 chars)
     if (!courseData.description.trim()) {
-      Alert.alert("Error", "Please enter a course description");
-      return false;
-    }
-    if (courseData.description.trim().length < 10) {
-      Alert.alert(
-        "Error",
-        "Course description must be at least 10 characters long"
-      );
+      Alert.alert("Error", "Course description is required");
       return false;
     }
     if (courseData.description.trim().length > 1000) {
-      // ✅ Already correct
-      Alert.alert("Error", "Course description cannot exceed 1000 characters");
+      Alert.alert("Error", "Description cannot exceed 1000 characters");
+      return false;
+    }
+
+    // Thumbnail validation
+    if (!courseData.thumbnailFile) {
+      Alert.alert("Error", "Please select a thumbnail image");
       return false;
     }
 
@@ -575,357 +203,596 @@ export default function CreateCourseScreen({ navigation }) {
       }
       const priceValue = parseFloat(courseData.price);
       if (isNaN(priceValue) || priceValue <= 0) {
-        Alert.alert("Error", "Please enter a valid price greater than 0");
+        Alert.alert("Error", "Please enter valid price > 0");
         return false;
       }
       if (currentMaxPrice && priceValue > currentMaxPrice) {
         Alert.alert(
           "Error",
-          `Price cannot exceed ${currentMaxPrice.toFixed(
-            6
-          )} ETH (equivalent to $2 USD)\n\nCurrent maximum allowed: ${currentMaxPrice.toFixed(
-            6
-          )} ETH`
+          `Price exceeds maximum limit of ${currentMaxPrice.toFixed(6)} ETH`
         );
         return false;
       }
-    }
-
-    // Thumbnail validation
-    if (!courseData.thumbnailFile) {
-      Alert.alert("Error", "Please select a thumbnail image");
-      return false;
     }
 
     // Sections validation
     if (sections.length === 0) {
-      Alert.alert("Error", "Please add at least one course section");
-      return false;
-    }
-    if (sections.length > 50) {
-      Alert.alert("Error", "Maximum 50 sections allowed per course");
+      Alert.alert("Error", "Please add at least one section");
       return false;
     }
 
-    // ✅ PERBAIKAN: Validate sections sesuai smart contract limits
+    // Validate each section according to smart contract limits
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i];
 
-      // Section title validation - sesuai smart contract (max 200 chars)
-      if (!section.title.trim()) {
-        Alert.alert("Error", `Section ${i + 1} must have a title`);
-        return false;
-      }
-      if (section.title.trim().length < 3) {
-        Alert.alert(
-          "Error",
-          `Section ${i + 1} title must be at least 3 characters long`
-        );
-        return false;
-      }
-      if (section.title.trim().length > 200) {
-        // ✅ Fixed: sesuai smart contract limit
-        Alert.alert(
-          "Error",
-          `Section ${i + 1} title cannot exceed 200 characters`
-        );
+      if (!section.title.trim() || section.title.trim().length > 200) {
+        Alert.alert("Error", `Section ${i + 1} title invalid (max 200 chars)`);
         return false;
       }
 
-      // Duration validation - sesuai smart contract (max 86400 seconds = 24 hours)
-      if (!section.duration || section.duration <= 0) {
-        Alert.alert("Error", `Section ${i + 1} must have a valid duration`);
-        return false;
-      }
-      if (section.duration > 86400) {
-        // ✅ Fixed: sesuai smart contract limit (24 hours)
+      if (
+        !section.duration ||
+        section.duration <= 0 ||
+        section.duration > 86400
+      ) {
         Alert.alert(
           "Error",
-          `Section ${i + 1} duration cannot exceed 24 hours (86400 seconds)`
+          `Section ${i + 1} duration invalid (max 24 hours)`
         );
         return false;
       }
     }
 
     if (!isInitialized || !smartContractService) {
-      Alert.alert(
-        "Error",
-        "Smart contract service not initialized. Please try again."
-      );
+      Alert.alert("Error", "Smart contract service not ready");
       return false;
     }
 
     return true;
   };
 
-  // Helper function to upload thumbnail using working pattern from IPFSTestScreen
-  const uploadThumbnailToIPFS = async (thumbnailFile, retries = 3) => {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        console.log(`📸 Uploading thumbnail attempt ${attempt}/${retries}...`);
+  // ✅ PHASE 1: UPLOAD ALL FILES TO IPFS
+  const executePhase1_UploadFiles = async () => {
+    console.log("🚀 PHASE 1: Starting file uploads to IPFS");
+    setCurrentPhase(1);
+    setUploadProgress({
+      phase: 1,
+      percentage: 0,
+      message: "Uploading files to IPFS...",
+      completedFiles: 0,
+      totalFiles: 0,
+      completedSections: 0,
+      totalSections: sections.length,
+    });
 
-        if (!thumbnailFile || !thumbnailFile.uri) {
-          throw new Error("Invalid thumbnail file");
-        }
+    const filesToUpload = [];
 
-        if (thumbnailFile.size && thumbnailFile.size > 5 * 1024 * 1024) {
-          throw new Error("Thumbnail file too large (max 5MB)");
-        }
+    // Add thumbnail to upload queue
+    if (courseData.thumbnailFile) {
+      filesToUpload.push({
+        type: "thumbnail",
+        file: courseData.thumbnailFile,
+        id: "thumbnail",
+      });
+    }
 
-        // Use the working pattern from IPFSTestScreen
-        const uploadResult = await pinataService.uploadFile(thumbnailFile, {
-          name: thumbnailFile.name || `course_thumbnail_${Date.now()}.jpg`,
-          network: "public", // Use public network for easy access
-          keyvalues: {
-            category: "thumbnail",
-            courseTitle: courseData.title.trim() || "untitled",
-            app: "eduverse",
-            creator: address || "unknown",
-            uploadedAt: new Date().toISOString(),
-            network: "manta-pacific-testnet",
-            version: "1.0",
-            uploadSource: "CreateCourseScreen",
-          },
+    // Add videos to upload queue
+    sections.forEach((section) => {
+      if (section.videoFile) {
+        filesToUpload.push({
+          type: "video",
+          file: section.videoFile,
+          id: section.id,
+          sectionTitle: section.title,
         });
+      }
+    });
 
-        if (uploadResult.success && uploadResult.ipfsHash) {
-          console.log(
-            `✅ Thumbnail uploaded successfully on attempt ${attempt}:`,
-            uploadResult.ipfsHash
-          );
-          return {
-            success: true,
-            ipfsHash: uploadResult.ipfsHash,
-            publicUrl: uploadResult.publicUrl, // Untuk preview
-          };
-        } else {
-          throw new Error(
-            uploadResult.error || "Upload failed without error info"
-          );
+    const totalFiles = filesToUpload.length;
+    setUploadProgress((prev) => ({ ...prev, totalFiles }));
+
+    console.log(`📤 Uploading ${totalFiles} files to IPFS...`);
+
+    let completedFiles = 0;
+    const results = {
+      thumbnailCID: null,
+      videoCIDs: new Map(),
+    };
+
+    // Upload files sequentially to avoid overwhelming the service
+    for (const fileItem of filesToUpload) {
+      try {
+        console.log(`📁 Uploading ${fileItem.type}: ${fileItem.file.name}`);
+
+        setUploadProgress((prev) => ({
+          ...prev,
+          message: `Uploading ${fileItem.type}: ${fileItem.file.name}`,
+          percentage: Math.round((completedFiles / totalFiles) * 100),
+        }));
+
+        let uploadResult;
+
+        if (fileItem.type === "thumbnail") {
+          uploadResult = await pinataService.uploadFile(fileItem.file, {
+            name: `course_thumbnail_${Date.now()}`,
+            network: "public",
+            keyvalues: {
+              category: "thumbnail",
+              courseTitle: courseData.title.trim(),
+              app: "eduverse",
+              creator: address,
+              uploadedAt: new Date().toISOString(),
+            },
+          });
+
+          if (uploadResult.success) {
+            results.thumbnailCID = uploadResult.ipfsHash.replace("ipfs://", "");
+            console.log(`✅ Thumbnail uploaded: ${results.thumbnailCID}`);
+          } else {
+            throw new Error(uploadResult.error || "Thumbnail upload failed");
+          }
+        } else if (fileItem.type === "video") {
+          uploadResult = await videoService.uploadVideoPublic(fileItem.file, {
+            courseId: "temp-course",
+            sectionId: fileItem.id.toString(),
+            name: fileItem.file.name,
+            metadata: {
+              uploadSource: "CreateCourseScreen",
+              sectionTitle: fileItem.sectionTitle,
+              uploadedAt: new Date().toISOString(),
+            },
+          });
+
+          if (uploadResult.success) {
+            const videoCID = uploadResult.ipfsHash.replace("ipfs://", "");
+            results.videoCIDs.set(fileItem.id, videoCID);
+            console.log(
+              `✅ Video uploaded for section ${fileItem.sectionTitle}: ${videoCID}`
+            );
+          } else {
+            throw new Error(uploadResult.error || "Video upload failed");
+          }
         }
+
+        completedFiles++;
+        setUploadProgress((prev) => ({
+          ...prev,
+          completedFiles,
+          percentage: Math.round((completedFiles / totalFiles) * 100),
+        }));
+
+        // Small delay between uploads to prevent overwhelming
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (error) {
-        console.error(`❌ Thumbnail upload attempt ${attempt} failed:`, error);
-
-        if (attempt === retries) {
-          return {
-            success: false,
-            error: `Failed to upload thumbnail after ${retries} attempts: ${error.message}`,
-          };
-        }
-
-        // Wait before retry
-        const waitTime = Math.pow(2, attempt - 1) * 1000;
-        console.log(`⏳ Retrying upload in ${waitTime}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
+        console.error(`❌ Failed to upload ${fileItem.type}:`, error);
+        throw new Error(`Failed to upload ${fileItem.type}: ${error.message}`);
       }
     }
+
+    console.log("✅ PHASE 1 COMPLETED: All files uploaded to IPFS");
+    setUploadResults((prev) => ({
+      ...prev,
+      thumbnailCID: results.thumbnailCID,
+      videoCIDs: results.videoCIDs,
+    }));
+
+    return results;
   };
 
-  // Helper function to verify price limit
-  const verifyPriceLimit = async (priceValue) => {
-    try {
-      const maxPriceInWei = await smartContractService.getMaxPriceInWei();
-      const maxPriceInEth = parseFloat(ethers.formatEther(maxPriceInWei));
+  // ✅ PHASE 2: CREATE COURSE ON BLOCKCHAIN
+  const executePhase2_CreateCourse = async (uploadedFiles) => {
+    console.log("🔗 PHASE 2: Creating course on blockchain");
+    setCurrentPhase(2);
+    setUploadProgress((prev) => ({
+      ...prev,
+      phase: 2,
+      percentage: 0,
+      message: "Creating course on blockchain...",
+    }));
 
-      if (priceValue > maxPriceInEth) {
-        throw new Error(
-          `Price ${priceValue} ETH exceeds current maximum allowed: ${maxPriceInEth.toFixed(
-            6
-          )} ETH (equivalent to $2 USD)`
-        );
+    const createCourseParams = {
+      title: courseData.title.trim(),
+      description: courseData.description.trim(),
+      thumbnailCID: uploadedFiles.thumbnailCID,
+      pricePerMonth: courseData.isPaid ? courseData.price.toString() : "0",
+    };
+
+    console.log("📝 Creating course with params:", createCourseParams);
+
+    setUploadProgress((prev) => ({
+      ...prev,
+      percentage: 25,
+      message: "Estimating gas and preparing transaction...",
+    }));
+
+    try {
+      const createResult = await smartContractService.createCourse(
+        createCourseParams,
+        {
+          gasLimit: "350000",
+          timeout: 120000, // 2 minutes timeout
+        }
+      );
+
+      if (!createResult.success) {
+        throw new Error(createResult.error || "Failed to create course");
       }
+
+      setUploadProgress((prev) => ({
+        ...prev,
+        percentage: 100,
+        message: "Course created successfully!",
+      }));
 
       console.log(
-        `✅ Price validation passed: ${priceValue} ETH <= ${maxPriceInEth.toFixed(
-          6
-        )} ETH`
+        "✅ PHASE 2 COMPLETED: Course created with ID:",
+        createResult.courseId
       );
-    } catch (priceCheckError) {
-      console.error("❌ Error checking price limit:", priceCheckError);
-      throw new Error("Failed to verify price limit. Please try again.");
+
+      setUploadResults((prev) => ({
+        ...prev,
+        courseId: createResult.courseId,
+        transactionHashes: [
+          ...prev.transactionHashes,
+          createResult.transactionHash,
+        ],
+      }));
+
+      return createResult;
+    } catch (error) {
+      console.error("❌ Failed to create course:", error);
+      throw new Error(`Course creation failed: ${error.message}`);
     }
   };
 
-  // Helper function to generate success message
+  // ✅ PHASE 3: ADD SECTIONS TO COURSE
+  const executePhase3_AddSections = async (courseId, uploadedFiles) => {
+    console.log("📚 PHASE 3: Adding sections to course");
+    setCurrentPhase(3);
+    setUploadProgress((prev) => ({
+      ...prev,
+      phase: 3,
+      percentage: 0,
+      message: "Adding sections to course...",
+      completedSections: 0,
+    }));
+
+    const sectionResults = [];
+    let completedSections = 0;
+
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i];
+      const sectionNumber = i + 1;
+
+      try {
+        setUploadProgress((prev) => ({
+          ...prev,
+          percentage: Math.round((i / sections.length) * 100),
+          message: `Adding section ${sectionNumber}/${sections.length}: "${section.title}"`,
+        }));
+
+        // Get content CID (video CID or placeholder)
+        const contentCID =
+          uploadedFiles.videoCIDs.get(section.id) ||
+          "placeholder-video-content";
+
+        console.log(`📖 Adding section ${sectionNumber}: ${section.title}`);
+        console.log(`Content CID: ${contentCID}`);
+
+        // Show confirmation for each section (except first)
+        if (i > 0) {
+          const userChoice = await new Promise((resolve) => {
+            Alert.alert(
+              "Add Next Section",
+              `Ready to add section ${sectionNumber}/${sections.length}:\n"${section.title}"\n\nThis requires MetaMask approval.`,
+              [
+                {
+                  text: "Skip Remaining",
+                  style: "destructive",
+                  onPress: () => resolve("skip"),
+                },
+                {
+                  text: "Continue",
+                  onPress: () => resolve("continue"),
+                },
+              ]
+            );
+          });
+
+          if (userChoice === "skip") {
+            console.log("User chose to skip remaining sections");
+            break;
+          }
+        }
+
+        const sectionResult = await smartContractService.addCourseSection(
+          courseId,
+          {
+            title: section.title.trim(),
+            contentCID: contentCID,
+            duration: section.duration,
+          },
+          {
+            gasLimit: "250000",
+            timeout: 90000, // 1.5 minutes per section
+          }
+        );
+
+        if (sectionResult.success) {
+          sectionResults.push({
+            index: i,
+            success: true,
+            sectionId: sectionResult.sectionId,
+            title: section.title,
+            transactionHash: sectionResult.transactionHash,
+          });
+          console.log(`✅ Section ${sectionNumber} added successfully`);
+        } else {
+          console.error(
+            `❌ Failed to add section ${sectionNumber}:`,
+            sectionResult.error
+          );
+          sectionResults.push({
+            index: i,
+            success: false,
+            error: sectionResult.error,
+            title: section.title,
+          });
+        }
+
+        completedSections++;
+        setUploadProgress((prev) => ({
+          ...prev,
+          completedSections,
+          percentage: Math.round((completedSections / sections.length) * 100),
+        }));
+
+        // Add delay between transactions to avoid nonce conflicts
+        if (i < sections.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
+      } catch (sectionError) {
+        console.error(
+          `❌ Failed to add section ${sectionNumber}:`,
+          sectionError
+        );
+
+        if (
+          sectionError.message.includes("user rejected") ||
+          sectionError.message.includes("User denied")
+        ) {
+          sectionResults.push({
+            index: i,
+            success: false,
+            error: "User cancelled transaction",
+            title: section.title,
+          });
+
+          const continueChoice = await new Promise((resolve) => {
+            Alert.alert(
+              "Transaction Rejected",
+              `Section "${section.title}" was not added.\n\nContinue with remaining sections?`,
+              [
+                {
+                  text: "Stop Adding",
+                  style: "destructive",
+                  onPress: () => resolve(false),
+                },
+                {
+                  text: "Continue",
+                  onPress: () => resolve(true),
+                },
+              ]
+            );
+          });
+
+          if (!continueChoice) {
+            console.log("User chose to stop adding sections");
+            break;
+          }
+        } else {
+          sectionResults.push({
+            index: i,
+            success: false,
+            error: sectionError.message,
+            title: section.title,
+          });
+        }
+      }
+    }
+
+    console.log("✅ PHASE 3 COMPLETED: Section addition finished");
+
+    const successfulSections = sectionResults.filter((r) => r.success);
+    const failedSections = sectionResults.filter((r) => !r.success);
+
+    setUploadResults((prev) => ({
+      ...prev,
+      sectionIds: successfulSections.map((s) => s.sectionId),
+      transactionHashes: [
+        ...prev.transactionHashes,
+        ...successfulSections.map((s) => s.transactionHash),
+      ],
+    }));
+
+    return {
+      successfulSections,
+      failedSections,
+      totalProcessed: sectionResults.length,
+    };
+  };
+
+  // ✅ MAIN COURSE CREATION ORCHESTRATOR
+  const handleCreateCourse = async () => {
+    if (!validateCourseData()) return;
+
+    if (isCreatingCourse) {
+      Alert.alert("Please wait", "Course creation already in progress");
+      return;
+    }
+
+    const videosToUpload = sections.filter((s) => s.videoFile).length;
+    const totalFiles = videosToUpload + (courseData.thumbnailFile ? 1 : 0);
+
+    Alert.alert(
+      "Create Course",
+      `Ready to create course with ${sections.length} sections?\n\n` +
+        `Title: ${courseData.title}\n` +
+        `Price: ${courseData.isPaid ? `${courseData.price} ETH` : "Free"}\n` +
+        `Files to upload: ${totalFiles}\n\n` +
+        `Process:\n1. Upload files to IPFS\n2. Create course on blockchain\n3. Add sections\n\n` +
+        `Continue?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Create Course", onPress: executeCreateCourse },
+      ]
+    );
+  };
+
+  const executeCreateCourse = async () => {
+    setIsCreatingCourse(true);
+
+    try {
+      console.log("🚀 Starting 3-phase course creation process");
+
+      // PHASE 1: Upload all files to IPFS
+      const uploadedFiles = await executePhase1_UploadFiles();
+
+      // Small delay between phases
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // PHASE 2: Create course on blockchain
+      const courseResult = await executePhase2_CreateCourse(uploadedFiles);
+
+      // Small delay before adding sections
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // PHASE 3: Add sections to course
+      const sectionsResult = await executePhase3_AddSections(
+        courseResult.courseId,
+        uploadedFiles
+      );
+
+      // Generate success message
+      const successMessage = generateSuccessMessage({
+        courseId: courseResult.courseId,
+        successfulSections: sectionsResult.successfulSections.length,
+        totalSections: sections.length,
+        thumbnailCID: uploadedFiles.thumbnailCID,
+        price: courseData.isPaid ? `${courseData.price} ETH/month` : "Free",
+        transactionHash: courseResult.transactionHash,
+        videosUploaded: uploadedFiles.videoCIDs.size,
+        failedSections: sectionsResult.failedSections,
+      });
+
+      Alert.alert("Success! 🎉", successMessage);
+      resetForm();
+      navigation.navigate("MyCourses");
+    } catch (error) {
+      console.error("❌ Course creation failed:", error);
+      handleCreateCourseError(error);
+    } finally {
+      setIsCreatingCourse(false);
+      setCurrentPhase(0);
+      setUploadProgress({
+        phase: 0,
+        percentage: 0,
+        message: "",
+        completedFiles: 0,
+        totalFiles: 0,
+        completedSections: 0,
+        totalSections: 0,
+      });
+    }
+  };
+
+  // ✅ HELPER FUNCTIONS
   const generateSuccessMessage = ({
     courseId,
-    successfulSections, // ✅ Fixed: changed from successfulSectionsCount
+    successfulSections,
     totalSections,
-    thumbnailHash,
+    thumbnailCID,
     price,
     transactionHash,
     videosUploaded,
-    videosFailed,
     failedSections,
   }) => {
     let message = `✅ Course created successfully!\n\n`;
     message += `📚 Course ID: ${courseId}\n`;
-    message += `📖 Sections: ${successfulSections}/${totalSections} added\n`; // ✅ Fixed
-    message += `🖼️ Thumbnail: ${thumbnailHash.substring(0, 12)}...\n`;
-    message += `🎬 Videos: ${videosUploaded} uploaded`;
-    if (videosFailed > 0) {
-      message += `, ${videosFailed} failed`;
-    }
-    message += `\n💰 Price: ${price}\n`;
+    message += `📖 Sections: ${successfulSections}/${totalSections} added\n`;
+    message += `🖼️ Thumbnail: ${thumbnailCID.substring(0, 12)}...\n`;
+    message += `🎬 Videos: ${videosUploaded} uploaded\n`;
+    message += `💰 Price: ${price}\n`;
     message += `🔗 Transaction: ${transactionHash.substring(0, 12)}...`;
 
     if (failedSections.length > 0) {
-      message += `\n\n⚠️ Warning: ${failedSections.length} sections failed to be added:\n`;
+      message += `\n\n⚠️ Warning: ${failedSections.length} sections failed:\n`;
       failedSections.slice(0, 3).forEach((failed) => {
         message += `• ${failed.title}\n`;
       });
       if (failedSections.length > 3) {
         message += `• ... and ${failedSections.length - 3} more\n`;
       }
-      message += `\nYou can add them later from the course management page.`;
+      message += `\nYou can add them later from course management.`;
     }
 
     return message;
   };
 
-  // Helper function to handle create course errors
   const handleCreateCourseError = (error) => {
     let errorMessage = "Failed to create course.";
-    let errorCategory = "unknown";
 
     if (
       error.message.includes("user rejected") ||
       error.message.includes("User denied")
     ) {
       errorMessage = "Transaction was rejected by user.";
-      errorCategory = "user_rejection";
     } else if (error.message.includes("insufficient funds")) {
-      errorMessage = "Insufficient funds to pay for transaction fees.";
-      errorCategory = "insufficient_funds";
-    } else if (
-      error.message.includes("Price exceeds") ||
-      error.message.includes("price")
-    ) {
-      errorMessage = `Price validation failed: ${error.message}`;
-      errorCategory = "price_validation";
-    } else if (
-      error.message.includes("network") ||
-      error.message.includes("timeout")
-    ) {
-      errorMessage =
-        "Network error. Please check your connection and try again.";
-      errorCategory = "network";
+      errorMessage = "Insufficient funds for transaction fees.";
+    } else if (error.message.includes("timeout")) {
+      errorMessage = "Process timed out. Please try again.";
     } else if (
       error.message.includes("IPFS") ||
       error.message.includes("upload")
     ) {
-      errorMessage = `Failed to upload files: ${error.message}`;
-      errorCategory = "ipfs_upload";
-    } else if (error.message.includes("gas")) {
-      errorMessage =
-        "Transaction failed due to gas issues. Please try again with higher gas limit.";
-      errorCategory = "gas";
-    } else if (error.message.includes("revert")) {
-      errorMessage =
-        "Smart contract rejected the transaction. Please check your input values.";
-      errorCategory = "contract_revert";
+      errorMessage = `File upload failed: ${error.message}`;
     } else {
       errorMessage = `Failed to create course: ${error.message}`;
-      errorCategory = "general";
     }
 
-    console.error("❌ Error category:", errorCategory);
     Alert.alert("Error", errorMessage);
   };
 
-  // Helper function to reset form
   const resetForm = () => {
     setCourseData({
       title: "",
       description: "",
       price: "",
       isPaid: false,
-      thumbnailURI: "",
-      thumbnailCID: "",
-      thumbnailUrl: "",
       thumbnailFile: null,
+      thumbnailUrl: "",
     });
     setSections([]);
-    setUploadProgress(0);
-    setPriceValidationError("");
-    setProgressMessage("");
+    setUploadResults({
+      thumbnailCID: null,
+      videoCIDs: new Map(),
+      courseId: null,
+      sectionIds: [],
+      transactionHashes: [],
+    });
   };
 
-  // Section Item component with upload status indicator
-  const SectionItem = React.memo(({ section, onRemove }) => (
-    <View style={styles.sectionItem}>
-      <View style={styles.sectionInfo}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-          {section.videoFile && (
-            <View style={styles.videoStatusBadge}>
-              <Ionicons
-                name={
-                  section.uploadStatus === "uploaded"
-                    ? "checkmark-circle"
-                    : "videocam"
-                }
-                size={16}
-                color={
-                  section.uploadStatus === "uploaded" ? "#4caf50" : "#9747FF"
-                }
-              />
-              <Text style={styles.videoStatusText}>
-                {section.uploadStatus === "uploaded" ? "Ready" : "Will Upload"}
-              </Text>
-            </View>
-          )}
-        </View>
-        <Text style={styles.sectionDuration}>
-          {Math.round(section.duration / 60)} minutes ({section.duration}{" "}
-          seconds)
-        </Text>
-        {section.videoFile && (
-          <Text style={styles.sectionVideoFile}>
-            📹 Video: {section.videoFile.name}
-          </Text>
-        )}
-        {section.contentURI &&
-          section.contentURI !== "placeholder://video-content" && (
-            <Text style={styles.sectionContent} numberOfLines={1}>
-              🔗{" "}
-              {section.contentURI.startsWith("ipfs://")
-                ? "IPFS Content"
-                : "Video Content"}
-            </Text>
-          )}
-        {(!section.contentURI ||
-          section.contentURI === "placeholder://video-content") &&
-          !section.videoFile && (
-            <Text style={styles.sectionContentPlaceholder}>
-              📹 No video content
-            </Text>
-          )}
-      </View>
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={() => onRemove(section.id)}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="trash-outline" size={20} color="#ff4444" />
-      </TouchableOpacity>
-    </View>
-  ));
-
-  // Effect untuk fetch maximum price dari smart contract
+  // ✅ PRICE VALIDATION EFFECTS
   useEffect(() => {
     const fetchMaxPrice = async () => {
       if (smartContractService && isInitialized) {
         try {
-          const maxPriceInWei = await smartContractService.getMaxPriceInWei();
-          if (maxPriceInWei) {
-            const maxPriceInEth = parseFloat(ethers.formatEther(maxPriceInWei));
-            setCurrentMaxPrice(maxPriceInEth);
-            console.log("📊 Maximum price allowed:", maxPriceInEth, "ETH");
-          }
+          const maxPriceInETH = await smartContractService.getMaxPriceInETH();
+          setCurrentMaxPrice(parseFloat(maxPriceInETH));
+          console.log("📊 Maximum price allowed:", maxPriceInETH, "ETH");
         } catch (error) {
           console.error("❌ Error fetching max price:", error);
-          setCurrentMaxPrice(0.001); // Fallback value
+          setCurrentMaxPrice(0.001); // Fallback
         }
       }
     };
@@ -933,7 +800,6 @@ export default function CreateCourseScreen({ navigation }) {
     fetchMaxPrice();
   }, [smartContractService, isInitialized]);
 
-  // Effect untuk validasi price real-time
   useEffect(() => {
     if (courseData.isPaid && courseData.price && currentMaxPrice) {
       const priceValue = parseFloat(courseData.price);
@@ -943,9 +809,7 @@ export default function CreateCourseScreen({ navigation }) {
         setPriceValidationError("Price must be greater than 0");
       } else if (priceValue > currentMaxPrice) {
         setPriceValidationError(
-          `Price cannot exceed ${currentMaxPrice.toFixed(
-            6
-          )} ETH (equivalent to $2 USD)`
+          `Price cannot exceed ${currentMaxPrice.toFixed(6)} ETH (≈ $2 USD)`
         );
       } else {
         setPriceValidationError("");
@@ -955,6 +819,7 @@ export default function CreateCourseScreen({ navigation }) {
     }
   }, [courseData.price, courseData.isPaid, currentMaxPrice]);
 
+  // ✅ RENDER GUARDS
   if (!isConnected) {
     return (
       <SafeAreaView style={styles.container}>
@@ -976,14 +841,14 @@ export default function CreateCourseScreen({ navigation }) {
           <Ionicons name="warning-outline" size={64} color="#ff9500" />
           <Text style={styles.warningTitle}>Wrong Network</Text>
           <Text style={styles.warningSubtitle}>
-            Please switch to Manta Pacific Testnet to create courses
+            Please switch to Manta Pacific Testnet
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Calculate summary for create button
+  // ✅ CALCULATE TOTALS FOR UI
   const videosToUpload = sections.filter((s) => s.videoFile).length;
   const totalFiles = videosToUpload + (courseData.thumbnailFile ? 1 : 0);
 
@@ -994,7 +859,7 @@ export default function CreateCourseScreen({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.title}>Create New Course</Text>
           <Text style={styles.subtitle}>
-            Share your knowledge with the world
+            3-Phase Upload: Files → Course → Sections
           </Text>
         </View>
 
@@ -1002,29 +867,40 @@ export default function CreateCourseScreen({ navigation }) {
           {/* Basic Course Information */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>📚 Course Information</Text>
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Course Title *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter course title"
+                placeholder="Enter course title (max 200 chars)"
                 value={courseData.title}
                 onChangeText={(text) => handleInputChange("title", text)}
                 placeholderTextColor="#999"
+                maxLength={200}
               />
+              <Text style={styles.helperText}>
+                {courseData.title.length}/200 characters
+              </Text>
             </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Description *</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="Describe what students will learn..."
+                placeholder="Describe what students will learn (max 1000 chars)"
                 value={courseData.description}
                 onChangeText={(text) => handleInputChange("description", text)}
                 multiline={true}
                 numberOfLines={4}
                 textAlignVertical="top"
                 placeholderTextColor="#999"
+                maxLength={1000}
               />
+              <Text style={styles.helperText}>
+                {courseData.description.length}/1000 characters
+              </Text>
             </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Thumbnail Image *</Text>
               <TouchableOpacity
@@ -1049,7 +925,7 @@ export default function CreateCourseScreen({ navigation }) {
                         color="#4caf50"
                       />
                       <Text style={styles.thumbnailSelectedText}>
-                        Ready to Upload
+                        Ready for Upload
                       </Text>
                       <Text style={styles.thumbnailChangeText}>
                         Tap to change
@@ -1060,18 +936,14 @@ export default function CreateCourseScreen({ navigation }) {
                   <View style={styles.thumbnailPlaceholder}>
                     <Ionicons name="image-outline" size={48} color="#9e9e9e" />
                     <Text style={styles.thumbnailPlaceholderText}>
-                      Tap to select thumbnail image
+                      Tap to select thumbnail
                     </Text>
                     <Text style={styles.thumbnailRequirements}>
-                      Recommended: 16:9 aspect ratio, max 5MB
+                      16:9 aspect ratio, max 5MB
                     </Text>
                   </View>
                 )}
               </TouchableOpacity>
-              <Text style={styles.helpText}>
-                Select a high-quality image that represents your course. It will
-                be uploaded to IPFS when you create the course.
-              </Text>
             </View>
           </View>
 
@@ -1083,7 +955,7 @@ export default function CreateCourseScreen({ navigation }) {
               <View style={styles.switchInfo}>
                 <Text style={styles.label}>Paid Course</Text>
                 <Text style={styles.switchSubtext}>
-                  Enable if you want to charge for this course
+                  Enable to charge for this course
                 </Text>
               </View>
               <Switch
@@ -1096,7 +968,7 @@ export default function CreateCourseScreen({ navigation }) {
 
             {courseData.isPaid && (
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Price per Month (in ETH)</Text>
+                <Text style={styles.label}>Price per Month (ETH)</Text>
                 <TextInput
                   style={[
                     styles.input,
@@ -1105,7 +977,7 @@ export default function CreateCourseScreen({ navigation }) {
                   placeholder={
                     currentMaxPrice
                       ? `Max: ${currentMaxPrice.toFixed(6)} ETH`
-                      : "0.01"
+                      : "0.001"
                   }
                   value={courseData.price}
                   onChangeText={(text) => handleInputChange("price", text)}
@@ -1116,8 +988,7 @@ export default function CreateCourseScreen({ navigation }) {
                   <Text style={styles.errorText}>{priceValidationError}</Text>
                 ) : currentMaxPrice ? (
                   <Text style={styles.helpText}>
-                    Maximum allowed: {currentMaxPrice.toFixed(6)} ETH
-                    (equivalent to $2 USD)
+                    Maximum: {currentMaxPrice.toFixed(6)} ETH (≈ $2 USD)
                   </Text>
                 ) : null}
               </View>
@@ -1131,6 +1002,7 @@ export default function CreateCourseScreen({ navigation }) {
               <TouchableOpacity
                 style={styles.addSectionButton}
                 onPress={() => setShowAddSectionModal(true)}
+                disabled={isCreatingCourse}
               >
                 <Ionicons name="add" size={20} color="#9747FF" />
                 <Text style={styles.addSectionText}>Add Section</Text>
@@ -1143,7 +1015,9 @@ export default function CreateCourseScreen({ navigation }) {
                   <SectionItem
                     key={section.id}
                     section={section}
+                    index={index}
                     onRemove={removeSection}
+                    disabled={isCreatingCourse}
                   />
                 ))}
                 <View style={styles.sectionsSummary}>
@@ -1154,7 +1028,7 @@ export default function CreateCourseScreen({ navigation }) {
                   {videosToUpload > 0 && (
                     <Text style={styles.videosSummary}>
                       📹 {videosToUpload} video{videosToUpload !== 1 ? "s" : ""}{" "}
-                      ready for upload
+                      ready
                     </Text>
                   )}
                 </View>
@@ -1172,30 +1046,25 @@ export default function CreateCourseScreen({ navigation }) {
           {/* Upload Summary */}
           {totalFiles > 0 && (
             <View style={styles.uploadSummary}>
-              <Text style={styles.uploadSummaryTitle}>📤 Upload Summary</Text>
+              <Text style={styles.uploadSummaryTitle}>📤 Upload Process</Text>
               <Text style={styles.uploadSummaryText}>
-                When you create the course, the following will be uploaded to
-                IPFS:
+                3-Phase Creation Process:
               </Text>
-              <View style={styles.uploadList}>
-                {courseData.thumbnailFile && (
-                  <Text style={styles.uploadItem}>
-                    🖼️ Thumbnail image (
-                    {(courseData.thumbnailFile.size / 1024).toFixed(1)} KB)
-                  </Text>
-                )}
-                {sections
-                  .filter((s) => s.videoFile)
-                  .map((section, index) => (
-                    <Text key={section.id} style={styles.uploadItem}>
-                      🎬 Video: {section.videoFile.name} (
-                      {videoService.formatFileSize(section.videoFile.size)})
-                    </Text>
-                  ))}
+              <View style={styles.phasesList}>
+                <Text style={styles.phaseItem}>
+                  📁 Phase 1: Upload {totalFiles} file
+                  {totalFiles !== 1 ? "s" : ""} to IPFS
+                </Text>
+                <Text style={styles.phaseItem}>
+                  🔗 Phase 2: Create course on blockchain
+                </Text>
+                <Text style={styles.phaseItem}>
+                  📚 Phase 3: Add {sections.length} section
+                  {sections.length !== 1 ? "s" : ""}
+                </Text>
               </View>
               <Text style={styles.uploadSummaryNote}>
-                💡 All files will be uploaded to IPFS with public access for
-                easy sharing and playback.
+                💡 Each phase waits for completion before proceeding
               </Text>
             </View>
           )}
@@ -1222,7 +1091,7 @@ export default function CreateCourseScreen({ navigation }) {
               <View style={styles.creatingContent}>
                 <ActivityIndicator size="small" color="white" />
                 <Text style={styles.createButtonText}>
-                  Creating Course... {uploadProgress}%
+                  {uploadProgress.message || "Creating Course..."}
                 </Text>
               </View>
             ) : (
@@ -1235,20 +1104,54 @@ export default function CreateCourseScreen({ navigation }) {
             )}
           </TouchableOpacity>
 
-          {/* Progress Bar */}
+          {/* Progress Display */}
           {isCreatingCourse && (
             <View style={styles.progressContainer}>
+              <View style={styles.phaseIndicator}>
+                <Text style={styles.phaseText}>
+                  Phase {uploadProgress.phase}/3:{" "}
+                  {uploadProgress.phase === 1
+                    ? "Uploading Files"
+                    : uploadProgress.phase === 2
+                    ? "Creating Course"
+                    : uploadProgress.phase === 3
+                    ? "Adding Sections"
+                    : "Processing"}
+                </Text>
+              </View>
+
               <View style={styles.progressBar}>
                 <View
-                  style={[styles.progressFill, { width: `${uploadProgress}%` }]}
+                  style={[
+                    styles.progressFill,
+                    { width: `${uploadProgress.percentage}%` },
+                  ]}
                 />
               </View>
-              <Text style={styles.progressText}>{progressMessage}</Text>
-              <Text style={styles.progressPercentage}>{uploadProgress}%</Text>
+
+              <Text style={styles.progressText}>{uploadProgress.message}</Text>
+
+              <View style={styles.progressStats}>
+                <Text style={styles.progressStat}>
+                  {uploadProgress.percentage}%
+                </Text>
+                {uploadProgress.phase === 1 && (
+                  <Text style={styles.progressStat}>
+                    Files: {uploadProgress.completedFiles}/
+                    {uploadProgress.totalFiles}
+                  </Text>
+                )}
+                {uploadProgress.phase === 3 && (
+                  <Text style={styles.progressStat}>
+                    Sections: {uploadProgress.completedSections}/
+                    {uploadProgress.totalSections}
+                  </Text>
+                )}
+              </View>
             </View>
           )}
 
-          {/* Info Card */}
+          {/* Info Cards */}
           <View style={styles.infoCard}>
             <Ionicons
               name="information-circle-outline"
@@ -1256,24 +1159,11 @@ export default function CreateCourseScreen({ navigation }) {
               color="#9747FF"
             />
             <Text style={styles.infoText}>
-              Your course will be deployed as a smart contract on Manta Pacific
-              Testnet. All files (thumbnails and videos) will be uploaded to
-              IPFS when you click "Create Course". This ensures data integrity
-              and decentralized storage.
-            </Text>
-          </View>
-
-          {/* Requirements Card */}
-          <View style={styles.requirementsCard}>
-            <Text style={styles.requirementsTitle}>📋 Upload Process</Text>
-            <Text style={styles.requirementsText}>
-              When you create the course:{"\n"}
-              1. 🖼️ Thumbnail will be uploaded to IPFS{"\n"}
-              2. 🎬 Section videos will be uploaded to IPFS{"\n"}
-              3. 🔗 Course will be created on blockchain{"\n"}
-              4. 📚 Sections will be added to the course{"\n\n"}
-              All uploads happen automatically when you click "Create Course".
-              No manual upload required!
+              <Text style={styles.infoTextBold}>Smart Contract Process:</Text>
+              {"\n"}• Files uploaded to IPFS for decentralized storage
+              {"\n"}• Course created on Manta Pacific blockchain
+              {"\n"}• Sections added with IPFS content references
+              {"\n"}• No timeout issues with sequential processing
             </Text>
           </View>
         </View>
@@ -1289,6 +1179,43 @@ export default function CreateCourseScreen({ navigation }) {
     </SafeAreaView>
   );
 }
+
+// ✅ SECTION ITEM COMPONENT
+const SectionItem = React.memo(({ section, index, onRemove, disabled }) => (
+  <View style={styles.sectionItem}>
+    <View style={styles.sectionInfo}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          {index + 1}. {section.title}
+        </Text>
+        {section.videoFile && (
+          <View style={styles.videoStatusBadge}>
+            <Ionicons name="videocam" size={16} color="#9747FF" />
+            <Text style={styles.videoStatusText}>Video Ready</Text>
+          </View>
+        )}
+      </View>
+      <Text style={styles.sectionDuration}>
+        {Math.round(section.duration / 60)} minutes ({section.duration} seconds)
+      </Text>
+      {section.videoFile && (
+        <Text style={styles.sectionVideoFile}>📹 {section.videoFile.name}</Text>
+      )}
+    </View>
+    <TouchableOpacity
+      style={[styles.removeButton, disabled && styles.disabledRemoveButton]}
+      onPress={() => onRemove(section.id)}
+      disabled={disabled}
+      activeOpacity={0.7}
+    >
+      <Ionicons
+        name="trash-outline"
+        size={20}
+        color={disabled ? "#ccc" : "#ff4444"}
+      />
+    </TouchableOpacity>
+  </View>
+));
 
 const styles = StyleSheet.create({
   container: {
@@ -1315,7 +1242,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     textAlign: "center",
-    marginBottom: 30,
   },
   warningTitle: {
     fontSize: 24,
@@ -1388,7 +1314,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#ff4444",
     marginTop: 4,
-    marginBottom: 4,
+  },
+  helpText: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+  },
+  helperText: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
   },
   textArea: {
     height: 100,
@@ -1413,210 +1348,8 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 2,
   },
-  addSectionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "white",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#9747FF",
-  },
-  addSectionText: {
-    color: "#9747FF",
-    fontSize: 14,
-    fontWeight: "600",
-    marginLeft: 4,
-  },
-  sectionsContainer: {
-    backgroundColor: "white",
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-  },
-  sectionItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  sectionInfo: {
-    flex: 1,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 4,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    flex: 1,
-  },
-  videoStatusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  videoStatusText: {
-    fontSize: 12,
-    color: "#333",
-    marginLeft: 4,
-    fontWeight: "500",
-  },
-  sectionDuration: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 2,
-  },
-  sectionVideoFile: {
-    fontSize: 12,
-    color: "#9747FF",
-    marginBottom: 2,
-  },
-  sectionContent: {
-    fontSize: 12,
-    color: "#9747FF",
-  },
-  sectionContentPlaceholder: {
-    fontSize: 12,
-    color: "#9e9e9e",
-    fontStyle: "italic",
-  },
-  removeButton: {
-    padding: 8,
-  },
-  sectionsSummary: {
-    alignItems: "center",
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-  },
-  sectionsCount: {
-    fontSize: 14,
-    color: "#666",
-    fontStyle: "italic",
-  },
-  videosSummary: {
-    fontSize: 12,
-    color: "#9747FF",
-    marginTop: 4,
-    fontWeight: "500",
-  },
-  emptySections: {
-    alignItems: "center",
-    paddingVertical: 40,
-    backgroundColor: "white",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderStyle: "dashed",
-  },
-  emptySectionsText: {
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    marginTop: 12,
-    paddingHorizontal: 20,
-  },
-  uploadSummary: {
-    backgroundColor: "#f0f8ff",
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#b3d9ff",
-    marginBottom: 20,
-  },
-  uploadSummaryTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  uploadSummaryText: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 12,
-  },
-  uploadList: {
-    marginBottom: 12,
-  },
-  uploadItem: {
-    fontSize: 14,
-    color: "#333",
-    marginBottom: 4,
-    paddingLeft: 8,
-  },
-  uploadSummaryNote: {
-    fontSize: 12,
-    color: "#4a90e2",
-    fontStyle: "italic",
-  },
-  createButton: {
-    backgroundColor: "#9747FF",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: 8,
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  disabledButton: {
-    backgroundColor: "#94a3b8",
-  },
-  createContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  creatingContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  createButtonText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
-    marginLeft: 8,
-  },
-  progressContainer: {
-    marginBottom: 20,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 3,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#9747FF",
-    borderRadius: 3,
-  },
-  progressText: {
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    fontStyle: "italic",
-    marginBottom: 4,
-  },
-  progressPercentage: {
-    fontSize: 12,
-    color: "#9747FF",
-    textAlign: "center",
-    fontWeight: "600",
-  },
+
+  // Thumbnail styles
   thumbnailUploadArea: {
     backgroundColor: "#f8f9fa",
     borderRadius: 12,
@@ -1626,7 +1359,6 @@ const styles = StyleSheet.create({
     minHeight: 200,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
   },
   thumbnailSelected: {
     borderColor: "#9747FF",
@@ -1682,6 +1414,223 @@ const styles = StyleSheet.create({
     color: "#9e9e9e",
     textAlign: "center",
   },
+
+  // Section styles
+  addSectionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#9747FF",
+  },
+  addSectionText: {
+    color: "#9747FF",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  sectionsContainer: {
+    backgroundColor: "white",
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  sectionItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  sectionInfo: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    flex: 1,
+  },
+  videoStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  videoStatusText: {
+    fontSize: 12,
+    color: "#333",
+    marginLeft: 4,
+    fontWeight: "500",
+  },
+  sectionDuration: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 4,
+  },
+  sectionVideoFile: {
+    fontSize: 12,
+    color: "#9747FF",
+    marginTop: 2,
+  },
+  removeButton: {
+    padding: 8,
+  },
+  disabledRemoveButton: {
+    opacity: 0.5,
+  },
+  sectionsSummary: {
+    alignItems: "center",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  sectionsCount: {
+    fontSize: 14,
+    color: "#666",
+    fontStyle: "italic",
+  },
+  videosSummary: {
+    fontSize: 12,
+    color: "#9747FF",
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  emptySections: {
+    alignItems: "center",
+    paddingVertical: 40,
+    backgroundColor: "white",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    borderStyle: "dashed",
+  },
+  emptySectionsText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 12,
+    paddingHorizontal: 20,
+  },
+
+  // Upload summary styles
+  uploadSummary: {
+    backgroundColor: "#f0f8ff",
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#b3d9ff",
+    marginBottom: 20,
+  },
+  uploadSummaryTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  uploadSummaryText: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 12,
+  },
+  phasesList: {
+    marginBottom: 12,
+  },
+  phaseItem: {
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 4,
+    paddingLeft: 8,
+  },
+  uploadSummaryNote: {
+    fontSize: 12,
+    color: "#4a90e2",
+    fontStyle: "italic",
+  },
+
+  // Button styles
+  createButton: {
+    backgroundColor: "#9747FF",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: 8,
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  disabledButton: {
+    backgroundColor: "#94a3b8",
+  },
+  createContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  creatingContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  createButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+
+  // Progress styles
+  progressContainer: {
+    marginBottom: 20,
+  },
+  phaseIndicator: {
+    backgroundColor: "#e3f2fd",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  phaseText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1565c0",
+    textAlign: "center",
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 4,
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#9747FF",
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  progressStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  progressStat: {
+    fontSize: 12,
+    color: "#9747FF",
+    fontWeight: "600",
+  },
+
+  // Info card styles
   infoCard: {
     flexDirection: "row",
     backgroundColor: "#e3f2fd",
@@ -1698,30 +1647,8 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 20,
   },
-  requirementsCard: {
-    backgroundColor: "#fff3e0",
-    padding: 15,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: "#ff9800",
-    marginBottom: 20,
-  },
-  requirementsTitle: {
-    fontSize: 16,
+  infoTextBold: {
     fontWeight: "600",
-    color: "#e65100",
-    marginBottom: 8,
-  },
-  requirementsText: {
-    fontSize: 13,
-    color: "#ef6c00",
-    lineHeight: 20,
-  },
-  helpText: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 4,
-    marginBottom: 10,
-    lineHeight: 16,
+    color: "#0d47a1",
   },
 });

@@ -403,72 +403,117 @@ class VideoService {
     }
   }
 
-  /**
-   * Upload video to IPFS dengan PUBLIC access (untuk kemudahan)
-   */
+  // ✅ ENHANCED: Public video upload with progress tracking
   async uploadVideoPublic(videoFile, options = {}) {
-    console.log("🌐 Uploading video with PUBLIC access for easy sharing...");
-    return await this.uploadVideo(videoFile, {
-      ...options,
-      network: "public",
-      usePrivate: false,
-    });
-  }
+    console.log("📹 Starting public video upload:", videoFile.name);
 
-  /**
-   * Get streaming URL untuk video (dengan signed URL jika private)
-   */
-  async getVideoStreamingUrl(cid, network = null, expires = 7200) {
     try {
-      console.log(
-        `🎬 Getting streaming URL for video CID: ${cid} (network: ${network})`
-      );
-
-      if (!cid) {
-        throw new Error("CID is required for streaming URL");
+      // Validate video file
+      const validation = this.validateVideoFile(videoFile);
+      if (!validation.isValid) {
+        throw new Error(validation.error);
       }
 
-      const streamingUrl = await this.pinataService.getFasterStreamingUrl(
-        cid,
-        network
-      );
+      // Use PinataService for IPFS upload
+      const { pinataService } = await import("./PinataService");
 
-      // PERBAIKAN: Pastikan streamingUrl tidak null/undefined
-      if (!streamingUrl) {
-        console.log(
-          "⚠️ No URL returned from getFasterStreamingUrl, generating fallback..."
-        );
-        const fallbackUrl = `${this.pinataService.PUBLIC_GATEWAY}/${cid}`;
+      const uploadResult = await pinataService.uploadFile(videoFile, {
+        name: options.name || videoFile.name,
+        network: "public", // Force public for easy access
+        keyvalues: {
+          category: "video",
+          courseId: options.courseId || "unknown",
+          sectionId: options.sectionId || "unknown",
+          app: "eduverse",
+          uploadedAt: new Date().toISOString(),
+          ...options.metadata,
+        },
+      });
 
-        return {
-          success: true,
-          streamingUrl: fallbackUrl,
-          cid: cid,
-          network: network,
-          isTemporary: false,
-          isFallback: true,
-        };
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || "Video upload failed");
       }
+
+      console.log("✅ Video uploaded successfully:", uploadResult.ipfsHash);
 
       return {
         success: true,
-        streamingUrl: streamingUrl,
-        cid: cid,
-        network: network,
-        isTemporary: network === "private", // Private URLs are temporary (signed)
-        isFallback: false,
+        ipfsHash: uploadResult.ipfsHash,
+        publicUrl: uploadResult.publicUrl,
+        streamingUrl: uploadResult.streamingUrl,
+        fileName: videoFile.name,
+        fileSize: videoFile.size,
+        cid: uploadResult.ipfsHash.replace("ipfs://", ""),
       };
     } catch (error) {
-      console.error("Failed to get streaming URL:", error);
-
-      // Generate emergency fallback URL
-      const emergencyUrl = `${this.pinataService.PUBLIC_GATEWAY}/${cid}`;
-
+      console.error("❌ Video upload failed:", error);
       return {
         success: false,
         error: error.message,
-        fallbackUrl: emergencyUrl,
-        streamingUrl: emergencyUrl, // Add this for consistency
+      };
+    }
+  }
+
+  // ✅ ENHANCED: Video file validation
+  validateVideoFile(videoFile) {
+    if (!videoFile) {
+      return { isValid: false, error: "No video file provided" };
+    }
+
+    if (!videoFile.uri && !videoFile.path) {
+      return { isValid: false, error: "Invalid video file - no path" };
+    }
+
+    // Size validation (max 100MB)
+    const maxSize = 100 * 1024 * 1024;
+    if (videoFile.size && videoFile.size > maxSize) {
+      return {
+        isValid: false,
+        error: `Video file too large (${this.formatFileSize(
+          videoFile.size
+        )}). Max: 100MB`,
+      };
+    }
+
+    // Type validation
+    const allowedTypes = [
+      "video/mp4",
+      "video/mov",
+      "video/avi",
+      "video/mkv",
+      "video/webm",
+      "video/quicktime",
+    ];
+
+    if (videoFile.type && !allowedTypes.includes(videoFile.type)) {
+      console.warn("Video type may not be fully supported:", videoFile.type);
+    }
+
+    return { isValid: true };
+  }
+
+  // ✅ ENHANCED: Get video streaming URL
+  async getVideoStreamingUrl(cid, network = "public") {
+    try {
+      const { pinataService } = await import("./PinataService");
+
+      const streamingUrl = await pinataService.getOptimizedFileUrl(cid, {
+        forcePublic: network === "public",
+        network: network,
+        expires: 7200, // 2 hours for streaming
+      });
+
+      return {
+        success: true,
+        streamingUrl,
+        cid,
+      };
+    } catch (error) {
+      console.error("Failed to get streaming URL:", error);
+      return {
+        success: false,
+        error: error.message,
+        fallbackUrl: `https://gateway.pinata.cloud/ipfs/${cid}`,
       };
     }
   }
