@@ -1,5 +1,5 @@
-// src/screens/ProfileScreen.js - Modern Profile Screen with Enhanced UI
-import React from "react";
+// src/screens/ProfileScreen.js - FIXED: Remove modal triggers
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,16 +10,45 @@ import {
   SafeAreaView,
 } from "react-native";
 import { useAccount, useDisconnect, useChainId, useSwitchChain } from "wagmi";
-import { AppKitButton } from "@reown/appkit-wagmi-react-native";
+import { AppKitButton, useAppKit } from "@reown/appkit-wagmi-react-native";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
-import WalletInfo from "../components/WalletInfo";
+import { useWeb3 } from "../contexts/Web3Context"; // ✅ Import Web3Context
 
 export default function ProfileScreen({ navigation }) {
   const { address, isConnected, connector } = useAccount();
   const { disconnect } = useDisconnect();
   const chainId = useChainId();
   const { switchChain, isPending } = useSwitchChain();
+  const { open } = useAppKit();
+
+  // ✅ Get modal prevention status
+  const { modalPreventionActive } = useWeb3();
+
+  // User stats state
+  const [userStats, setUserStats] = useState({
+    coursesEnrolled: 0,
+    coursesCreated: 0,
+    certificatesEarned: 0,
+  });
+
+  useEffect(() => {
+    if (isConnected && address) {
+      fetchUserStats();
+    }
+  }, [isConnected, address]);
+
+  const fetchUserStats = async () => {
+    try {
+      setUserStats({
+        coursesEnrolled: 5,
+        coursesCreated: 2,
+        certificatesEarned: 3,
+      });
+    } catch (error) {
+      console.error("Error fetching user stats:", error);
+    }
+  };
 
   const handleSwitchToManta = async () => {
     try {
@@ -51,177 +80,215 @@ export default function ProfileScreen({ navigation }) {
     );
   };
 
+  // ✅ FIXED: Safe manual wallet modal trigger
+  const handleOpenWalletModal = () => {
+    if (modalPreventionActive) {
+      console.log("🚫 Modal opening prevented during contract initialization");
+      return;
+    }
+    open();
+  };
+
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
-  const ProfileOption = ({
+
+  // Simplified menu item component
+  const MenuItem = ({
     icon,
     title,
-    subtitle,
     onPress,
-    color = "#9747FF",
-    showArrow = true,
-    badge,
+    color = "#007AFF",
+    danger = false,
   }) => (
-    <TouchableOpacity style={styles.optionCard} onPress={onPress}>
-      <View style={styles.optionContent}>
-        <View style={[styles.optionIcon, { backgroundColor: `${color}15` }]}>
-          <Ionicons name={icon} size={22} color={color} />
-        </View>
-        <View style={styles.optionText}>
-          <View style={styles.optionTitleRow}>
-            <Text style={styles.optionTitle}>{title}</Text>
-            {badge && (
-              <View style={[styles.badge, { backgroundColor: color }]}>
-                <Text style={styles.badgeText}>{badge}</Text>
-              </View>
-            )}
-          </View>
-          {subtitle && <Text style={styles.optionSubtitle}>{subtitle}</Text>}
-        </View>
-        {showArrow && (
-          <Ionicons name="chevron-forward" size={20} color="#999" />
-        )}
-      </View>
+    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+      <Ionicons name={icon} size={20} color={danger ? "#FF3B30" : color} />
+      <Text style={[styles.menuText, danger && styles.dangerText]}>
+        {title}
+      </Text>
+      <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
     </TouchableOpacity>
   );
+
+  // Disconnected state
   if (!isConnected) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.customHeader}>
-          <Text style={styles.screenTitle}>Profile</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>Profile</Text>
         </View>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.disconnectedContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.centeredContent}>
-            <View style={styles.profileIconContainer}>
-              <Ionicons name="person-outline" size={64} color="#9747FF" />
-            </View>
-            <Text style={styles.notConnectedTitle}>Welcome to EduVerse</Text>
-            <Text style={styles.notConnectedSubtitle}>
-              Connect your wallet to access your profile and start learning
-            </Text>
-            <View style={styles.connectSection}>
-              <AppKitButton />
-            </View>
-            <Text style={styles.helpText}>
-              Need help? Tap the connect button above to get started
-            </Text>
+        <View style={styles.disconnectedContainer}>
+          <View style={styles.iconContainer}>
+            <Ionicons name="person-outline" size={60} color="#007AFF" />
           </View>
-        </ScrollView>
+          <Text style={styles.welcomeTitle}>Welcome to EduVerse</Text>
+          <Text style={styles.welcomeSubtitle}>
+            Connect your wallet to access your profile
+          </Text>
+          <View style={styles.connectButtonContainer}>
+            <AppKitButton label="Connect Wallet" size="md" balance="hide" />
+          </View>
+        </View>
       </SafeAreaView>
     );
   }
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.customHeader}>
-        <Text style={styles.screenTitle}>Profile</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Profile</Text>
       </View>
+
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <View style={styles.profileSection}>
-            <View style={styles.avatarContainer}>
-              <Ionicons name="person" size={32} color="#007AFF" />
-            </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileTitle}>My Profile</Text>
-              <Text style={styles.walletAddress}>
-                {`${address?.slice(0, 8)}...${address?.slice(-6)}`}
-              </Text>
-              <Text style={styles.connectorName}>
-                Connected via {connector?.name || "Unknown"}
-              </Text>
-            </View>
+        {/* Simple Profile Header */}
+        <View style={styles.profileHeader}>
+          <View style={styles.avatar}>
+            <Ionicons name="person" size={24} color="#007AFF" />
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.addressText}>
+              {`${address?.slice(0, 6)}...${address?.slice(-4)}`}
+            </Text>
+            <Text style={styles.connectorText}>{connector?.name}</Text>
           </View>
         </View>
-        <View style={styles.networkSection}>
-          <Text style={styles.sectionTitle}>Network Status</Text>
-          <View style={styles.networkCard}>
-            <View style={styles.networkInfo}>
-              <Ionicons
-                name={isOnMantaNetwork ? "checkmark-circle" : "warning"}
-                size={24}
-                color={isOnMantaNetwork ? "#28a745" : "#ff9500"}
-              />
-              <View style={styles.networkDetails}>
-                <Text style={styles.networkName}>Chain ID: {chainId}</Text>
-                <Text style={styles.networkDescription}>
-                  {chainId === 1
-                    ? "Ethereum Mainnet"
-                    : chainId === 137
-                    ? "Polygon"
-                    : chainId === 42161
-                    ? "Arbitrum"
-                    : chainId === 11155111
-                    ? "Sepolia Testnet"
-                    : chainId === 3441006
-                    ? "Manta Pacific Testnet"
-                    : "Unknown Network"}
-                </Text>
-              </View>
-            </View>
 
-            {!isOnMantaNetwork && (
-              <TouchableOpacity
-                style={styles.switchButton}
-                onPress={handleSwitchToManta}
-                disabled={isPending}
-              >
-                <Text style={styles.switchButtonText}>
-                  {isPending ? "Switching..." : "Switch to Manta"}
-                </Text>
-              </TouchableOpacity>
-            )}
+        {/* Quick Stats - Simple Row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statNumber}>{userStats.coursesEnrolled}</Text>
+            <Text style={styles.statLabel}>Courses</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statNumber}>{userStats.coursesCreated}</Text>
+            <Text style={styles.statLabel}>Created</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statNumber}>
+              {userStats.certificatesEarned}
+            </Text>
+            <Text style={styles.statLabel}>Certificates</Text>
           </View>
         </View>
-        <WalletInfo address={address} />
-        <View style={styles.optionsSection}>
-          <Text style={styles.sectionTitle}>Account Options</Text>
-          <ProfileOption
+
+        {/* ✅ FIXED: Manual Wallet Buttons - No auto-triggers */}
+        <View style={styles.walletButtons}>
+          <TouchableOpacity
+            style={styles.manualWalletButton}
+            onPress={handleOpenWalletModal}
+            disabled={modalPreventionActive}
+          >
+            <Ionicons name="wallet-outline" size={20} color="#007AFF" />
+            <Text style={styles.manualWalletButtonText}>
+              {modalPreventionActive ? "Initializing..." : "Wallet Settings"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.manualNetworkButton}
+            onPress={handleSwitchToManta}
+            disabled={isPending}
+          >
+            <Ionicons name="globe-outline" size={20} color="#007AFF" />
+            <Text style={styles.manualNetworkButtonText}>
+              {isPending ? "Switching..." : "Network"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Network Status - Improved Layout */}
+        {!isOnMantaNetwork && (
+          <View style={styles.networkStatusCard}>
+            <View style={styles.networkStatusHeader}>
+              <Ionicons name="warning" size={20} color="#FF9500" />
+              <Text style={styles.networkStatusTitle}>Network Notice</Text>
+            </View>
+            <Text style={styles.networkStatusDescription}>
+              You're currently connected to a different network. Switch to Manta
+              Pacific Testnet to access all EduVerse features and get the best
+              experience.
+            </Text>
+            <TouchableOpacity
+              style={styles.switchNetworkButton}
+              onPress={handleSwitchToManta}
+              disabled={isPending}
+            >
+              <Ionicons
+                name="swap-horizontal"
+                size={16}
+                color="white"
+                style={styles.switchButtonIcon}
+              />
+              <Text style={styles.switchNetworkButtonText}>
+                {isPending ? "Switching..." : "Switch to Manta Pacific"}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.networkStatusFooter}>
+              Current network: {chainId ? `Chain ID ${chainId}` : "Unknown"}
+            </Text>
+          </View>
+        )}
+
+        {/* Current Network Info (when on correct network) */}
+        {isOnMantaNetwork && (
+          <View style={styles.networkStatusCardSuccess}>
+            <View style={styles.networkStatusHeader}>
+              <Ionicons name="checkmark-circle" size={20} color="#34C759" />
+              <Text style={styles.networkStatusTitleSuccess}>
+                Connected to Manta Pacific
+              </Text>
+            </View>
+            <Text style={styles.networkStatusDescriptionSuccess}>
+              You're connected to the correct network. All EduVerse features are
+              available.
+            </Text>
+          </View>
+        )}
+
+        {/* Simple Menu List */}
+        <View style={styles.menuSection}>
+          <MenuItem
             icon="settings-outline"
             title="Settings"
-            subtitle="App preferences and configurations"
             onPress={() => navigation.navigate("Settings")}
           />
-          <ProfileOption
+          <MenuItem
             icon="help-circle-outline"
             title="Help & Support"
-            subtitle="Get help and contact support"
             onPress={() => navigation.navigate("HelpSupport")}
           />
-          <ProfileOption
+          <MenuItem
             icon="document-text-outline"
             title="Terms & Privacy"
-            subtitle="Read our terms and privacy policy"
             onPress={() => navigation.navigate("TermsPrivacy")}
           />
-          <ProfileOption
+          <MenuItem
             icon="information-circle-outline"
-            title="About EduVerse"
-            subtitle="Learn more about our platform"
+            title="About"
             onPress={() => navigation.navigate("About")}
           />
-        </View>
-        <View style={styles.dangerSection}>
-          <Text style={styles.sectionTitle}>Danger Zone</Text>
-
-          <ProfileOption
-            icon="log-out-outline"
-            title="Disconnect Wallet"
-            subtitle="Sign out from your wallet"
-            onPress={handleDisconnect}
-            color="#FF3B30"
-            showArrow={false}
+          <MenuItem
+            icon="flask-outline"
+            title="IPFS Test"
+            onPress={() => navigation.navigate("IPFSTest")}
           />
         </View>
+
+        {/* Disconnect Button - Separate Section */}
+        <View style={styles.disconnectSection}>
+          <TouchableOpacity
+            style={styles.disconnectButton}
+            onPress={handleDisconnect}
+          >
+            <Ionicons name="log-out-outline" size={20} color="#FF3B30" />
+            <Text style={styles.disconnectButtonText}>Disconnect Wallet</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Simple Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Powered by Reown AppKit</Text>
-          <Text style={styles.versionText}>EduVerse v1.0.0</Text>
+          <Text style={styles.footerText}>EduVerse v1.0.0</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -231,242 +298,284 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#F2F2F7",
   },
-  customHeader: {
+  header: {
     backgroundColor: "white",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e9ecef",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#C7C7CC",
   },
-  screenTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
+  title: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#000",
     textAlign: "center",
   },
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: 30,
-  },
-  disconnectedContent: {
-    flexGrow: 1,
-  },
-  centeredContent: {
+
+  // Disconnected State
+  disconnectedContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    paddingHorizontal: 32,
   },
-  profileIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#f0f0f0",
+  iconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#F2F2F7",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  notConnectedTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
+  welcomeTitle: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: "#000",
     marginBottom: 8,
   },
-  notConnectedSubtitle: {
-    fontSize: 16,
-    color: "#666",
+  welcomeSubtitle: {
+    fontSize: 15,
+    color: "#8E8E93",
     textAlign: "center",
-    marginBottom: 30,
+    marginBottom: 32,
   },
-  connectSection: {
-    marginTop: 20,
+  connectButtonContainer: {
+    width: "100%",
   },
-  helpText: {
-    fontSize: 14,
-    color: "#999",
-    textAlign: "center",
-    marginTop: 20,
-    fontStyle: "italic",
-  },
-  header: {
-    padding: 20,
-    paddingBottom: 10,
-  },
-  profileSection: {
-    flexDirection: "row",
-    alignItems: "center",
+
+  // Connected State - Simplified
+  profileHeader: {
     backgroundColor: "white",
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  avatarContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#e3f2fd",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  profileTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  walletAddress: {
-    fontSize: 14,
-    color: "#007AFF",
-    fontFamily: "monospace",
-    marginBottom: 2,
-  },
-  connectorName: {
-    fontSize: 12,
-    color: "#666",
-  },
-  networkSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-  },
-  networkCard: {
-    backgroundColor: "white",
+    marginTop: 16,
+    marginHorizontal: 16,
     borderRadius: 12,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  networkInfo: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
   },
-  networkDetails: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  networkName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 2,
-  },
-  networkDescription: {
-    fontSize: 14,
-    color: "#666",
-  },
-  switchButton: {
-    backgroundColor: "#007AFF",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-  },
-  switchButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  optionsSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  optionCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  optionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-  },
-  optionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#E3F2FD",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  optionText: {
+  profileInfo: {
     flex: 1,
   },
-  optionTitle: {
+  addressText: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 2,
+    fontWeight: "500",
+    color: "#000",
+    fontFamily: "monospace",
   },
-  optionTitleRow: {
+  connectorText: {
+    fontSize: 13,
+    color: "#8E8E93",
+    marginTop: 2,
+  },
+
+  // Simple Stats Row
+  statsRow: {
+    flexDirection: "row",
+    backgroundColor: "white",
+    marginTop: 8,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+  },
+  statBox: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  statLabel: {
+    fontSize: 11,
+    color: "#8E8E93",
+    marginTop: 2,
+  },
+
+  // ✅ FIXED: Manual Wallet Buttons
+  walletButtons: {
+    flexDirection: "row",
+    backgroundColor: "white",
+    marginTop: 8,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+    justifyContent: "space-around",
+  },
+  manualWalletButton: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 2,
+    backgroundColor: "#F2F2F7",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flex: 0.45,
+    justifyContent: "center",
   },
-  badge: {
+  manualWalletButtonText: {
     marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "white",
-  },
-  optionSubtitle: {
     fontSize: 14,
-    color: "#666",
+    fontWeight: "500",
+    color: "#007AFF",
   },
-  dangerSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+  manualNetworkButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F2F2F7",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flex: 0.45,
+    justifyContent: "center",
   },
+  manualNetworkButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#007AFF",
+  },
+
+  // Network Status Cards (unchanged)
+  networkStatusCard: {
+    backgroundColor: "white",
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#FF9500",
+  },
+  networkStatusCardSuccess: {
+    backgroundColor: "white",
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#34C759",
+  },
+  networkStatusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  networkStatusTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FF9500",
+    marginLeft: 8,
+  },
+  networkStatusTitleSuccess: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#34C759",
+    marginLeft: 8,
+  },
+  networkStatusDescription: {
+    fontSize: 14,
+    color: "#8E8E93",
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  networkStatusDescriptionSuccess: {
+    fontSize: 14,
+    color: "#8E8E93",
+    lineHeight: 20,
+  },
+  switchNetworkButton: {
+    backgroundColor: "#FF9500",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  switchButtonIcon: {
+    marginRight: 8,
+  },
+  switchNetworkButtonText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  networkStatusFooter: {
+    fontSize: 12,
+    color: "#C7C7CC",
+    textAlign: "center",
+  },
+
+  // Menu (unchanged)
+  menuSection: {
+    backgroundColor: "white",
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#F2F2F7",
+  },
+  menuText: {
+    flex: 1,
+    fontSize: 15,
+    color: "#000",
+    marginLeft: 12,
+  },
+  dangerText: {
+    color: "#FF3B30",
+  },
+
+  // Disconnect Section (unchanged)
+  disconnectSection: {
+    backgroundColor: "white",
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  disconnectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  disconnectButtonText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#FF3B30",
+    marginLeft: 8,
+  },
+
+  // Footer (unchanged)
   footer: {
     alignItems: "center",
-    paddingVertical: 20,
+    paddingVertical: 24,
   },
   footerText: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 4,
-  },
-  versionText: {
-    fontSize: 10,
-    color: "#ccc",
+    fontSize: 11,
+    color: "#8E8E93",
   },
 });

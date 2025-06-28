@@ -1,4 +1,4 @@
-// src/screens/DashboardScreen.js - Enhanced with latest SmartContract & Pinata integration
+// src/screens/DashboardScreen.js - Updated with Web3Context
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -18,7 +18,6 @@ import {
   useCourses,
   useMintLicense,
   useUserCourses,
-  useSmartContract,
   useHasActiveLicense,
 } from "../hooks/useBlockchain";
 import CourseCard from "../components/CourseCard";
@@ -46,7 +45,7 @@ export default function DashboardScreen({ navigation }) {
   const [ethToIdrRate, setEthToIdrRate] = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
 
-  // ✅ Enhanced pagination support
+  // Enhanced pagination support
   const [pagination, setPagination] = useState({
     offset: 0,
     limit: 20,
@@ -65,9 +64,8 @@ export default function DashboardScreen({ navigation }) {
 
   const { mintLicense, loading: mintLoading } = useMintLicense();
   const { refetch: refetchUserCourses } = useUserCourses();
-  const { smartContractService, isInitialized } = useSmartContract();
 
-  // ✅ Enhanced license checking hook for selected course
+  // Enhanced license checking hook for selected course
   const {
     hasLicense,
     licenseData,
@@ -77,7 +75,7 @@ export default function DashboardScreen({ navigation }) {
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
-  // ✅ Enhanced ETH price fetching dengan retry mechanism
+  // Enhanced ETH price fetching dengan retry mechanism
   const fetchEthPriceInIdr = useCallback(async (retries = 3) => {
     try {
       setRateLoading(true);
@@ -115,12 +113,12 @@ export default function DashboardScreen({ navigation }) {
   useEffect(() => {
     fetchEthPriceInIdr();
 
-    // ✅ Auto-refresh price every 5 minutes
+    // Auto-refresh price every 5 minutes
     const priceInterval = setInterval(fetchEthPriceInIdr, 5 * 60 * 1000);
     return () => clearInterval(priceInterval);
   }, [fetchEthPriceInIdr]);
 
-  // ✅ Enhanced refresh with better error handling
+  // Enhanced refresh with better error handling
   const handleRefresh = useCallback(async () => {
     try {
       console.log("🔄 Refreshing dashboard data...");
@@ -142,7 +140,7 @@ export default function DashboardScreen({ navigation }) {
     }
   }, [refetchCourses, fetchEthPriceInIdr, refetchUserCourses]);
 
-  // ✅ Load more courses (pagination)
+  // Load more courses (pagination)
   const handleLoadMore = useCallback(async () => {
     if (!hasMore || coursesLoading) return;
 
@@ -164,7 +162,7 @@ export default function DashboardScreen({ navigation }) {
     };
   }, []);
 
-  // ✅ Enhanced course detail opening dengan preloading
+  // Enhanced course detail opening dengan preloading
   const handleOpenDetail = useCallback(
     async (course) => {
       if (modalInteracting) {
@@ -184,35 +182,16 @@ export default function DashboardScreen({ navigation }) {
       setSelectedCourse(course);
       setModalVisible(true);
 
-      // ✅ Enhanced course data preloading
-      try {
-        if (isInitialized && smartContractService && course.id) {
-          console.log("🔍 Preloading course sections count...");
-
-          // Preload sections count for better UX
-          const sectionsCount =
-            await smartContractService.getCourseSectionsCount(course.id);
-
-          // Update selected course with additional data
-          setSelectedCourse((prev) => ({
-            ...prev,
-            sectionsCount: sectionsCount || prev.sectionsCount,
-          }));
-        }
-      } catch (error) {
-        console.warn("Failed to preload course data:", error);
-      }
-
       // Reset interaction state
       modalTimeoutRef.current = setTimeout(() => {
         setModalInteracting(false);
         modalTimeoutRef.current = null;
       }, 1500);
     },
-    [modalInteracting, isInitialized, smartContractService]
+    [modalInteracting]
   );
 
-  // ✅ FIXED: Enhanced mint license dengan proper duration validation
+  // Enhanced mint license dengan proper duration validation
   const handleMintLicense = async (course, selectedDuration = 1) => {
     if (!isOnMantaNetwork) {
       Alert.alert(
@@ -222,7 +201,7 @@ export default function DashboardScreen({ navigation }) {
       return;
     }
 
-    // ✅ Validate duration according to smart contract (max 12 months)
+    // Validate duration according to smart contract (max 12 months)
     if (selectedDuration <= 0) {
       Alert.alert("Error", "Durasi harus lebih dari 0 bulan");
       return;
@@ -238,19 +217,8 @@ export default function DashboardScreen({ navigation }) {
         `🎫 Minting license: Course ${course.id}, Duration: ${selectedDuration} month(s)`
       );
 
-      // ✅ Enhanced validation
-      if (!smartContractService || !isInitialized) {
-        throw new Error("Smart contract service not ready");
-      }
-
-      // ✅ Check if course is still active
-      const courseData = await smartContractService.getCourse(course.id);
-      if (!courseData.isActive) {
-        throw new Error("Course is no longer active");
-      }
-
-      // ✅ Calculate expected price for confirmation
-      const pricePerMonth = parseFloat(courseData.pricePerMonth);
+      // Calculate expected price for confirmation
+      const pricePerMonth = parseFloat(course.pricePerMonth);
       const totalPriceETH = pricePerMonth * selectedDuration;
       const estimatedPriceIDR = ethToIdrRate ? totalPriceETH * ethToIdrRate : 0;
 
@@ -273,14 +241,7 @@ export default function DashboardScreen({ navigation }) {
             `\n\n💰 Total: ${totalPriceETH} ETH (≈ ${formatRupiah(
               estimatedPriceIDR
             )})` +
-            `\n📋 Transaction: ${result.transactionHash?.slice(0, 10)}...` +
-            `\n⏰ Berlaku hingga: ${
-              result.expiryTimestamp
-                ? new Date(
-                    Number(result.expiryTimestamp) * 1000
-                  ).toLocaleDateString("id-ID")
-                : "Tidak diketahui"
-            }`,
+            `\n📋 Transaction: ${result.transactionHash?.slice(0, 10)}...`,
           [
             {
               text: "Lihat Kursus Saya",
@@ -299,12 +260,8 @@ export default function DashboardScreen({ navigation }) {
           ]
         );
 
-        // ✅ Enhanced data refresh
-        await Promise.allSettled([
-          refetchUserCourses(),
-          refetchLicense(), // Refresh license status for current course
-          smartContractService.clearAllCaches(), // Clear caches for fresh data
-        ]);
+        // Enhanced data refresh
+        await Promise.allSettled([refetchUserCourses(), refetchLicense()]);
 
         setModalVisible(false);
       } else {
@@ -359,10 +316,10 @@ export default function DashboardScreen({ navigation }) {
     </View>
   );
 
-  // ✅ Enhanced render item dengan error handling
+  // Enhanced render item dengan error handling
   const renderItem = ({ item }) => {
     try {
-      // ✅ Enhanced price calculation
+      // Enhanced price calculation
       const priceInEth = parseFloat(item.pricePerMonth || "0");
       const priceInIdr =
         ethToIdrRate && !rateLoading ? priceInEth * ethToIdrRate : 0;
@@ -382,7 +339,7 @@ export default function DashboardScreen({ navigation }) {
     }
   };
 
-  // ✅ Enhanced empty state
+  // Enhanced empty state
   const renderEmptyState = () => (
     <View style={styles.centered}>
       <Ionicons
@@ -405,7 +362,7 @@ export default function DashboardScreen({ navigation }) {
     </View>
   );
 
-  // ✅ Enhanced footer untuk pagination
+  // Enhanced footer untuk pagination
   const renderFooter = () => {
     if (!hasMore) return null;
 
@@ -422,7 +379,7 @@ export default function DashboardScreen({ navigation }) {
     );
   };
 
-  // ✅ FIXED: Enhanced price calculation untuk modal dengan duration support
+  // Enhanced price calculation untuk modal dengan duration support
   const calculateModalPrice = (duration = 1) => {
     if (!selectedCourse || !ethToIdrRate) return "Menghitung...";
 
@@ -430,7 +387,7 @@ export default function DashboardScreen({ navigation }) {
 
     if (priceInEth === 0) return "Gratis";
 
-    // ✅ Apply discount logic same as CourseDetailModal
+    // Apply discount logic same as CourseDetailModal
     const originalTotal = priceInEth * duration;
 
     // Discount tiers (same as DURATION_OPTIONS in CourseDetailModal)
@@ -471,9 +428,9 @@ export default function DashboardScreen({ navigation }) {
           onRefresh={handleRefresh}
           refreshing={coursesLoading}
           showsVerticalScrollIndicator={false}
-          removeClippedSubviews={true} // ✅ Performance optimization
-          maxToRenderPerBatch={10} // ✅ Performance optimization
-          windowSize={10} // ✅ Performance optimization
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
         />
       )}
 
@@ -488,12 +445,12 @@ export default function DashboardScreen({ navigation }) {
             modalTimeoutRef.current = null;
           }
         }}
-        onMintLicense={handleMintLicense} // ✅ Now properly handles duration
+        onMintLicense={handleMintLicense}
         isMinting={mintLoading}
-        priceCalculator={calculateModalPrice} // ✅ Enhanced with discount calculation
+        priceCalculator={calculateModalPrice}
         priceLoading={rateLoading}
         hasLicense={hasLicense}
-        licenseData={licenseData} // ✅ Pass license details
+        licenseData={licenseData}
         licenseLoading={licenseLoading}
       />
     </SafeAreaView>

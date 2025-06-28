@@ -1,3 +1,4 @@
+// src/screens/CreateCourseScreen.js - Updated with Web3Context
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
@@ -14,21 +15,25 @@ import {
   Image,
 } from "react-native";
 import { useAccount, useChainId } from "wagmi";
-import { ethers } from "ethers";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { pinataService } from "../services/PinataService";
 import { videoService } from "../services/VideoService";
-import { useBlockchain } from "../hooks/useBlockchain";
+import { useCreateCourse, useETHPrice } from "../hooks/useBlockchain";
 import AddSectionModal from "../components/AddSectionModal";
 
 export default function CreateCourseScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const { smartContractService, isInitialized } = useBlockchain();
+  const {
+    createCourse,
+    loading: isCreatingCourse,
+    progress: createProgress,
+  } = useCreateCourse();
+  const { maxPriceETH } = useETHPrice();
 
-  // ✅ COURSE DATA STATE
+  // Course data state
   const [courseData, setCourseData] = useState({
     title: "",
     description: "",
@@ -41,9 +46,8 @@ export default function CreateCourseScreen({ navigation }) {
   const [sections, setSections] = useState([]);
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
 
-  // ✅ UPLOAD PROCESS STATE
-  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
-  const [currentPhase, setCurrentPhase] = useState(0); // 0: idle, 1: files, 2: course, 3: sections
+  // Upload process state
+  const [currentPhase, setCurrentPhase] = useState(0);
   const [uploadProgress, setUploadProgress] = useState({
     phase: 0,
     percentage: 0,
@@ -54,22 +58,22 @@ export default function CreateCourseScreen({ navigation }) {
     totalSections: 0,
   });
 
-  // ✅ UPLOAD RESULTS STATE
+  // Upload results state
   const [uploadResults, setUploadResults] = useState({
     thumbnailCID: null,
-    videoCIDs: new Map(), // sectionId -> CID
+    videoCIDs: new Map(),
     courseId: null,
     sectionIds: [],
     transactionHashes: [],
   });
 
-  // ✅ VALIDATION STATE
+  // Validation state
   const [currentMaxPrice, setCurrentMaxPrice] = useState(null);
   const [priceValidationError, setPriceValidationError] = useState("");
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
-  // ✅ INPUT HANDLERS
+  // Input handlers
   const handleInputChange = (field, value) => {
     setCourseData((prev) => ({
       ...prev,
@@ -121,7 +125,7 @@ export default function CreateCourseScreen({ navigation }) {
     }
   };
 
-  // ✅ SECTION HANDLERS
+  // Section handlers
   const handleAddSection = useCallback(
     (sectionData) => {
       if (sections.length >= 50) {
@@ -141,7 +145,7 @@ export default function CreateCourseScreen({ navigation }) {
       const newSection = {
         id: Date.now() + Math.random(),
         title: sectionData.title,
-        duration: sectionData.duration, // Already in seconds from AddSectionModal
+        duration: sectionData.duration,
         videoFile: sectionData.videoFile,
         orderId: sections.length,
         createdAt: new Date().toISOString(),
@@ -167,9 +171,9 @@ export default function CreateCourseScreen({ navigation }) {
     ]);
   }, []);
 
-  // ✅ VALIDATION FUNCTIONS
+  // Validation functions
   const validateCourseData = () => {
-    // Title validation (smart contract: max 200 chars)
+    // Title validation
     if (!courseData.title.trim()) {
       Alert.alert("Error", "Course title is required");
       return false;
@@ -179,7 +183,7 @@ export default function CreateCourseScreen({ navigation }) {
       return false;
     }
 
-    // Description validation (smart contract: max 1000 chars)
+    // Description validation
     if (!courseData.description.trim()) {
       Alert.alert("Error", "Course description is required");
       return false;
@@ -221,7 +225,7 @@ export default function CreateCourseScreen({ navigation }) {
       return false;
     }
 
-    // Validate each section according to smart contract limits
+    // Validate each section
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i];
 
@@ -243,15 +247,10 @@ export default function CreateCourseScreen({ navigation }) {
       }
     }
 
-    if (!isInitialized || !smartContractService) {
-      Alert.alert("Error", "Smart contract service not ready");
-      return false;
-    }
-
     return true;
   };
 
-  // ✅ PHASE 1: UPLOAD ALL FILES TO IPFS
+  // Phase 1: Upload all files to IPFS
   const executePhase1_UploadFiles = async () => {
     console.log("🚀 PHASE 1: Starting file uploads to IPFS");
     setCurrentPhase(1);
@@ -299,7 +298,7 @@ export default function CreateCourseScreen({ navigation }) {
       videoCIDs: new Map(),
     };
 
-    // Upload files sequentially to avoid overwhelming the service
+    // Upload files sequentially
     for (const fileItem of filesToUpload) {
       try {
         console.log(`📁 Uploading ${fileItem.type}: ${fileItem.file.name}`);
@@ -361,7 +360,7 @@ export default function CreateCourseScreen({ navigation }) {
           percentage: Math.round((completedFiles / totalFiles) * 100),
         }));
 
-        // Small delay between uploads to prevent overwhelming
+        // Small delay between uploads
         await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (error) {
         console.error(`❌ Failed to upload ${fileItem.type}:`, error);
@@ -379,250 +378,7 @@ export default function CreateCourseScreen({ navigation }) {
     return results;
   };
 
-  // ✅ PHASE 2: CREATE COURSE ON BLOCKCHAIN
-  const executePhase2_CreateCourse = async (uploadedFiles) => {
-    console.log("🔗 PHASE 2: Creating course on blockchain");
-    setCurrentPhase(2);
-    setUploadProgress((prev) => ({
-      ...prev,
-      phase: 2,
-      percentage: 0,
-      message: "Creating course on blockchain...",
-    }));
-
-    const createCourseParams = {
-      title: courseData.title.trim(),
-      description: courseData.description.trim(),
-      thumbnailCID: uploadedFiles.thumbnailCID,
-      pricePerMonth: courseData.isPaid ? courseData.price.toString() : "0",
-    };
-
-    console.log("📝 Creating course with params:", createCourseParams);
-
-    setUploadProgress((prev) => ({
-      ...prev,
-      percentage: 25,
-      message: "Estimating gas and preparing transaction...",
-    }));
-
-    try {
-      const createResult = await smartContractService.createCourse(
-        createCourseParams,
-        {
-          gasLimit: "350000",
-          timeout: 120000, // 2 minutes timeout
-        }
-      );
-
-      if (!createResult.success) {
-        throw new Error(createResult.error || "Failed to create course");
-      }
-
-      setUploadProgress((prev) => ({
-        ...prev,
-        percentage: 100,
-        message: "Course created successfully!",
-      }));
-
-      console.log(
-        "✅ PHASE 2 COMPLETED: Course created with ID:",
-        createResult.courseId
-      );
-
-      setUploadResults((prev) => ({
-        ...prev,
-        courseId: createResult.courseId,
-        transactionHashes: [
-          ...prev.transactionHashes,
-          createResult.transactionHash,
-        ],
-      }));
-
-      return createResult;
-    } catch (error) {
-      console.error("❌ Failed to create course:", error);
-      throw new Error(`Course creation failed: ${error.message}`);
-    }
-  };
-
-  // ✅ PHASE 3: ADD SECTIONS TO COURSE
-  const executePhase3_AddSections = async (courseId, uploadedFiles) => {
-    console.log("📚 PHASE 3: Adding sections to course");
-    setCurrentPhase(3);
-    setUploadProgress((prev) => ({
-      ...prev,
-      phase: 3,
-      percentage: 0,
-      message: "Adding sections to course...",
-      completedSections: 0,
-    }));
-
-    const sectionResults = [];
-    let completedSections = 0;
-
-    for (let i = 0; i < sections.length; i++) {
-      const section = sections[i];
-      const sectionNumber = i + 1;
-
-      try {
-        setUploadProgress((prev) => ({
-          ...prev,
-          percentage: Math.round((i / sections.length) * 100),
-          message: `Adding section ${sectionNumber}/${sections.length}: "${section.title}"`,
-        }));
-
-        // Get content CID (video CID or placeholder)
-        const contentCID =
-          uploadedFiles.videoCIDs.get(section.id) ||
-          "placeholder-video-content";
-
-        console.log(`📖 Adding section ${sectionNumber}: ${section.title}`);
-        console.log(`Content CID: ${contentCID}`);
-
-        // Show confirmation for each section (except first)
-        if (i > 0) {
-          const userChoice = await new Promise((resolve) => {
-            Alert.alert(
-              "Add Next Section",
-              `Ready to add section ${sectionNumber}/${sections.length}:\n"${section.title}"\n\nThis requires MetaMask approval.`,
-              [
-                {
-                  text: "Skip Remaining",
-                  style: "destructive",
-                  onPress: () => resolve("skip"),
-                },
-                {
-                  text: "Continue",
-                  onPress: () => resolve("continue"),
-                },
-              ]
-            );
-          });
-
-          if (userChoice === "skip") {
-            console.log("User chose to skip remaining sections");
-            break;
-          }
-        }
-
-        const sectionResult = await smartContractService.addCourseSection(
-          courseId,
-          {
-            title: section.title.trim(),
-            contentCID: contentCID,
-            duration: section.duration,
-          },
-          {
-            gasLimit: "250000",
-            timeout: 90000, // 1.5 minutes per section
-          }
-        );
-
-        if (sectionResult.success) {
-          sectionResults.push({
-            index: i,
-            success: true,
-            sectionId: sectionResult.sectionId,
-            title: section.title,
-            transactionHash: sectionResult.transactionHash,
-          });
-          console.log(`✅ Section ${sectionNumber} added successfully`);
-        } else {
-          console.error(
-            `❌ Failed to add section ${sectionNumber}:`,
-            sectionResult.error
-          );
-          sectionResults.push({
-            index: i,
-            success: false,
-            error: sectionResult.error,
-            title: section.title,
-          });
-        }
-
-        completedSections++;
-        setUploadProgress((prev) => ({
-          ...prev,
-          completedSections,
-          percentage: Math.round((completedSections / sections.length) * 100),
-        }));
-
-        // Add delay between transactions to avoid nonce conflicts
-        if (i < sections.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 3000));
-        }
-      } catch (sectionError) {
-        console.error(
-          `❌ Failed to add section ${sectionNumber}:`,
-          sectionError
-        );
-
-        if (
-          sectionError.message.includes("user rejected") ||
-          sectionError.message.includes("User denied")
-        ) {
-          sectionResults.push({
-            index: i,
-            success: false,
-            error: "User cancelled transaction",
-            title: section.title,
-          });
-
-          const continueChoice = await new Promise((resolve) => {
-            Alert.alert(
-              "Transaction Rejected",
-              `Section "${section.title}" was not added.\n\nContinue with remaining sections?`,
-              [
-                {
-                  text: "Stop Adding",
-                  style: "destructive",
-                  onPress: () => resolve(false),
-                },
-                {
-                  text: "Continue",
-                  onPress: () => resolve(true),
-                },
-              ]
-            );
-          });
-
-          if (!continueChoice) {
-            console.log("User chose to stop adding sections");
-            break;
-          }
-        } else {
-          sectionResults.push({
-            index: i,
-            success: false,
-            error: sectionError.message,
-            title: section.title,
-          });
-        }
-      }
-    }
-
-    console.log("✅ PHASE 3 COMPLETED: Section addition finished");
-
-    const successfulSections = sectionResults.filter((r) => r.success);
-    const failedSections = sectionResults.filter((r) => !r.success);
-
-    setUploadResults((prev) => ({
-      ...prev,
-      sectionIds: successfulSections.map((s) => s.sectionId),
-      transactionHashes: [
-        ...prev.transactionHashes,
-        ...successfulSections.map((s) => s.transactionHash),
-      ],
-    }));
-
-    return {
-      successfulSections,
-      failedSections,
-      totalProcessed: sectionResults.length,
-    };
-  };
-
-  // ✅ MAIN COURSE CREATION ORCHESTRATOR
+  // Main course creation orchestrator
   const handleCreateCourse = async () => {
     if (!validateCourseData()) return;
 
@@ -650,95 +406,60 @@ export default function CreateCourseScreen({ navigation }) {
   };
 
   const executeCreateCourse = async () => {
-    setIsCreatingCourse(true);
-
     try {
-      console.log("🚀 Starting 3-phase course creation process");
+      console.log("🚀 Starting course creation process");
 
-      // PHASE 1: Upload all files to IPFS
+      // Phase 1: Upload all files to IPFS
       const uploadedFiles = await executePhase1_UploadFiles();
 
-      // Small delay between phases
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Prepare sections with CIDs
+      const sectionsWithCIDs = sections.map((section) => ({
+        title: section.title,
+        duration: section.duration,
+        contentCID:
+          uploadedFiles.videoCIDs.get(section.id) ||
+          "placeholder-video-content",
+      }));
 
-      // PHASE 2: Create course on blockchain
-      const courseResult = await executePhase2_CreateCourse(uploadedFiles);
-
-      // Small delay before adding sections
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // PHASE 3: Add sections to course
-      const sectionsResult = await executePhase3_AddSections(
-        courseResult.courseId,
-        uploadedFiles
+      // Create course with sections
+      const courseResult = await createCourse(
+        {
+          title: courseData.title.trim(),
+          description: courseData.description.trim(),
+          thumbnailCID: uploadedFiles.thumbnailCID,
+          pricePerMonth: courseData.isPaid ? courseData.price : "0",
+        },
+        sectionsWithCIDs
       );
 
-      // Generate success message
-      const successMessage = generateSuccessMessage({
-        courseId: courseResult.courseId,
-        successfulSections: sectionsResult.successfulSections.length,
-        totalSections: sections.length,
-        thumbnailCID: uploadedFiles.thumbnailCID,
-        price: courseData.isPaid ? `${courseData.price} ETH/month` : "Free",
-        transactionHash: courseResult.transactionHash,
-        videosUploaded: uploadedFiles.videoCIDs.size,
-        failedSections: sectionsResult.failedSections,
-      });
+      if (courseResult.success) {
+        Alert.alert(
+          "Success! 🎉",
+          `✅ Course created successfully!\n\n` +
+            `📚 Course ID: ${courseResult.courseId}\n` +
+            `📖 Sections: ${courseResult.sectionsAdded}/${courseResult.totalSections} added\n` +
+            `🖼️ Thumbnail: ${uploadedFiles.thumbnailCID.substring(
+              0,
+              12
+            )}...\n` +
+            `🎬 Videos: ${uploadedFiles.videoCIDs.size} uploaded\n` +
+            `💰 Price: ${
+              courseData.isPaid ? `${courseData.price} ETH/month` : "Free"
+            }`
+        );
 
-      Alert.alert("Success! 🎉", successMessage);
-      resetForm();
-      navigation.navigate("MyCourses");
+        resetForm();
+        navigation.navigate("MyCourses");
+      } else {
+        throw new Error(courseResult.error || "Failed to create course");
+      }
     } catch (error) {
       console.error("❌ Course creation failed:", error);
       handleCreateCourseError(error);
-    } finally {
-      setIsCreatingCourse(false);
-      setCurrentPhase(0);
-      setUploadProgress({
-        phase: 0,
-        percentage: 0,
-        message: "",
-        completedFiles: 0,
-        totalFiles: 0,
-        completedSections: 0,
-        totalSections: 0,
-      });
     }
   };
 
-  // ✅ HELPER FUNCTIONS
-  const generateSuccessMessage = ({
-    courseId,
-    successfulSections,
-    totalSections,
-    thumbnailCID,
-    price,
-    transactionHash,
-    videosUploaded,
-    failedSections,
-  }) => {
-    let message = `✅ Course created successfully!\n\n`;
-    message += `📚 Course ID: ${courseId}\n`;
-    message += `📖 Sections: ${successfulSections}/${totalSections} added\n`;
-    message += `🖼️ Thumbnail: ${thumbnailCID.substring(0, 12)}...\n`;
-    message += `🎬 Videos: ${videosUploaded} uploaded\n`;
-    message += `💰 Price: ${price}\n`;
-    message += `🔗 Transaction: ${transactionHash.substring(0, 12)}...`;
-
-    if (failedSections.length > 0) {
-      message += `\n\n⚠️ Warning: ${failedSections.length} sections failed:\n`;
-      failedSections.slice(0, 3).forEach((failed) => {
-        message += `• ${failed.title}\n`;
-      });
-      if (failedSections.length > 3) {
-        message += `• ... and ${failedSections.length - 3} more\n`;
-      }
-      message += `\nYou can add them later from course management.`;
-    }
-
-    return message;
-  };
-
+  // Helper functions
   const handleCreateCourseError = (error) => {
     let errorMessage = "Failed to create course.";
 
@@ -782,23 +503,13 @@ export default function CreateCourseScreen({ navigation }) {
     });
   };
 
-  // ✅ PRICE VALIDATION EFFECTS
+  // Price validation effects
   useEffect(() => {
-    const fetchMaxPrice = async () => {
-      if (smartContractService && isInitialized) {
-        try {
-          const maxPriceInETH = await smartContractService.getMaxPriceInETH();
-          setCurrentMaxPrice(parseFloat(maxPriceInETH));
-          console.log("📊 Maximum price allowed:", maxPriceInETH, "ETH");
-        } catch (error) {
-          console.error("❌ Error fetching max price:", error);
-          setCurrentMaxPrice(0.001); // Fallback
-        }
-      }
-    };
-
-    fetchMaxPrice();
-  }, [smartContractService, isInitialized]);
+    if (maxPriceETH) {
+      setCurrentMaxPrice(parseFloat(maxPriceETH));
+      console.log("📊 Maximum price allowed:", maxPriceETH, "ETH");
+    }
+  }, [maxPriceETH]);
 
   useEffect(() => {
     if (courseData.isPaid && courseData.price && currentMaxPrice) {
@@ -819,7 +530,7 @@ export default function CreateCourseScreen({ navigation }) {
     }
   }, [courseData.price, courseData.isPaid, currentMaxPrice]);
 
-  // ✅ RENDER GUARDS
+  // Render guards
   if (!isConnected) {
     return (
       <SafeAreaView style={styles.container}>
@@ -848,7 +559,7 @@ export default function CreateCourseScreen({ navigation }) {
     );
   }
 
-  // ✅ CALCULATE TOTALS FOR UI
+  // Calculate totals for UI
   const videosToUpload = sections.filter((s) => s.videoFile).length;
   const totalFiles = videosToUpload + (courseData.thumbnailFile ? 1 : 0);
 
@@ -1109,42 +820,26 @@ export default function CreateCourseScreen({ navigation }) {
             <View style={styles.progressContainer}>
               <View style={styles.phaseIndicator}>
                 <Text style={styles.phaseText}>
-                  Phase {uploadProgress.phase}/3:{" "}
                   {uploadProgress.phase === 1
-                    ? "Uploading Files"
-                    : uploadProgress.phase === 2
-                    ? "Creating Course"
-                    : uploadProgress.phase === 3
-                    ? "Adding Sections"
-                    : "Processing"}
+                    ? "Phase 1/2: Uploading Files"
+                    : "Phase 2/2: Creating Course"}
                 </Text>
               </View>
 
               <View style={styles.progressBar}>
                 <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${uploadProgress.percentage}%` },
-                  ]}
+                  style={[styles.progressFill, { width: `${createProgress}%` }]}
                 />
               </View>
 
               <Text style={styles.progressText}>{uploadProgress.message}</Text>
 
               <View style={styles.progressStats}>
-                <Text style={styles.progressStat}>
-                  {uploadProgress.percentage}%
-                </Text>
+                <Text style={styles.progressStat}>{createProgress}%</Text>
                 {uploadProgress.phase === 1 && (
                   <Text style={styles.progressStat}>
                     Files: {uploadProgress.completedFiles}/
                     {uploadProgress.totalFiles}
-                  </Text>
-                )}
-                {uploadProgress.phase === 3 && (
-                  <Text style={styles.progressStat}>
-                    Sections: {uploadProgress.completedSections}/
-                    {uploadProgress.totalSections}
                   </Text>
                 )}
               </View>
@@ -1180,7 +875,7 @@ export default function CreateCourseScreen({ navigation }) {
   );
 }
 
-// ✅ SECTION ITEM COMPONENT
+// Section Item Component
 const SectionItem = React.memo(({ section, index, onRemove, disabled }) => (
   <View style={styles.sectionItem}>
     <View style={styles.sectionInfo}>
@@ -1447,12 +1142,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f0f0f0",
   },
   sectionInfo: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
     flex: 1,
   },
   videoStatusBadge: {

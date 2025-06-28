@@ -1,4 +1,4 @@
-// src/screens/MyCoursesScreen.js - Fixed with latest SmartContract integration
+// src/screens/MyCoursesScreen.js - Updated with Web3Context
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -15,24 +15,34 @@ import { useFocusEffect } from "@react-navigation/native";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
 import CourseCard from "../components/CourseCard";
-import { useSmartContract } from "../hooks/useBlockchain";
+import { useUserCourses, useCreatorCourses } from "../hooks/useBlockchain";
 
 export default function MyCoursesScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const { smartContractService, isInitialized } = useSmartContract();
 
   const [activeTab, setActiveTab] = useState("enrolled");
-  const [enrolledCourses, setEnrolledCourses] = useState([]);
-  const [createdCourses, setCreatedCourses] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [navigating, setNavigating] = useState(false);
   const navigationTimeoutRef = useRef(null);
 
   // State untuk kurs ETH -> IDR
   const [ethToIdrRate, setEthToIdrRate] = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
+
+  // Use blockchain hooks
+  const {
+    enrolledCourses,
+    loading: enrolledLoading,
+    error: enrolledError,
+    refetch: refetchEnrolled,
+  } = useUserCourses();
+  const {
+    createdCourses,
+    loading: createdLoading,
+    error: createdError,
+    refetch: refetchCreated,
+  } = useCreatorCourses();
 
   // Helper untuk format Rupiah
   const formatRupiah = (number) => {
@@ -56,7 +66,7 @@ export default function MyCoursesScreen({ navigation }) {
     return formatRupiah(priceInIdr);
   };
 
-  // ✅ FIXED: Enhanced ETH price fetching sesuai dengan DashboardScreen
+  // Enhanced ETH price fetching
   const fetchEthPriceInIdr = useCallback(async (retries = 3) => {
     try {
       setRateLoading(true);
@@ -108,188 +118,9 @@ export default function MyCoursesScreen({ navigation }) {
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
-  // ✅ ENHANCED: Load enrolled courses menggunakan SmartContractService terbaru
-  const loadEnrolledCourses = async () => {
-    try {
-      if (!smartContractService || !address) {
-        console.log("SmartContractService not available or no address");
-        return;
-      }
-
-      console.log("📚 Fetching enrolled courses for address:", address);
-
-      // ✅ Get user licenses first
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Request timeout")), 45000)
-      );
-
-      const userLicenses = await Promise.race([
-        smartContractService.getUserLicenses(address),
-        timeoutPromise,
-      ]);
-
-      console.log("✅ User licenses fetched:", userLicenses.length);
-
-      const coursesWithProgress = [];
-
-      // ✅ Process licenses in batches
-      const batchSize = 3;
-      for (let i = 0; i < userLicenses.length; i += batchSize) {
-        const batch = userLicenses.slice(i, i + batchSize);
-
-        const batchResults = await Promise.all(
-          batch.map(async (license) => {
-            try {
-              // Get course details
-              const course = await smartContractService.getCourse(
-                license.courseId
-              );
-
-              if (course && course.isActive) {
-                // Get progress for this course
-                let progress = null;
-                try {
-                  progress = await smartContractService.getUserProgress(
-                    address,
-                    license.courseId
-                  );
-                } catch (progressError) {
-                  console.warn(
-                    `Progress not available for course ${license.courseId}:`,
-                    progressError
-                  );
-                }
-
-                return {
-                  ...course,
-                  license,
-                  progress: progress?.progressPercentage || 0,
-                  completedSections: progress?.completedSections || 0,
-                  totalSections:
-                    progress?.totalSections || course.sectionsCount || 0,
-                  enrolled: license.expiryTimestamp
-                    ? new Date(license.expiryTimestamp)
-                        .toISOString()
-                        .split("T")[0]
-                    : new Date().toISOString().split("T")[0],
-                  instructor: `${course.creator.slice(
-                    0,
-                    6
-                  )}...${course.creator.slice(-4)}`,
-                  category: "Blockchain",
-                };
-              }
-              return null;
-            } catch (err) {
-              console.warn(
-                `Failed to fetch course details for license ${license.courseId}:`,
-                err
-              );
-              return null;
-            }
-          })
-        );
-
-        coursesWithProgress.push(...batchResults.filter(Boolean));
-      }
-
-      console.log("✅ Enrolled courses processed:", coursesWithProgress.length);
-      setEnrolledCourses(coursesWithProgress);
-    } catch (error) {
-      console.error("❌ Error loading enrolled courses:", error);
-      setEnrolledCourses([]); // Clear on error
-    }
-  };
-
-  // ✅ ENHANCED: Load created courses menggunakan SmartContractService terbaru
-  const loadCreatedCourses = async () => {
-    try {
-      if (!smartContractService || !address) {
-        console.log("SmartContractService not available or no address");
-        return;
-      }
-
-      console.log("👨‍🏫 Fetching created courses for address:", address);
-
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Request timeout")), 30000)
-      );
-
-      const userCreatedCourses = await Promise.race([
-        smartContractService.getCreatorCourses(address),
-        timeoutPromise,
-      ]);
-
-      console.log("✅ Created courses fetched:", userCreatedCourses.length);
-      setCreatedCourses(userCreatedCourses);
-    } catch (error) {
-      console.error("❌ Error loading created courses:", error);
-      setCreatedCourses([]); // Clear on error
-    }
-  };
-
-  // ✅ ENHANCED: Load all courses with better error handling
-  const loadAllCourses = async () => {
-    if (loading) {
-      console.log("Loading already in progress, skipping");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      // Use Promise.allSettled for better error handling
-      const results = await Promise.allSettled([
-        loadEnrolledCourses(),
-        loadCreatedCourses(),
-      ]);
-
-      // Log failed operations
-      results.forEach((result, index) => {
-        if (result.status === "rejected") {
-          console.error(
-            `Failed to load ${index === 0 ? "enrolled" : "created"} courses:`,
-            result.reason
-          );
-        }
-      });
-    } catch (error) {
-      console.error("❌ Error in loadAllCourses:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ✅ ENHANCED: Enhanced useEffect sesuai dengan pattern terbaru
   useEffect(() => {
-    console.log("MyCoursesScreen mounted with:", {
-      isConnected,
-      isOnMantaNetwork,
-      address,
-      isInitialized,
-      smartContractServiceAvailable: !!smartContractService,
-    });
-
-    // Fetch ETH rate
     fetchEthPriceInIdr();
-
-    // Load courses hanya jika semua kondisi terpenuhi
-    if (
-      isConnected &&
-      isOnMantaNetwork &&
-      address &&
-      isInitialized &&
-      smartContractService
-    ) {
-      loadAllCourses();
-    }
-  }, [
-    isConnected,
-    isOnMantaNetwork,
-    address,
-    isInitialized,
-    smartContractService,
-  ]);
+  }, [fetchEthPriceInIdr]);
 
   // Cleanup timeout when component unmounts
   useEffect(() => {
@@ -300,14 +131,18 @@ export default function MyCoursesScreen({ navigation }) {
     };
   }, []);
 
-  // ✅ ENHANCED: Refresh handler
+  // Refresh handler
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.allSettled([loadAllCourses(), fetchEthPriceInIdr()]);
+    await Promise.allSettled([
+      refetchEnrolled(),
+      refetchCreated(),
+      fetchEthPriceInIdr(),
+    ]);
     setRefreshing(false);
   };
 
-  // ✅ ENHANCED: Course press handler dengan debouncing
+  // Course press handler with debouncing
   const handleCoursePress = (course) => {
     if (navigating) {
       console.log("Navigation already in progress, preventing duplicate press");
@@ -338,7 +173,7 @@ export default function MyCoursesScreen({ navigation }) {
     }, 500);
   };
 
-  // ✅ ENHANCED: Tab button component
+  // Tab button component
   const TabButton = ({ title, isActive, onPress, count = 0 }) => (
     <TouchableOpacity
       style={[styles.tabButton, isActive && styles.activeTab]}
@@ -359,7 +194,7 @@ export default function MyCoursesScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-  // ✅ ENHANCED: Empty state component
+  // Empty state component
   const EmptyState = ({ type }) => (
     <View style={styles.emptyState}>
       <Ionicons
@@ -392,7 +227,7 @@ export default function MyCoursesScreen({ navigation }) {
     </View>
   );
 
-  // ✅ Connection state components
+  // Connection state components
   const NotConnectedState = () => (
     <View style={styles.centeredContent}>
       <Ionicons name="wallet-outline" size={64} color="#ccc" />
@@ -413,7 +248,7 @@ export default function MyCoursesScreen({ navigation }) {
     </View>
   );
 
-  // ✅ Early returns untuk connection states
+  // Early returns for connection states
   if (!isConnected) {
     return (
       <SafeAreaView style={styles.container}>
@@ -429,6 +264,8 @@ export default function MyCoursesScreen({ navigation }) {
       </SafeAreaView>
     );
   }
+
+  const loading = activeTab === "enrolled" ? enrolledLoading : createdLoading;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -478,7 +315,7 @@ export default function MyCoursesScreen({ navigation }) {
             </View>
           ) : enrolledCourses.length > 0 ? (
             <>
-              {/* ✅ ENHANCED: Learning Progress Stats */}
+              {/* Learning Progress Stats */}
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryTitle}>Learning Progress</Text>
                 <View style={styles.summaryStats}>
@@ -544,7 +381,7 @@ export default function MyCoursesScreen({ navigation }) {
           </View>
         ) : createdCourses.length > 0 ? (
           <>
-            {/* ✅ ENHANCED: Creator Stats */}
+            {/* Creator Stats */}
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Creator Stats</Text>
               <View style={styles.summaryStats}>
