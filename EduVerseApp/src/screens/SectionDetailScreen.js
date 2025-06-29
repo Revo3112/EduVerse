@@ -1,4 +1,3 @@
-// src/screens/SectionDetailScreen.js - Optimized for IPFS Video Playback
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -10,8 +9,9 @@ import {
   ActivityIndicator,
   Dimensions,
   ScrollView,
+  Platform,
 } from "react-native";
-import { Video } from "expo-av";
+import { Video, ResizeMode, Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { useAccount } from "wagmi";
 import { useWeb3 } from "../contexts/Web3Context";
@@ -21,6 +21,20 @@ const { width: screenWidth } = Dimensions.get("window");
 
 // Cache for video URLs to avoid regenerating
 const videoUrlCache = new Map();
+
+const configureAudio = async () => {
+  try {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      staysActiveInBackground: true,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    });
+  } catch (error) {
+    console.log("Audio configuration error:", error);
+  }
+};
 
 export default function SectionDetailScreen({ route, navigation }) {
   const { courseId, sectionId, sectionIndex, courseTitle, sectionData } =
@@ -42,16 +56,22 @@ export default function SectionDetailScreen({ route, navigation }) {
   const [hasLicense, setHasLicense] = useState(false);
   const [progress, setProgress] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
-  const [videoStatus, setVideoStatus] = useState({});
   const [completingSection, setCompletingSection] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState(null);
   const [licenseChecking, setLicenseChecking] = useState(false);
+  const [videoStatus, setVideoStatus] = useState({});
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [videoRetryCount, setVideoRetryCount] = useState(0);
 
   const videoRef = useRef(null);
   const isMountedRef = useRef(true);
   const initialLoadDone = useRef(false);
+
+  useEffect(() => {
+    configureAudio();
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -223,7 +243,7 @@ export default function SectionDetailScreen({ route, navigation }) {
       // Check cache first
       if (videoUrlCache.has(contentCID)) {
         const cachedUrl = videoUrlCache.get(contentCID);
-        console.log("✅ Using cached video URL");
+        console.log("✅ Using cached video URL:", cachedUrl);
         setVideoUrl(cachedUrl);
         setVideoLoading(false);
         return;
@@ -238,47 +258,42 @@ export default function SectionDetailScreen({ route, navigation }) {
 
       console.log("🎥 Generating video URL for CID:", cleanCID);
 
-      // Try multiple IPFS gateways for better availability
+      // Try multiple IPFS gateways in order of reliability
       const gateways = [
-        `https://gateway.pinata.cloud/ipfs/${cleanCID}`,
-        `https://ipfs.io/ipfs/${cleanCID}`,
-        `https://cloudflare-ipfs.com/ipfs/${cleanCID}`,
-        `https://w3s.link/ipfs/${cleanCID}`,
+        {
+          name: "Pinata",
+          url: `https://gateway.pinata.cloud/ipfs/${cleanCID}`,
+          priority: 1,
+        },
+        {
+          name: "IPFS.io",
+          url: `https://ipfs.io/ipfs/${cleanCID}`,
+          priority: 2,
+        },
+        {
+          name: "Cloudflare",
+          url: `https://cloudflare-ipfs.com/ipfs/${cleanCID}`,
+          priority: 3,
+        },
+        {
+          name: "W3S",
+          url: `https://w3s.link/ipfs/${cleanCID}`,
+          priority: 4,
+        },
       ];
 
-      // Try to get optimized URL from PinataService first
-      try {
-        const optimizedUrl = await pinataService.getOptimizedFileUrl(cleanCID, {
-          forcePublic: true,
-          network: "public",
-          fileType: "video",
-          expires: 7200, // 2 hours for video streaming
-        });
-
-        if (optimizedUrl && isMountedRef.current) {
-          console.log("✅ Got optimized URL from PinataService");
-          setVideoUrl(optimizedUrl);
-          videoUrlCache.set(contentCID, optimizedUrl);
-          setVideoLoading(false);
-          return;
-        }
-      } catch (pinataError) {
-        console.warn(
-          "⚠️ PinataService optimization failed, trying gateways:",
-          pinataError.message
-        );
-      }
-
-      // Test gateways to find the fastest one
       let workingUrl = null;
+      let testedGateways = [];
 
+      // Test gateways in order
       for (const gateway of gateways) {
         try {
-          console.log(`🔍 Testing gateway: ${gateway}`);
+          console.log(`🔍 Testing gateway: ${gateway.name}`);
+
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
 
-          const response = await fetch(gateway, {
+          const response = await fetch(gateway.url, {
             method: "HEAD",
             signal: controller.signal,
           });
@@ -286,26 +301,33 @@ export default function SectionDetailScreen({ route, navigation }) {
           clearTimeout(timeoutId);
 
           if (response.ok) {
-            console.log(`✅ Gateway working: ${gateway}`);
-            workingUrl = gateway;
+            console.log(`✅ Gateway working: ${gateway.name}`);
+            workingUrl = gateway.url;
             break;
+          } else {
+            testedGateways.push(`${gateway.name} (${response.status})`);
           }
         } catch (error) {
-          console.log(`❌ Gateway failed: ${gateway}`);
+          console.log(`❌ Gateway failed: ${gateway.name}`, error.message);
+          testedGateways.push(`${gateway.name} (failed)`);
           continue;
         }
       }
 
       if (workingUrl && isMountedRef.current) {
+        console.log("✅ Final working URL:", workingUrl);
         setVideoUrl(workingUrl);
         videoUrlCache.set(contentCID, workingUrl);
       } else {
-        throw new Error("No working IPFS gateway found");
+        console.error("❌ No working gateway found");
+        console.log("Tested gateways:", testedGateways);
+        throw new Error("Unable to access video content from any gateway");
       }
     } catch (error) {
       console.error("❌ Error generating video URL:", error);
       if (isMountedRef.current) {
-        setVideoError("Failed to load video content. Please try again later.");
+        setVideoError(error.message || "Failed to load video content");
+        // Set fallback URL anyway
         setFallbackVideoUrl();
       }
     } finally {
@@ -434,9 +456,14 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   }, []);
 
+  // Video status update handler
   const handleVideoStatusUpdate = useCallback(
     (status) => {
       setVideoStatus(status);
+
+      if (status.isLoaded) {
+        setIsPlaying(status.isPlaying);
+      }
 
       if (status.didJustFinish && !isCompleted && hasLicense) {
         Alert.alert("Video Completed", "Mark this section as complete?", [
@@ -444,9 +471,43 @@ export default function SectionDetailScreen({ route, navigation }) {
           { text: "Complete Section", onPress: handleCompleteSection },
         ]);
       }
+
+      if (status.error) {
+        console.error("Video playback error:", status.error);
+        handleVideoError();
+      }
     },
     [isCompleted, hasLicense, handleCompleteSection]
   );
+
+  // Handle video errors
+  const handleVideoError = useCallback(() => {
+    console.log("Video error occurred, retry count:", videoRetryCount);
+
+    if (videoRetryCount < 3) {
+      setVideoRetryCount((prev) => prev + 1);
+
+      // Try different gateway
+      if (section?.contentCID) {
+        videoUrlCache.delete(section.contentCID);
+        setTimeout(() => {
+          generateVideoUrl(section.contentCID);
+        }, 1000);
+      }
+    } else {
+      setVideoError("Unable to play video after multiple attempts");
+    }
+  }, [videoRetryCount, section, generateVideoUrl]);
+
+  // Retry video with different gateway
+  const retryVideo = useCallback(async () => {
+    if (!section?.contentCID) return;
+
+    setVideoError(null);
+    setVideoRetryCount(0);
+    videoUrlCache.delete(section.contentCID);
+    await generateVideoUrl(section.contentCID);
+  }, [section, generateVideoUrl]);
 
   // Media player component
   const renderMediaPlayer = useCallback(() => {
@@ -461,30 +522,6 @@ export default function SectionDetailScreen({ route, navigation }) {
             <Text style={styles.videoLoadingSubtext}>
               This may take a few moments
             </Text>
-          </View>
-        </View>
-      );
-    }
-
-    if (videoError) {
-      return (
-        <View style={styles.mediaContainer}>
-          <View style={styles.videoErrorContainer}>
-            <Ionicons name="alert-circle-outline" size={64} color="#ff6b6b" />
-            <Text style={styles.videoErrorTitle}>Video Loading Error</Text>
-            <Text style={styles.videoErrorText}>{videoError}</Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() => {
-                if (section?.contentCID) {
-                  setVideoError(null);
-                  generateVideoUrl(section.contentCID);
-                }
-              }}
-            >
-              <Ionicons name="refresh-outline" size={20} color="#fff" />
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
           </View>
         </View>
       );
@@ -508,35 +545,21 @@ export default function SectionDetailScreen({ route, navigation }) {
           style={styles.video}
           source={{ uri: videoUrl }}
           useNativeControls
-          resizeMode="contain"
+          resizeMode={ResizeMode.CONTAIN}
           shouldPlay={false}
           isLooping={false}
+          isMuted={false} // ✅ Tambahkan ini
+          volume={1.0} // ✅ Tambahkan ini
+          rate={1.0} // ✅ Tambahkan ini
           onPlaybackStatusUpdate={handleVideoStatusUpdate}
           onError={(error) => {
-            console.error("❌ Video playback error:", error);
-            Alert.alert(
-              "Video Error",
-              "Unable to play this video. The video might be in an unsupported format or the IPFS gateway is temporarily unavailable.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Try Again",
-                  onPress: () => {
-                    if (section?.contentCID) {
-                      videoUrlCache.delete(section.contentCID);
-                      generateVideoUrl(section.contentCID);
-                    }
-                  },
-                },
-              ]
-            );
-            setVideoError("Unable to play this video");
+            console.error("expo-av video error:", error);
+            handleVideoError();
           }}
           onLoad={(status) => {
-            console.log("✅ Video loaded successfully:", {
-              duration: status.durationMillis,
-              isLoaded: status.isLoaded,
-            });
+            console.log("✅ Video loaded successfully");
+            setVideoError(null);
+            setVideoRetryCount(0);
           }}
         />
 
@@ -550,15 +573,38 @@ export default function SectionDetailScreen({ route, navigation }) {
             </View>
           )}
 
-        {/* Video controls hint */}
-        {videoStatus.isPlaying === false && !videoStatus.didJustFinish && (
-          <View style={styles.playHint}>
-            <Ionicons
-              name="play-circle"
-              size={48}
-              color="rgba(255,255,255,0.8)"
-            />
-            <Text style={styles.playHintText}>Tap to play</Text>
+        {/* Play overlay when paused */}
+        {!isPlaying && !videoLoading && (
+          <TouchableOpacity
+            style={styles.playOverlay}
+            onPress={async () => {
+              if (videoRef.current) {
+                await videoRef.current.playAsync();
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.playButton}>
+              <Ionicons name="play" size={40} color="#fff" />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Error overlay */}
+        {videoError && (
+          <View style={styles.errorOverlay}>
+            <Ionicons name="alert-circle-outline" size={48} color="#ff6b6b" />
+            <Text style={styles.errorTitle}>Video Playback Error</Text>
+            <Text style={styles.errorText}>{videoError}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={retryVideo}>
+              <Ionicons name="refresh-outline" size={20} color="#fff" />
+              <Text style={styles.retryButtonText}>Try Again</Text>
+            </TouchableOpacity>
+            {videoRetryCount > 0 && (
+              <Text style={styles.retryCountText}>
+                Attempt {videoRetryCount + 1} of 4
+              </Text>
+            )}
           </View>
         )}
       </View>
@@ -568,14 +614,17 @@ export default function SectionDetailScreen({ route, navigation }) {
     videoError,
     videoUrl,
     section,
-    videoStatus,
+    isPlaying,
+    videoRetryCount,
     handleVideoStatusUpdate,
-    generateVideoUrl,
+    handleVideoError,
+    retryVideo,
   ]);
 
   // Navigation handlers
   const navigateToSection = useCallback(
     (newSectionIndex) => {
+      // Unload current video before navigation
       if (videoRef.current) {
         videoRef.current.unloadAsync();
       }
@@ -681,6 +730,29 @@ export default function SectionDetailScreen({ route, navigation }) {
               </Text>
             </View>
           </View>
+
+          {/* Video Info */}
+          {videoUrl && (
+            <View style={styles.videoInfoBox}>
+              <Text style={styles.videoInfoTitle}>Video Information</Text>
+              <Text style={styles.videoInfoText}>
+                Gateway: {new URL(videoUrl).hostname}
+              </Text>
+              {section?.contentCID && (
+                <Text style={styles.videoInfoText} numberOfLines={1}>
+                  CID: {section.contentCID}
+                </Text>
+              )}
+              {videoStatus.durationMillis && (
+                <Text style={styles.videoInfoText}>
+                  Duration:{" "}
+                  {formatDuration(
+                    Math.floor(videoStatus.durationMillis / 1000)
+                  )}
+                </Text>
+              )}
+            </View>
+          )}
 
           {/* Progress info */}
           {progress && (
@@ -847,41 +919,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
-  videoErrorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#1a1a1a",
-    padding: 20,
-  },
-  videoErrorTitle: {
-    color: "#ff6b6b",
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  videoErrorText: {
-    color: "#ccc",
-    fontSize: 14,
-    textAlign: "center",
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  retryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#8b5cf6",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
   noVideoContainer: {
     flex: 1,
     justifyContent: "center",
@@ -911,17 +948,65 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "500",
   },
-  playHint: {
+  playOverlay: {
     position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: [{ translateX: -50 }, { translateY: -30 }],
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
     alignItems: "center",
   },
-  playHintText: {
-    color: "rgba(255,255,255,0.8)",
+  playButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(139, 92, 246, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorTitle: {
+    color: "#ff6b6b",
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  errorText: {
+    color: "#ccc",
     fontSize: 14,
-    marginTop: 4,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#8b5cf6",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  retryCountText: {
+    color: "#999",
+    fontSize: 12,
+    marginTop: 12,
   },
   sectionInfo: {
     padding: 20,
@@ -982,6 +1067,23 @@ const styles = StyleSheet.create({
   completedText: {
     color: "#4CAF50",
     fontWeight: "500",
+  },
+  videoInfoBox: {
+    backgroundColor: "#f8f9fa",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  videoInfoTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
+  videoInfoText: {
+    fontSize: 11,
+    color: "#666",
+    marginBottom: 2,
   },
   progressInfo: {
     paddingTop: 16,
