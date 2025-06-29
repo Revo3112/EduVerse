@@ -1,4 +1,4 @@
-// src/screens/MyCoursesScreen.js - PRODUCTION READY
+// src/screens/MyCoursesScreen.js - PRODUCTION READY - Updated for Smart Contract Integration
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -35,7 +35,7 @@ export default function MyCoursesScreen({ navigation }) {
   const [ethToIdrRate, setEthToIdrRate] = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
 
-  // Use blockchain hooks
+  // Use blockchain hooks - Updated to match smart contract functions
   const {
     enrolledCourses,
     loading: enrolledLoading,
@@ -60,7 +60,7 @@ export default function MyCoursesScreen({ navigation }) {
     }).format(number);
   };
 
-  // Helper function to format price in IDR
+  // Helper function to format price in IDR - Updated for smart contract pricePerMonth
   const formatPriceInIDR = (priceInETH) => {
     if (!priceInETH || priceInETH === "0" || parseFloat(priceInETH) === 0) {
       return "Free";
@@ -98,7 +98,7 @@ export default function MyCoursesScreen({ navigation }) {
         return;
       }
 
-      // Fallback price
+      // Fallback price based on current market rates
       setEthToIdrRate(55000000);
     } finally {
       setRateLoading(false);
@@ -135,7 +135,7 @@ export default function MyCoursesScreen({ navigation }) {
     };
   }, []);
 
-  // Refresh handler
+  // Refresh handler - Updated to work with getUserLicenses and getCreatorCourses
   const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.allSettled([
@@ -146,10 +146,10 @@ export default function MyCoursesScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  // Course press handler
+  // Course press handler - Updated for course detail navigation
   const handleCoursePress = (course) => {
     if (navigating || modalPreventionActive) {
-      console.log("Navigation prevented");
+      console.log("Navigation prevented during smart contract operations");
       return;
     }
 
@@ -162,7 +162,7 @@ export default function MyCoursesScreen({ navigation }) {
 
     try {
       navigation.navigate("CourseDetail", {
-        courseId: course.id,
+        courseId: course.id.toString(), // Ensure courseId is string for smart contract calls
         courseTitle: course.title,
       });
     } catch (navigationError) {
@@ -211,8 +211,8 @@ export default function MyCoursesScreen({ navigation }) {
       </Text>
       <Text style={styles.emptySubtitle}>
         {type === "enrolled"
-          ? "Start learning by browsing available courses"
-          : "Share your knowledge by creating your first course"}
+          ? "Start learning by browsing available courses and minting course licenses"
+          : "Share your knowledge by creating your first course on the blockchain"}
       </Text>
       <TouchableOpacity
         style={styles.emptyActionButton}
@@ -237,7 +237,7 @@ export default function MyCoursesScreen({ navigation }) {
       <Ionicons name="wallet-outline" size={64} color="#ccc" />
       <Text style={styles.notConnectedTitle}>Wallet Not Connected</Text>
       <Text style={styles.notConnectedSubtitle}>
-        Connect your wallet to view your courses
+        Connect your wallet to view your course licenses and created courses
       </Text>
     </View>
   );
@@ -247,7 +247,7 @@ export default function MyCoursesScreen({ navigation }) {
       <Ionicons name="warning-outline" size={64} color="#ff9500" />
       <Text style={styles.warningTitle}>Wrong Network</Text>
       <Text style={styles.warningSubtitle}>
-        Switch to Manta Pacific Testnet to access your courses
+        Switch to Manta Pacific Testnet to access your courses and licenses
       </Text>
     </View>
   );
@@ -275,7 +275,10 @@ export default function MyCoursesScreen({ navigation }) {
         <View style={styles.centeredContent}>
           <ActivityIndicator size="large" color="#9747FF" />
           <Text style={styles.loadingText}>
-            Initializing smart contracts...
+            Initializing smart contracts on Manta Pacific...
+          </Text>
+          <Text style={styles.loadingSubtext}>
+            Connecting to CourseFactory, CourseLicense, and ProgressTracker
           </Text>
         </View>
       </SafeAreaView>
@@ -289,7 +292,9 @@ export default function MyCoursesScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>My Courses</Text>
-        <Text style={styles.subtitle}>Track your learning journey</Text>
+        <Text style={styles.subtitle}>
+          Track your learning journey and course creation on Manta Pacific
+        </Text>
       </View>
 
       {/* Tab Navigation */}
@@ -327,12 +332,15 @@ export default function MyCoursesScreen({ navigation }) {
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#9747FF" />
               <Text style={styles.loadingText}>
-                Loading enrolled courses...
+                Loading enrolled courses from blockchain...
+              </Text>
+              <Text style={styles.loadingSubtext}>
+                Fetching course licenses and progress data
               </Text>
             </View>
           ) : enrolledCourses.length > 0 ? (
             <>
-              {/* Learning Progress Stats */}
+              {/* Learning Progress Stats - Updated for smart contract data */}
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryTitle}>Learning Progress</Text>
                 <View style={styles.summaryStats}>
@@ -371,9 +379,14 @@ export default function MyCoursesScreen({ navigation }) {
                     <Text style={styles.summaryLabel}>Avg Progress</Text>
                   </View>
                 </View>
+                <View style={styles.licenseInfo}>
+                  <Text style={styles.licenseInfoText}>
+                    📝 Course access managed via NFT licenses on Manta Pacific
+                  </Text>
+                </View>
               </View>
 
-              {/* Enrolled Courses List */}
+              {/* Enrolled Courses List - Updated for license data */}
               <View style={styles.coursesContainer}>
                 {enrolledCourses.map((course) => (
                   <CourseCard
@@ -384,6 +397,9 @@ export default function MyCoursesScreen({ navigation }) {
                     showMintButton={false}
                     hidePrice={true}
                     priceLoading={navigating}
+                    showProgress={true}
+                    progressPercentage={course.progress || 0}
+                    licenseInfo={course.license}
                   />
                 ))}
               </View>
@@ -394,18 +410,23 @@ export default function MyCoursesScreen({ navigation }) {
         ) : loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#9747FF" />
-            <Text style={styles.loadingText}>Loading created courses...</Text>
+            <Text style={styles.loadingText}>
+              Loading created courses from blockchain...
+            </Text>
+            <Text style={styles.loadingSubtext}>
+              Fetching courses from CourseFactory contract
+            </Text>
           </View>
         ) : createdCourses.length > 0 ? (
           <>
-            {/* Creator Stats */}
+            {/* Creator Stats - Updated for smart contract data */}
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Creator Stats</Text>
               <View style={styles.summaryStats}>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryNumber}>
                     {createdCourses.reduce(
-                      (acc, c) => acc + (c.students || 0),
+                      (acc, c) => acc + (c.studentsCount || 0),
                       0
                     )}
                   </Text>
@@ -415,14 +436,14 @@ export default function MyCoursesScreen({ navigation }) {
                   <Text style={styles.summaryNumber}>
                     {createdCourses.filter((c) => c.isActive === true).length}
                   </Text>
-                  <Text style={styles.summaryLabel}>Published</Text>
+                  <Text style={styles.summaryLabel}>Active Courses</Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryNumber}>
                     {createdCourses
                       .reduce((acc, c) => {
                         const pricePerMonth = parseFloat(c.pricePerMonth) || 0;
-                        const students = c.students || 0;
+                        const students = c.studentsCount || 0;
                         return acc + pricePerMonth * students;
                       }, 0)
                       .toFixed(4)}{" "}
@@ -431,9 +452,15 @@ export default function MyCoursesScreen({ navigation }) {
                   <Text style={styles.summaryLabel}>Est. Revenue</Text>
                 </View>
               </View>
+              <View style={styles.contractInfo}>
+                <Text style={styles.contractInfoText}>
+                  🏗️ Courses deployed on CourseFactory: {createdCourses.length}{" "}
+                  total
+                </Text>
+              </View>
             </View>
 
-            {/* Created Courses List */}
+            {/* Created Courses List - Updated for smart contract data */}
             <View style={styles.coursesContainer}>
               {createdCourses.map((course) => (
                 <CourseCard
@@ -445,6 +472,7 @@ export default function MyCoursesScreen({ navigation }) {
                   hidePrice={false}
                   priceInIdr={formatPriceInIDR(course.pricePerMonth)}
                   priceLoading={rateLoading || navigating}
+                  showCreatorBadge={true}
                 />
               ))}
             </View>
@@ -472,6 +500,13 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: "#666",
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#94a3b8",
     textAlign: "center",
   },
   centeredContent: {
@@ -644,6 +679,32 @@ const styles = StyleSheet.create({
   summaryLabel: {
     fontSize: 12,
     color: "#666",
+    fontWeight: "500",
+  },
+  licenseInfo: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "#f0f7ff",
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#9747FF",
+  },
+  licenseInfoText: {
+    fontSize: 12,
+    color: "#5a67d8",
+    fontWeight: "500",
+  },
+  contractInfo: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "#f0fff4",
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#48bb78",
+  },
+  contractInfoText: {
+    fontSize: 12,
+    color: "#38a169",
     fontWeight: "500",
   },
 });

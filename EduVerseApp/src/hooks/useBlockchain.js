@@ -7,9 +7,11 @@ import { mantaPacificTestnet } from "../constants/blockchain";
 // ==================== CONTRACT STATUS HOOKS ====================
 
 export const useSmartContract = () => {
-  const { isInitialized, initError, modalPreventionActive } = useWeb3();
+  const web3Context = useWeb3();
+  const { isInitialized, initError, modalPreventionActive } = web3Context;
 
   return {
+    smartContractService: web3Context, // ✅ Return the whole context as service
     isInitialized,
     error: initError,
     hasEverInitialized: isInitialized,

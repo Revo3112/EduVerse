@@ -1,4 +1,4 @@
-// src/screens/CreateCourseScreen.js - ENHANCED ERROR HANDLING
+// src/screens/CreateCourseScreen.js - Updated for Direct ETH Pricing
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
@@ -22,18 +22,21 @@ import { videoService } from "../services/VideoService";
 import { useWeb3 } from "../contexts/Web3Context";
 import AddSectionModal from "../components/AddSectionModal";
 
+// Constants for Manta Pacific Sepolia
+const TRANSACTION_DELAY_MS = 3000; // 3 seconds between section additions
+const MAX_RETRIES_SECTIONS = 2; // Max retries for failed sections
+
 export default function CreateCourseScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
 
-  // ✅ Using Web3Context directly
+  // ✅ Using updated Web3Context
   const {
     isInitialized,
     modalPreventionActive,
     createCourse,
     addCourseSection,
-    getETHPrice,
-    getMaxPriceInETH,
+    getMaxPriceETH, // Using direct ETH constant
   } = useWeb3();
 
   // Course data state
@@ -50,7 +53,7 @@ export default function CreateCourseScreen({ navigation }) {
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [createProgress, setCreateProgress] = useState(0);
-  const [currentStep, setCurrentStep] = useState(""); // Track current step
+  const [currentStep, setCurrentStep] = useState("");
 
   // Upload state
   const [uploadProgress, setUploadProgress] = useState({
@@ -67,22 +70,24 @@ export default function CreateCourseScreen({ navigation }) {
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
-  // ✅ Fetch max price
+  // ✅ Fetch max price from contract
   useEffect(() => {
     const fetchMaxPrice = async () => {
-      if (isInitialized) {
+      if (isInitialized && getMaxPriceETH) {
         try {
-          const maxPrice = await getMaxPriceInETH();
+          const maxPrice = await getMaxPriceETH();
           setCurrentMaxPrice(parseFloat(maxPrice));
           console.log("📊 Maximum price allowed:", maxPrice, "ETH");
         } catch (error) {
           console.error("Failed to get max price:", error);
+          // Fallback to hardcoded value from contract
+          setCurrentMaxPrice(0.002);
         }
       }
     };
 
     fetchMaxPrice();
-  }, [isInitialized, getMaxPriceInETH]);
+  }, [isInitialized, getMaxPriceETH]);
 
   // Input handlers
   const handleInputChange = (field, value) => {
@@ -240,7 +245,7 @@ export default function CreateCourseScreen({ navigation }) {
     return true;
   };
 
-  // Upload files to IPFS
+  // Upload files to IPFS with retry logic
   const uploadFilesToIPFS = async () => {
     console.log("🚀 Starting file uploads to IPFS");
     setCurrentStep("Uploading files to IPFS");
@@ -284,73 +289,100 @@ export default function CreateCourseScreen({ navigation }) {
 
     let completedFiles = 0;
 
+    // Upload with retry logic
     for (const fileItem of filesToUpload) {
-      try {
-        setUploadProgress((prev) => ({
-          ...prev,
-          message: `Uploading ${fileItem.type}: ${fileItem.file.name}`,
-          percentage: Math.round((completedFiles / totalFiles) * 100),
-        }));
+      let retries = 0;
+      const maxRetries = 2;
+      let uploadSuccess = false;
 
-        let uploadResult;
+      while (retries <= maxRetries && !uploadSuccess) {
+        try {
+          setUploadProgress((prev) => ({
+            ...prev,
+            message: `Uploading ${fileItem.type}: ${
+              fileItem.file.name
+            } (attempt ${retries + 1})`,
+            percentage: Math.round((completedFiles / totalFiles) * 100),
+          }));
 
-        if (fileItem.type === "thumbnail") {
-          uploadResult = await pinataService.uploadFile(fileItem.file, {
-            name: `course_thumbnail_${Date.now()}`,
-            network: "public",
-            keyvalues: {
-              category: "thumbnail",
-              courseTitle: courseData.title.trim(),
-              app: "eduverse",
-              creator: address,
-              uploadedAt: new Date().toISOString(),
-            },
-          });
+          let uploadResult;
 
-          if (uploadResult.success) {
-            results.thumbnailCID = uploadResult.ipfsHash.replace("ipfs://", "");
-            console.log(`✅ Thumbnail uploaded: ${results.thumbnailCID}`);
-          } else {
-            throw new Error(uploadResult.error || "Thumbnail upload failed");
+          if (fileItem.type === "thumbnail") {
+            uploadResult = await pinataService.uploadFile(fileItem.file, {
+              name: `course_thumbnail_${Date.now()}`,
+              network: "public",
+              keyvalues: {
+                category: "thumbnail",
+                courseTitle: courseData.title.trim(),
+                app: "eduverse",
+                creator: address,
+                uploadedAt: new Date().toISOString(),
+              },
+            });
+
+            if (uploadResult.success) {
+              results.thumbnailCID = uploadResult.ipfsHash.replace(
+                "ipfs://",
+                ""
+              );
+              console.log(`✅ Thumbnail uploaded: ${results.thumbnailCID}`);
+              uploadSuccess = true;
+            } else {
+              throw new Error(uploadResult.error || "Thumbnail upload failed");
+            }
+          } else if (fileItem.type === "video") {
+            uploadResult = await videoService.uploadVideoPublic(fileItem.file, {
+              courseId: "temp-course",
+              sectionId: fileItem.id.toString(),
+              name: fileItem.file.name,
+              metadata: {
+                uploadSource: "CreateCourseScreen",
+                sectionTitle: fileItem.sectionTitle,
+                uploadedAt: new Date().toISOString(),
+              },
+            });
+
+            if (uploadResult.success) {
+              const videoCID = uploadResult.ipfsHash.replace("ipfs://", "");
+              results.videoCIDs.set(fileItem.id, videoCID);
+              console.log(
+                `✅ Video uploaded for section ${fileItem.sectionTitle}: ${videoCID}`
+              );
+              uploadSuccess = true;
+            } else {
+              throw new Error(uploadResult.error || "Video upload failed");
+            }
           }
-        } else if (fileItem.type === "video") {
-          uploadResult = await videoService.uploadVideoPublic(fileItem.file, {
-            courseId: "temp-course",
-            sectionId: fileItem.id.toString(),
-            name: fileItem.file.name,
-            metadata: {
-              uploadSource: "CreateCourseScreen",
-              sectionTitle: fileItem.sectionTitle,
-              uploadedAt: new Date().toISOString(),
-            },
-          });
 
-          if (uploadResult.success) {
-            const videoCID = uploadResult.ipfsHash.replace("ipfs://", "");
-            results.videoCIDs.set(fileItem.id, videoCID);
-            console.log(
-              `✅ Video uploaded for section ${fileItem.sectionTitle}: ${videoCID}`
+          completedFiles++;
+          setUploadProgress((prev) => ({
+            ...prev,
+            completedFiles,
+            percentage: Math.round((completedFiles / totalFiles) * 100),
+          }));
+
+          setCreateProgress(Math.round((completedFiles / totalFiles) * 40));
+
+          // Small delay between uploads
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        } catch (error) {
+          console.error(
+            `❌ Upload attempt ${retries + 1} failed for ${fileItem.type}:`,
+            error
+          );
+
+          retries++;
+          if (retries > maxRetries) {
+            throw new Error(
+              `Failed to upload ${fileItem.type} after ${
+                maxRetries + 1
+              } attempts: ${error.message}`
             );
-          } else {
-            throw new Error(uploadResult.error || "Video upload failed");
           }
+
+          // Wait before retry
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
-
-        completedFiles++;
-        setUploadProgress((prev) => ({
-          ...prev,
-          completedFiles,
-          percentage: Math.round((completedFiles / totalFiles) * 100),
-        }));
-
-        // Update create progress
-        setCreateProgress(Math.round((completedFiles / totalFiles) * 40)); // 40% for uploads
-
-        // Small delay between uploads
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      } catch (error) {
-        console.error(`❌ Failed to upload ${fileItem.type}:`, error);
-        throw new Error(`Failed to upload ${fileItem.type}: ${error.message}`);
       }
     }
 
@@ -358,7 +390,111 @@ export default function CreateCourseScreen({ navigation }) {
     return results;
   };
 
-  // ✅ ENHANCED: Main course creation with better debugging
+  // ✅ Enhanced section addition with retry logic
+  const addSectionsWithRetry = async (
+    courseId,
+    sectionsToAdd,
+    uploadedVideoCIDs
+  ) => {
+    const sectionsAdded = [];
+    const sectionErrors = [];
+    let totalAdded = 0;
+
+    for (let i = 0; i < sectionsToAdd.length; i++) {
+      const section = sectionsToAdd[i];
+      let retries = 0;
+      let sectionAdded = false;
+
+      while (retries <= MAX_RETRIES_SECTIONS && !sectionAdded) {
+        try {
+          console.log(
+            `📝 Adding section ${i + 1}/${sectionsToAdd.length}: ${
+              section.title
+            } (attempt ${retries + 1})`
+          );
+
+          const sectionResult = await addCourseSection(courseId, {
+            title: section.title,
+            contentCID:
+              uploadedVideoCIDs.get(section.id) || "placeholder-video-content",
+            duration: section.duration,
+          });
+
+          if (sectionResult.success) {
+            totalAdded++;
+            sectionsAdded.push({
+              ...section,
+              transactionHash: sectionResult.transactionHash,
+            });
+            sectionAdded = true;
+            console.log(
+              `✅ Section ${i + 1}/${sectionsToAdd.length} added successfully`
+            );
+          } else {
+            throw new Error(sectionResult.error || "Failed to add section");
+          }
+
+          // Update progress
+          const sectionProgress = 70 + ((i + 1) / sectionsToAdd.length) * 30;
+          setCreateProgress(Math.round(sectionProgress));
+
+          setUploadProgress((prev) => ({
+            ...prev,
+            message: `Added section ${totalAdded} of ${sectionsToAdd.length}...`,
+          }));
+
+          // ✅ CRITICAL: Delay between transactions for Manta Pacific Sepolia
+          if (i < sectionsToAdd.length - 1) {
+            console.log(
+              `⏳ Waiting ${TRANSACTION_DELAY_MS}ms before next section...`
+            );
+            await new Promise((resolve) =>
+              setTimeout(resolve, TRANSACTION_DELAY_MS)
+            );
+          }
+        } catch (error) {
+          console.error(`❌ Section attempt ${retries + 1} failed:`, error);
+
+          // Don't retry on user rejection
+          if (
+            error.message?.includes("cancelled by user") ||
+            error.message?.includes("user rejected")
+          ) {
+            sectionErrors.push({
+              section: section.title,
+              error: "Transaction cancelled by user",
+            });
+            break;
+          }
+
+          retries++;
+          if (retries > MAX_RETRIES_SECTIONS) {
+            sectionErrors.push({
+              section: section.title,
+              error: error.message,
+            });
+            console.error(
+              `Failed to add section "${section.title}" after ${
+                MAX_RETRIES_SECTIONS + 1
+              } attempts`
+            );
+          } else {
+            // Wait longer before retry
+            console.log(`⏳ Waiting 5s before retry...`);
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+          }
+        }
+      }
+    }
+
+    return {
+      sectionsAdded: totalAdded,
+      totalSections: sectionsToAdd.length,
+      errors: sectionErrors,
+    };
+  };
+
+  // ✅ Main course creation with enhanced error handling
   const handleCreateCourse = async () => {
     if (!validateCourseData()) return;
 
@@ -407,7 +543,10 @@ export default function CreateCourseScreen({ navigation }) {
         `Title: ${courseData.title}\n` +
         `Price: ${courseData.isPaid ? `${courseData.price} ETH` : "Free"}\n` +
         `Files to upload: ${totalFiles}\n\n` +
-        `Make sure your wallet is connected and you have enough ETH for gas fees.\n\n` +
+        `⚠️ Important:\n` +
+        `• Make sure your wallet is connected\n` +
+        `• Have enough ETH for gas fees\n` +
+        `• Each section adds a 3s delay for network safety\n\n` +
         `Continue?`,
       [
         { text: "Cancel", style: "cancel" },
@@ -421,12 +560,15 @@ export default function CreateCourseScreen({ navigation }) {
 
   const executeCreateCourse = async () => {
     try {
-      console.log("🚀 Starting course creation process");
+      console.log(
+        "🚀 Starting course creation process on Manta Pacific Sepolia"
+      );
       console.log("📊 Course data:", {
         title: courseData.title,
         description: courseData.description.substring(0, 50) + "...",
         price: courseData.isPaid ? courseData.price : "0",
         sectionsCount: sections.length,
+        network: "Manta Pacific Sepolia",
       });
 
       setIsCreatingCourse(true);
@@ -487,82 +629,38 @@ export default function CreateCourseScreen({ navigation }) {
         return;
       }
 
-      // Phase 3: Add sections to blockchain
+      // Phase 3: Add sections to blockchain with retry logic
       setUploadProgress((prev) => ({
         ...prev,
         phase: 3,
-        message: "Adding sections to course...",
+        message: "Adding sections to course (this may take a while)...",
       }));
       setCurrentStep("Adding sections to blockchain");
 
-      let sectionsAdded = 0;
-      let sectionErrors = [];
-
-      for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-
-        try {
-          console.log(
-            `📝 Adding section ${i + 1}/${sections.length}: ${section.title}`
-          );
-
-          const sectionResult = await addCourseSection(courseId, {
-            title: section.title,
-            contentCID:
-              uploadedFiles.videoCIDs.get(section.id) ||
-              "placeholder-video-content",
-            duration: section.duration,
-          });
-
-          if (sectionResult.success) {
-            sectionsAdded++;
-            console.log(`✅ Section ${i + 1}/${sections.length} added`);
-          } else {
-            throw new Error(sectionResult.error || "Failed to add section");
-          }
-
-          // Update progress
-          const sectionProgress = 70 + ((i + 1) / sections.length) * 30;
-          setCreateProgress(Math.round(sectionProgress));
-
-          setUploadProgress((prev) => ({
-            ...prev,
-            message: `Adding section ${i + 1} of ${sections.length}...`,
-          }));
-
-          // Delay between transactions
-          if (i < sections.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          }
-        } catch (err) {
-          console.warn(`Failed to add section "${section.title}":`, err);
-          sectionErrors.push({
-            section: section.title,
-            error: err.message,
-          });
-
-          // Continue with other sections even if one fails
-          if (err.message.includes("timeout")) {
-            console.log(
-              "Section may still be processing, continuing with next section..."
-            );
-          }
-        }
-      }
+      const sectionResults = await addSectionsWithRetry(
+        courseId,
+        sections,
+        uploadedFiles.videoCIDs
+      );
 
       setCreateProgress(100);
       setCurrentStep("Complete!");
 
-      // Enhanced success message with section status
-      let successMessage = `Course created successfully!\n\nCourse ID: ${courseId}\nSections added: ${sectionsAdded}/${sections.length}`;
+      // Enhanced success message
+      let successMessage =
+        `Course created successfully! 🎉\n\n` +
+        `Course ID: ${courseId}\n` +
+        `Sections added: ${sectionResults.sectionsAdded}/${sectionResults.totalSections}`;
 
-      if (sectionErrors.length > 0) {
-        successMessage += `\n\nSome sections failed to add:\n${sectionErrors
-          .map((e) => `- ${e.section}: ${e.error}`)
-          .join("\n")}`;
+      if (sectionResults.errors.length > 0) {
+        successMessage += `\n\n⚠️ Some sections failed to add:\n${sectionResults.errors
+          .map((e) => `• ${e.section}: ${e.error}`)
+          .join(
+            "\n"
+          )}\n\nYou can add these sections later from the course edit page.`;
       }
 
-      Alert.alert("Success! 🎉", successMessage, [
+      Alert.alert("Success!", successMessage, [
         {
           text: "View My Courses",
           onPress: () => navigation.navigate("MyCourses"),
@@ -582,48 +680,49 @@ export default function CreateCourseScreen({ navigation }) {
       let errorMessage = "Failed to create course.";
       let errorTitle = "Error";
 
-      // More specific error handling
+      // Enhanced error handling for Web3 errors
       if (
-        error.message.includes("rejected by user") ||
-        error.message.includes("cancelled by user") ||
-        error.message.includes("User rejected") ||
-        error.message.includes("user rejected")
+        error.message?.includes("rejected by user") ||
+        error.message?.includes("cancelled by user") ||
+        error.message?.includes("User rejected") ||
+        error.message?.includes("user rejected")
       ) {
         errorTitle = "Transaction Cancelled";
         errorMessage =
           "You cancelled the transaction. Please try again when ready.";
-      } else if (error.message.includes("insufficient funds")) {
+      } else if (error.message?.includes("insufficient funds")) {
         errorTitle = "Insufficient Funds";
         errorMessage =
           "You don't have enough ETH for gas fees. Please add funds to your wallet.";
       } else if (
-        error.message.includes("Wallet disconnected") ||
-        error.message.includes("Wallet not connected") ||
-        error.message.includes("Wallet not properly connected")
+        error.message?.includes("Wallet disconnected") ||
+        error.message?.includes("Wallet not connected") ||
+        error.message?.includes("Wallet not properly connected")
       ) {
         errorTitle = "Wallet Issue";
         errorMessage =
           "Your wallet was disconnected or not properly connected. Please reconnect and try again.";
-      } else if (
-        error.message.includes("Transaction failed. Please check your wallet")
-      ) {
-        errorTitle = "Transaction Error";
+      } else if (error.message?.includes("Price exceeds maximum")) {
+        errorTitle = "Price Error";
+        errorMessage = `The course price exceeds the maximum allowed (${
+          currentMaxPrice?.toFixed(6) || "0.002"
+        } ETH).`;
+      } else if (error.message?.includes("reverted")) {
+        errorTitle = "Transaction Reverted";
         errorMessage =
-          "The transaction failed. This could be due to:\n\n" +
-          "• Wallet connectivity issues\n" +
-          "• Network congestion\n" +
-          "• Insufficient gas\n\n" +
-          "Please check your wallet and try again.";
-      } else if (error.message.includes("Contract error:")) {
-        errorTitle = "Smart Contract Error";
-        errorMessage = error.message;
-      } else if (error.message.includes("timeout")) {
+          "The transaction was reverted by the smart contract. This could be due to:\n\n" +
+          "• Invalid input data\n" +
+          "• Contract state issues\n" +
+          "• Network problems\n\n" +
+          "Please check your inputs and try again.";
+      } else if (error.message?.includes("timeout")) {
         errorTitle = "Transaction Timeout";
         errorMessage =
           "Transaction took too long. It may still be processing. Check 'My Courses' in a few minutes.";
-      } else if (error.message.includes("pending. Hash:")) {
-        errorTitle = "Transaction Pending";
-        errorMessage = error.message;
+      } else if (error.message?.includes("nonce")) {
+        errorTitle = "Transaction Conflict";
+        errorMessage =
+          "There was a transaction conflict. Please wait a moment and try again.";
       } else {
         errorMessage = `Failed to create course: ${error.message}`;
       }
@@ -672,7 +771,9 @@ export default function CreateCourseScreen({ navigation }) {
         setPriceValidationError("Price must be greater than 0");
       } else if (priceValue > currentMaxPrice) {
         setPriceValidationError(
-          `Price cannot exceed ${currentMaxPrice.toFixed(6)} ETH (≈ $2 USD)`
+          `Price cannot exceed ${currentMaxPrice.toFixed(
+            6
+          )} ETH (contract limit)`
         );
       } else {
         setPriceValidationError("");
@@ -850,7 +951,7 @@ export default function CreateCourseScreen({ navigation }) {
                   <Text style={styles.errorText}>{priceValidationError}</Text>
                 ) : currentMaxPrice ? (
                   <Text style={styles.helpText}>
-                    Maximum: {currentMaxPrice.toFixed(6)} ETH (≈ $2 USD)
+                    Maximum: {currentMaxPrice.toFixed(6)} ETH (contract limit)
                   </Text>
                 ) : null}
               </View>
@@ -903,6 +1004,15 @@ export default function CreateCourseScreen({ navigation }) {
                 </Text>
               </View>
             )}
+          </View>
+
+          {/* Network Info */}
+          <View style={styles.networkInfo}>
+            <Ionicons name="information-circle" size={20} color="#9747FF" />
+            <Text style={styles.networkInfoText}>
+              Creating on Manta Pacific Sepolia. Each section requires a
+              separate transaction with 3s delay for network stability.
+            </Text>
           </View>
 
           {/* Create Button */}
@@ -1346,6 +1456,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     paddingHorizontal: 20,
+  },
+
+  // Network info
+  networkInfo: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#f3f0ff",
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  networkInfoText: {
+    fontSize: 14,
+    color: "#6b46c1",
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 20,
   },
 
   // Button styles

@@ -1,4 +1,4 @@
-// src/contexts/Web3Context.js - Fixed for Manta Pacific Sepolia
+// src/contexts/Web3Context.js - Updated for Direct ETH Pricing
 import React, {
   createContext,
   useContext,
@@ -44,6 +44,9 @@ export function Web3Provider({ children }) {
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState(null);
   const [modalPreventionActive, setModalPreventionActive] = useState(false);
+
+  // Transaction safety delay for Manta Pacific Sepolia
+  const TRANSACTION_DELAY_MS = 3000; // 3 seconds between transactions
 
   // Cache management
   const cacheRef = useRef({
@@ -92,7 +95,7 @@ export function Web3Provider({ children }) {
         const allValid = verifications.every((v) => v.valid);
 
         if (allValid) {
-          console.log("✅ All contracts verified");
+          console.log("✅ All contracts verified on Manta Pacific Sepolia");
           setIsInitialized(true);
           setInitError(null);
         } else {
@@ -118,6 +121,109 @@ export function Web3Provider({ children }) {
     }
   }, [publicClient, contractAddresses]);
 
+  // ==================== HELPER FUNCTIONS ====================
+
+  // Safe delay function
+  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Safe transaction execution with retry logic
+  const executeTransaction = useCallback(
+    async (txFunc, options = {}) => {
+      const {
+        confirmations = 2, // Higher confirmations for testnet
+        timeout = 120000, // 2 minutes timeout
+        retryOnNonce = true,
+      } = options;
+
+      let retries = 0;
+      const maxRetries = 2;
+
+      while (retries <= maxRetries) {
+        try {
+          console.log(
+            `📤 Executing transaction (attempt ${retries + 1}/${
+              maxRetries + 1
+            })`
+          );
+
+          // Execute the transaction function
+          const hash = await txFunc();
+
+          console.log(`📋 Transaction hash: ${hash}`);
+          console.log(`⏳ Waiting for ${confirmations} confirmations...`);
+
+          // Wait for receipt with proper timeout
+          const receipt = await publicClient.waitForTransactionReceipt({
+            hash,
+            confirmations,
+            timeout,
+          });
+
+          console.log(`✅ Transaction confirmed:`, {
+            status: receipt.status,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed?.toString(),
+          });
+
+          if (receipt.status === "reverted") {
+            throw new Error("Transaction reverted on-chain");
+          }
+
+          return { hash, receipt };
+        } catch (error) {
+          console.error(`Transaction attempt ${retries + 1} failed:`, error);
+
+          // Don't retry on user rejection
+          if (
+            error.message?.includes("user rejected") ||
+            error.message?.includes("User denied") ||
+            error.cause?.code === 4001
+          ) {
+            throw error;
+          }
+
+          // Retry on nonce issues
+          if (
+            retryOnNonce &&
+            error.message?.includes("nonce") &&
+            retries < maxRetries
+          ) {
+            console.log("🔄 Retrying due to nonce issue...");
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            retries++;
+            continue;
+          }
+
+          throw error;
+        }
+      }
+
+      throw new Error("Transaction failed after all retries");
+    },
+    [publicClient]
+  );
+
+  // Get MAX_PRICE_ETH constant from contract
+  const getMaxPriceETH = useCallback(async () => {
+    if (!isInitialized || !publicClient) {
+      throw new Error("Not initialized");
+    }
+
+    try {
+      const maxPriceWei = await publicClient.readContract({
+        address: contractAddresses.courseFactory,
+        abi: CourseFactoryABI,
+        functionName: "MAX_PRICE_ETH",
+      });
+
+      return formatEther(maxPriceWei);
+    } catch (error) {
+      console.error("Get max price error:", error);
+      // Fallback to hardcoded value from contract
+      return "0.002";
+    }
+  }, [isInitialized, publicClient, contractAddresses]);
+
   // ==================== COURSE FACTORY FUNCTIONS ====================
 
   const createCourse = useCallback(
@@ -135,64 +241,44 @@ export function Web3Provider({ children }) {
           throw new Error("Wallet not properly connected. Please reconnect.");
         }
 
-        const priceInWei = parseEther(pricePerMonth.toString());
+        // Validate price against MAX_PRICE_ETH
+        const maxPrice = await getMaxPriceETH();
+        const priceValue = parseFloat(pricePerMonth);
 
-        // Prepare transaction
-        const transactionRequest = {
-          address: contractAddresses.courseFactory,
-          abi: CourseFactoryABI,
-          functionName: "createCourse",
-          args: [
-            title.trim(),
-            description.trim(),
-            thumbnailCID.trim(),
-            priceInWei,
-          ],
-          account: walletClient.account,
-          chain: mantaPacificTestnet,
-        };
-
-        console.log("📊 Transaction parameters:", {
-          to: transactionRequest.address,
-          functionName: transactionRequest.functionName,
-          from: walletClient.account.address,
-        });
-
-        // Write transaction
-        console.log("📤 Sending transaction...");
-        const hash = await walletClient.writeContract({
-          address: contractAddresses.courseFactory,
-          abi: CourseFactoryABI,
-          functionName: "createCourse",
-          args: [
-            title.trim(),
-            description.trim(),
-            thumbnailCID.trim(),
-            priceInWei,
-          ],
-        });
-
-        console.log("✅ Transaction hash received:", hash);
-        console.log("⏳ Waiting for transaction confirmation...");
-
-        // Wait for receipt
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash,
-          confirmations: 1,
-          timeout: 90000, // 90 seconds
-        });
-
-        console.log("✅ Transaction confirmed:", {
-          status: receipt.status,
-          blockNumber: receipt.blockNumber,
-          gasUsed: receipt.gasUsed?.toString(),
-        });
-
-        if (receipt.status === "reverted") {
-          throw new Error("Transaction reverted on-chain");
+        if (priceValue > parseFloat(maxPrice)) {
+          throw new Error(`Price exceeds maximum allowed: ${maxPrice} ETH`);
         }
 
-        // Parse event logs
+        const priceInWei = parseEther(pricePerMonth.toString());
+
+        console.log("📊 Transaction parameters:", {
+          to: contractAddresses.courseFactory,
+          from: walletClient.account.address,
+          title: title.trim(),
+          priceETH: pricePerMonth,
+          priceWei: priceInWei.toString(),
+        });
+
+        // Execute transaction with retry logic
+        const { hash, receipt } = await executeTransaction(
+          async () => {
+            return await walletClient.writeContract({
+              address: contractAddresses.courseFactory,
+              abi: CourseFactoryABI,
+              functionName: "createCourse",
+              args: [
+                title.trim(),
+                description.trim(),
+                thumbnailCID.trim(),
+                priceInWei,
+              ],
+              chain: mantaPacificTestnet,
+            });
+          },
+          { confirmations: 2 }
+        );
+
+        // Parse event logs to get courseId
         let courseId = null;
         if (receipt.logs && receipt.logs.length > 0) {
           for (const log of receipt.logs) {
@@ -222,6 +308,9 @@ export function Web3Provider({ children }) {
         // Fallback: get courseId from creator's courses
         if (!courseId && walletClient.account) {
           try {
+            // Add small delay to ensure state is updated
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+
             const creatorCourses = await publicClient.readContract({
               address: contractAddresses.courseFactory,
               abi: CourseFactoryABI,
@@ -231,7 +320,10 @@ export function Web3Provider({ children }) {
 
             if (creatorCourses && creatorCourses.length > 0) {
               courseId = creatorCourses[creatorCourses.length - 1].toString();
-              console.log("📍 Fallback courseId:", courseId);
+              console.log(
+                "📍 Retrieved courseId from creator courses:",
+                courseId
+              );
             }
           } catch (fallbackError) {
             console.error(
@@ -249,18 +341,34 @@ export function Web3Provider({ children }) {
       } catch (error) {
         console.error("Create course error:", error);
 
+        // Enhanced error handling
         if (error.message?.includes("user rejected")) {
           throw new Error("Transaction was cancelled by user");
         } else if (error.message?.includes("insufficient funds")) {
           throw new Error("Insufficient ETH for gas fees");
         } else if (error.message?.includes("Price exceeds maximum")) {
-          throw new Error("Course price exceeds maximum allowed (0.002 ETH)");
+          throw new Error(
+            `Course price exceeds maximum allowed (${await getMaxPriceETH()} ETH)`
+          );
+        } else if (error.message?.includes("reverted")) {
+          // Try to decode revert reason
+          const revertReason =
+            error.message.match(/reason="([^"]+)"/)?.[1] ||
+            "Transaction reverted";
+          throw new Error(`Contract error: ${revertReason}`);
         }
 
         throw error;
       }
     },
-    [isInitialized, walletClient, publicClient, contractAddresses]
+    [
+      isInitialized,
+      walletClient,
+      publicClient,
+      contractAddresses,
+      executeTransaction,
+      getMaxPriceETH,
+    ]
   );
 
   const addCourseSection = useCallback(
@@ -272,33 +380,47 @@ export function Web3Provider({ children }) {
       const { title, contentCID, duration } = sectionData;
 
       try {
-        console.log("📝 Adding course section...");
+        console.log("📝 Adding course section...", {
+          courseId,
+          title: title.substring(0, 50) + "...",
+          duration,
+        });
 
         if (!walletClient.account) {
           throw new Error("Wallet not properly connected. Please reconnect.");
         }
 
-        const hash = await walletClient.writeContract({
-          address: contractAddresses.courseFactory,
-          abi: CourseFactoryABI,
-          functionName: "addCourseSection",
-          args: [
-            BigInt(courseId),
-            title.trim(),
-            contentCID.trim(),
-            BigInt(duration),
-          ],
-        });
+        // Validate inputs
+        if (duration > 86400) {
+          throw new Error(
+            "Duration exceeds maximum allowed: 86400 seconds (24 hours)"
+          );
+        }
 
-        console.log("✅ Section transaction hash:", hash);
-
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash,
-          confirmations: 1,
-          timeout: 60000,
-        });
+        const { hash, receipt } = await executeTransaction(
+          async () => {
+            return await walletClient.writeContract({
+              address: contractAddresses.courseFactory,
+              abi: CourseFactoryABI,
+              functionName: "addCourseSection",
+              args: [
+                BigInt(courseId),
+                title.trim(),
+                contentCID.trim(),
+                BigInt(duration),
+              ],
+              chain: mantaPacificTestnet,
+            });
+          },
+          { confirmations: 2 }
+        );
 
         console.log("✅ Section added successfully");
+
+        // Add delay for next transaction
+        await new Promise((resolve) =>
+          setTimeout(resolve, TRANSACTION_DELAY_MS)
+        );
 
         return {
           success: true,
@@ -309,12 +431,24 @@ export function Web3Provider({ children }) {
 
         if (error.message?.includes("user rejected")) {
           throw new Error("Transaction was cancelled by user");
+        } else if (error.message?.includes("Not course creator")) {
+          throw new Error("Only the course creator can add sections");
+        } else if (error.message?.includes("Duration too long")) {
+          throw new Error(
+            "Section duration exceeds maximum allowed (24 hours)"
+          );
         }
 
         throw error;
       }
     },
-    [isInitialized, walletClient, publicClient, contractAddresses]
+    [
+      isInitialized,
+      walletClient,
+      publicClient,
+      contractAddresses,
+      executeTransaction,
+    ]
   );
 
   const getAllCourses = useCallback(
@@ -498,20 +632,22 @@ export function Web3Provider({ children }) {
           courseId,
           duration,
           totalPrice: totalPrice.toString(),
+          totalPriceETH: formatEther(totalPrice),
         });
 
-        const hash = await walletClient.writeContract({
-          address: contractAddresses.courseLicense,
-          abi: CourseLicenseABI,
-          functionName: "mintLicense",
-          args: [BigInt(courseId), BigInt(duration)],
-          value: totalPrice,
-        });
-
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash,
-          confirmations: 1,
-        });
+        const { hash, receipt } = await executeTransaction(
+          async () => {
+            return await walletClient.writeContract({
+              address: contractAddresses.courseLicense,
+              abi: CourseLicenseABI,
+              functionName: "mintLicense",
+              args: [BigInt(courseId), BigInt(duration)],
+              value: totalPrice,
+              chain: mantaPacificTestnet,
+            });
+          },
+          { confirmations: 2 }
+        );
 
         // Clear cache
         if (address) {
@@ -537,6 +673,7 @@ export function Web3Provider({ children }) {
       contractAddresses,
       address,
       getCourse,
+      executeTransaction,
     ]
   );
 
@@ -662,17 +799,18 @@ export function Web3Provider({ children }) {
           throw new Error("Wallet not properly connected. Please reconnect.");
         }
 
-        const hash = await walletClient.writeContract({
-          address: contractAddresses.progressTracker,
-          abi: ProgressTrackerABI,
-          functionName: "completeSection",
-          args: [BigInt(courseId), BigInt(sectionId)],
-        });
-
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash,
-          confirmations: 1,
-        });
+        const { hash, receipt } = await executeTransaction(
+          async () => {
+            return await walletClient.writeContract({
+              address: contractAddresses.progressTracker,
+              abi: ProgressTrackerABI,
+              functionName: "completeSection",
+              args: [BigInt(courseId), BigInt(sectionId)],
+              chain: mantaPacificTestnet,
+            });
+          },
+          { confirmations: 2 }
+        );
 
         // Clear cache
         if (address) {
@@ -691,7 +829,14 @@ export function Web3Provider({ children }) {
         throw error;
       }
     },
-    [isInitialized, walletClient, publicClient, contractAddresses, address]
+    [
+      isInitialized,
+      walletClient,
+      publicClient,
+      contractAddresses,
+      address,
+      executeTransaction,
+    ]
   );
 
   const getUserProgress = useCallback(
@@ -801,18 +946,19 @@ export function Web3Provider({ children }) {
           functionName: "certificateFee",
         });
 
-        const hash = await walletClient.writeContract({
-          address: contractAddresses.certificateManager,
-          abi: CertificateManagerABI,
-          functionName: "issueCertificate",
-          args: [BigInt(courseId), studentName.trim()],
-          value: fee,
-        });
-
-        const receipt = await publicClient.waitForTransactionReceipt({
-          hash,
-          confirmations: 1,
-        });
+        const { hash, receipt } = await executeTransaction(
+          async () => {
+            return await walletClient.writeContract({
+              address: contractAddresses.certificateManager,
+              abi: CertificateManagerABI,
+              functionName: "issueCertificate",
+              args: [BigInt(courseId), studentName.trim()],
+              value: fee,
+              chain: mantaPacificTestnet,
+            });
+          },
+          { confirmations: 2 }
+        );
 
         console.log("✅ Certificate issued successfully");
 
@@ -825,7 +971,13 @@ export function Web3Provider({ children }) {
         throw error;
       }
     },
-    [isInitialized, walletClient, publicClient, contractAddresses]
+    [
+      isInitialized,
+      walletClient,
+      publicClient,
+      contractAddresses,
+      executeTransaction,
+    ]
   );
 
   const getCertificateForCourse = useCallback(
@@ -919,6 +1071,9 @@ export function Web3Provider({ children }) {
       modalPreventionActive,
       contracts: contractAddresses,
 
+      // Constants
+      getMaxPriceETH,
+
       // Course Factory
       createCourse,
       getAllCourses,
@@ -949,6 +1104,7 @@ export function Web3Provider({ children }) {
       initError,
       modalPreventionActive,
       contractAddresses,
+      getMaxPriceETH,
       createCourse,
       getAllCourses,
       getCourse,

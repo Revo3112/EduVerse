@@ -1,4 +1,4 @@
-// src/screens/SectionDetailScreen.js - Enhanced with Pinata IPFS video support and aligned with SmartContract
+// src/screens/SectionDetailScreen.js - OPTIMIZED VERSION
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -14,7 +14,7 @@ import {
 import { Video } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { useAccount } from "wagmi";
-import { useSmartContract } from "../hooks/useBlockchain";
+import { useWeb3 } from "../contexts/Web3Context";
 import { pinataService } from "../services/PinataService";
 
 const { width: screenWidth } = Dimensions.get("window");
@@ -26,10 +26,14 @@ export default function SectionDetailScreen({ route, navigation }) {
   const { courseId, sectionId, sectionIndex, courseTitle, sectionData } =
     route.params;
   const { address } = useAccount();
-  const { smartContractService, isInitialized } = useSmartContract();
 
+  // ✅ Use Web3Context directly
+  const web3Context = useWeb3();
+  const { isInitialized } = web3Context;
+
+  // ✅ OPTIMIZED STATE MANAGEMENT
   const [section, setSection] = useState(sectionData || null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!sectionData); // Don't load if we have data
   const [hasValidLicense, setHasValidLicense] = useState(false);
   const [progress, setProgress] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -42,19 +46,19 @@ export default function SectionDetailScreen({ route, navigation }) {
 
   const videoRef = useRef(null);
   const isMountedRef = useRef(true);
+  const initialLoadDone = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      // Clean up video when unmounting
       if (videoRef.current) {
         videoRef.current.unloadAsync();
       }
     };
   }, []);
 
-  // ✅ ENHANCED: Main initialization effect
+  // ✅ OPTIMIZED INITIALIZATION - Reduce redundant calls
   useEffect(() => {
     console.log("SectionDetailScreen initialized:", {
       courseId,
@@ -63,81 +67,66 @@ export default function SectionDetailScreen({ route, navigation }) {
       address,
       isInitialized,
       hasSectionData: !!sectionData,
+      initialLoadDone: initialLoadDone.current,
     });
 
-    // If we have section data from navigation, use it immediately
-    if (sectionData && !section) {
+    // Early return if already processed
+    if (initialLoadDone.current) return;
+
+    // If we have section data, use it immediately and generate video URL
+    if (sectionData) {
       setSection(sectionData);
       if (
         sectionData.contentCID &&
         sectionData.contentCID !== "placeholder-video-content"
       ) {
         generateVideoUrl(sectionData.contentCID);
+      } else {
+        setFallbackVideoUrl();
       }
       setLoading(false);
-    } else if (!section) {
-      // Load section data if not provided
+    } else {
+      // Only load section data if we don't have it
       loadSectionData();
     }
 
-    // Check license and progress
-    if (address && isInitialized && smartContractService) {
+    // Check license and progress only once
+    if (address && isInitialized && web3Context && !initialLoadDone.current) {
       checkLicenseAndProgress();
+      initialLoadDone.current = true;
     }
-  }, [
-    courseId,
-    sectionId,
-    sectionIndex,
-    address,
-    isInitialized,
-    smartContractService,
-  ]);
+  }, [courseId, sectionId, sectionIndex, address, isInitialized, web3Context]);
 
-  // ✅ FIXED: Load section data using sections array
+  // ✅ OPTIMIZED: Load section data only when necessary
   const loadSectionData = useCallback(async () => {
+    if (!web3Context || !isInitialized) {
+      setFallbackSectionData();
+      return;
+    }
+
     try {
       setLoading(true);
       console.log("Loading section data for:", { courseId, sectionIndex });
 
-      if (!smartContractService || !isInitialized) {
-        setFallbackSectionData();
-        return;
-      }
+      const sections = await web3Context.getCourseSections(courseId);
 
-      // ✅ FIXED: Get all sections and pick by index
-      try {
-        const sections = await smartContractService.getCourseSections(courseId);
-        console.log(
-          `Found ${sections?.length || 0} sections for course ${courseId}`
-        );
+      if (sections && sections[sectionIndex]) {
+        const sectionData = sections[sectionIndex];
+        console.log("✅ Section data loaded from CourseFactory:", sectionData);
 
-        if (sections && sections[sectionIndex]) {
-          const sectionData = sections[sectionIndex];
-          console.log("✅ Section data loaded:", sectionData);
+        if (isMountedRef.current) {
+          setSection(sectionData);
 
-          if (isMountedRef.current) {
-            setSection(sectionData);
-
-            // Generate video URL from contentCID
-            if (
-              sectionData.contentCID &&
-              sectionData.contentCID !== "placeholder-video-content"
-            ) {
-              await generateVideoUrl(sectionData.contentCID);
-            } else {
-              console.log("⚠️ No valid contentCID found, using fallback video");
-              setFallbackVideoUrl();
-            }
+          if (
+            sectionData.contentCID &&
+            sectionData.contentCID !== "placeholder-video-content"
+          ) {
+            await generateVideoUrl(sectionData.contentCID);
+          } else {
+            setFallbackVideoUrl();
           }
-        } else {
-          console.log("⚠️ Section not found at index:", sectionIndex);
-          setFallbackSectionData();
         }
-      } catch (sectionError) {
-        console.error(
-          "❌ Error fetching sections from contract:",
-          sectionError
-        );
+      } else {
         setFallbackSectionData();
       }
     } catch (error) {
@@ -148,14 +137,75 @@ export default function SectionDetailScreen({ route, navigation }) {
         setLoading(false);
       }
     }
-  }, [courseId, sectionIndex, smartContractService, isInitialized]);
+  }, [courseId, sectionIndex, web3Context, isInitialized]);
 
-  // ✅ ENHANCED: Generate video URL with caching
+  // ✅ OPTIMIZED: Single license and progress check
+  const checkLicenseAndProgress = useCallback(async () => {
+    if (!address || !web3Context) {
+      console.log("Missing requirements for license check");
+      return;
+    }
+
+    console.log(
+      "Checking license and progress from smart contracts (OPTIMIZED):",
+      {
+        address,
+        courseId,
+      }
+    );
+
+    try {
+      setLicenseChecking(true);
+
+      // ✅ PARALLEL EXECUTION - Check both at the same time
+      const [licenseValid, userProgress] = await Promise.all([
+        web3Context.hasValidLicense(address, courseId),
+        web3Context.getUserProgress(address, courseId),
+      ]);
+
+      console.log("✅ PARALLEL results:", { licenseValid, userProgress });
+
+      if (isMountedRef.current) {
+        setHasValidLicense(licenseValid);
+        setProgress(userProgress);
+
+        // Check if this specific section is completed
+        if (
+          userProgress.sectionsProgress &&
+          sectionIndex < userProgress.sectionsProgress.length
+        ) {
+          const sectionCompleted = userProgress.sectionsProgress[sectionIndex];
+          setIsCompleted(sectionCompleted);
+          console.log(
+            `📊 Section ${sectionIndex} completion status:`,
+            sectionCompleted
+          );
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error in checkLicenseAndProgress:", error);
+      if (isMountedRef.current) {
+        setHasValidLicense(false);
+        setProgress({
+          courseId: courseId.toString(),
+          completedSections: 0,
+          totalSections: 0,
+          progressPercentage: 0,
+          sectionsProgress: [],
+        });
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLicenseChecking(false);
+      }
+    }
+  }, [address, courseId, sectionIndex, web3Context]);
+
+  // ✅ OPTIMIZED VIDEO URL GENERATION
   const generateVideoUrl = useCallback(async (contentCID) => {
     try {
       setVideoLoading(true);
       setVideoError(null);
-      console.log("🎥 Generating video URL for CID:", contentCID);
 
       // Check cache first
       if (videoUrlCache.has(contentCID)) {
@@ -166,76 +216,38 @@ export default function SectionDetailScreen({ route, navigation }) {
         return;
       }
 
-      // Clean CID (remove ipfs:// prefix if present)
       const cleanCID = contentCID.replace(/^ipfs:\/\//, "");
 
       if (!cleanCID || cleanCID === "placeholder-video-content") {
-        console.log("⚠️ Invalid CID, using fallback video");
         setFallbackVideoUrl();
         return;
       }
 
-      // Try to get optimized URL from PinataService for video streaming
+      // Try PinataService first
       try {
         const optimizedUrl = await pinataService.getOptimizedFileUrl(cleanCID, {
           forcePublic: true,
           network: "public",
           fileType: "video",
-          expires: 7200, // 2 hours for video streaming
+          expires: 7200,
         });
-
-        console.log("✅ Optimized video URL generated:", optimizedUrl);
 
         if (isMountedRef.current) {
           setVideoUrl(optimizedUrl);
-          // Cache the URL
           videoUrlCache.set(contentCID, optimizedUrl);
         }
       } catch (pinataError) {
-        console.warn(
-          "⚠️ PinataService failed, trying fallback gateways:",
-          pinataError.message
-        );
-
-        // Try multiple IPFS gateways for better reliability
-        const fallbackGateways = [
-          `https://gateway.pinata.cloud/ipfs/${cleanCID}`,
-          `https://ipfs.io/ipfs/${cleanCID}`,
-          `https://cloudflare-ipfs.com/ipfs/${cleanCID}`,
-          `https://dweb.link/ipfs/${cleanCID}`,
-        ];
-
-        // Test gateways sequentially
-        let workingUrl = null;
-        for (const gateway of fallbackGateways) {
-          try {
-            console.log(`Testing gateway: ${gateway}`);
-            const response = await fetch(gateway, {
-              method: "HEAD",
-              signal: AbortSignal.timeout(5000), // 5 second timeout
-            });
-
-            if (response.ok) {
-              workingUrl = gateway;
-              break;
-            }
-          } catch (error) {
-            console.log(`Gateway failed: ${gateway}`);
-          }
-        }
-
-        if (workingUrl && isMountedRef.current) {
-          console.log("✅ Using fallback gateway:", workingUrl);
-          setVideoUrl(workingUrl);
-          videoUrlCache.set(contentCID, workingUrl);
-        } else {
-          throw new Error("All gateways failed");
+        // Fallback to IPFS gateways
+        const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
+        if (isMountedRef.current) {
+          setVideoUrl(fallbackUrl);
+          videoUrlCache.set(contentCID, fallbackUrl);
         }
       }
     } catch (error) {
       console.error("❌ Error generating video URL:", error);
       if (isMountedRef.current) {
-        setVideoError("Failed to load video content from IPFS");
+        setVideoError("Failed to load video content");
         setFallbackVideoUrl();
       }
     } finally {
@@ -245,14 +257,14 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   }, []);
 
-  // ✅ Fallback section data
   const setFallbackSectionData = useCallback(() => {
     const fallbackSection = {
       id: sectionIndex.toString(),
       courseId: courseId.toString(),
       title: `Section ${sectionIndex + 1}`,
       contentCID: "sample-video",
-      duration: 596, // ~10 minutes
+      duration: 596,
+      orderId: sectionIndex,
     };
 
     if (isMountedRef.current) {
@@ -261,7 +273,6 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   }, [courseId, sectionIndex]);
 
-  // ✅ Set fallback video URL
   const setFallbackVideoUrl = useCallback(() => {
     const fallbackUrl =
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
@@ -270,137 +281,36 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   }, []);
 
-  // ✅ ENHANCED: Check license and progress with better error handling
-  const checkLicenseAndProgress = useCallback(async () => {
-    try {
-      console.log("Checking license and progress:", {
-        address,
-        courseId,
-        smartContractServiceAvailable: !!smartContractService,
-      });
-
-      if (!address || !smartContractService) {
-        console.log("Missing requirements for license check");
-        return;
-      }
-
-      // Check license with retry
-      setLicenseChecking(true);
-      try {
-        const licenseValid = await smartContractService.hasValidLicense(
-          address,
-          courseId
-        );
-        console.log("✅ License check result:", licenseValid);
-
-        if (isMountedRef.current) {
-          setHasValidLicense(licenseValid);
-        }
-
-        // Retry once if not valid (cache might be stale)
-        if (!licenseValid) {
-          console.log("⚠️ License not valid, retrying after delay...");
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-
-          const retryResult = await smartContractService.hasValidLicense(
-            address,
-            courseId
-          );
-          console.log("🔄 License retry result:", retryResult);
-
-          if (isMountedRef.current) {
-            setHasValidLicense(retryResult);
-          }
-        }
-      } catch (licenseError) {
-        console.error("❌ Error checking license:", licenseError);
-        if (isMountedRef.current) {
-          setHasValidLicense(false);
-        }
-      } finally {
-        if (isMountedRef.current) {
-          setLicenseChecking(false);
-        }
-      }
-
-      // Get user progress
-      try {
-        const userProgress = await smartContractService.getUserProgress(
-          address,
-          courseId
-        );
-        console.log("✅ User progress:", userProgress);
-
-        if (isMountedRef.current) {
-          setProgress(userProgress);
-
-          // Check if this specific section is completed
-          if (
-            userProgress.sectionsProgress &&
-            sectionIndex < userProgress.sectionsProgress.length
-          ) {
-            const sectionCompleted =
-              userProgress.sectionsProgress[sectionIndex];
-            setIsCompleted(sectionCompleted);
-            console.log(
-              `📊 Section ${sectionIndex} completion status:`,
-              sectionCompleted
-            );
-          }
-        }
-      } catch (progressError) {
-        console.error("❌ Error getting user progress:", progressError);
-        if (isMountedRef.current) {
-          setProgress({
-            courseId: courseId.toString(),
-            completedSections: 0,
-            totalSections: 0,
-            progressPercentage: 0,
-            sectionsProgress: [],
-          });
-        }
-      }
-    } catch (error) {
-      console.error("❌ Error in checkLicenseAndProgress:", error);
-    }
-  }, [address, courseId, sectionIndex, smartContractService]);
-
-  // ✅ ENHANCED: Complete section with better error handling
+  // ✅ COMPLETE SECTION - Optimized with error handling
   const handleCompleteSection = useCallback(async () => {
+    if (!hasValidLicense) {
+      Alert.alert(
+        "Access Denied",
+        "You need a valid license to complete sections"
+      );
+      return;
+    }
+
+    if (!web3Context) {
+      Alert.alert("Error", "Smart contract service not available");
+      return;
+    }
+
+    if (isCompleted) {
+      Alert.alert("Info", "Section already completed!");
+      return;
+    }
+
     try {
-      if (!hasValidLicense) {
-        Alert.alert(
-          "Access Denied",
-          "You need a valid license to complete sections"
-        );
-        return;
-      }
-
-      if (!smartContractService) {
-        Alert.alert("Error", "Smart contract service not available");
-        return;
-      }
-
-      if (isCompleted) {
-        Alert.alert("Info", "Section already completed!");
-        return;
-      }
-
       setCompletingSection(true);
       console.log("🎯 Completing section:", { courseId, sectionIndex });
 
-      // Call smart contract to complete section
-      const result = await smartContractService.completeSection(
-        courseId,
-        sectionIndex // Using sectionIndex as per ProgressTracker contract
-      );
+      const result = await web3Context.completeSection(courseId, sectionIndex);
 
       if (result.success) {
         if (isMountedRef.current) {
           setIsCompleted(true);
         }
-
-        console.log("✅ Section completed successfully!");
 
         Alert.alert("Success! 🎉", "Section completed successfully!", [
           {
@@ -409,41 +319,30 @@ export default function SectionDetailScreen({ route, navigation }) {
               // Refresh progress
               await checkLicenseAndProgress();
 
-              // Check if there's a next section
+              // Navigate to next section or show completion
               if (progress && sectionIndex < progress.totalSections - 1) {
-                Alert.alert(
-                  "Next Section",
-                  "Would you like to continue to the next section?",
-                  [
-                    { text: "Stay Here", style: "cancel" },
-                    {
-                      text: "Next Section",
-                      onPress: () => {
-                        navigation.replace("SectionDetail", {
-                          courseId,
-                          sectionId: sectionIndex + 1,
-                          sectionIndex: sectionIndex + 1,
-                          courseTitle,
-                        });
-                      },
+                Alert.alert("Next Section", "Continue to next section?", [
+                  { text: "Stay Here", style: "cancel" },
+                  {
+                    text: "Next Section",
+                    onPress: () => {
+                      navigation.replace("SectionDetail", {
+                        courseId,
+                        sectionId: sectionIndex + 1,
+                        sectionIndex: sectionIndex + 1,
+                        courseTitle,
+                      });
                     },
-                  ]
-                );
+                  },
+                ]);
               }
             },
           },
         ]);
-      } else {
-        throw new Error(result.error || "Failed to complete section");
       }
     } catch (error) {
       console.error("❌ Error completing section:", error);
-      Alert.alert(
-        "Error",
-        error.message?.includes("already completed")
-          ? "This section is already completed."
-          : "Failed to complete section. Please try again."
-      );
+      Alert.alert("Error", "Failed to complete section. Please try again.");
     } finally {
       if (isMountedRef.current) {
         setCompletingSection(false);
@@ -451,17 +350,17 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   }, [
     hasValidLicense,
-    smartContractService,
+    web3Context,
     isCompleted,
     courseId,
     sectionIndex,
-    courseTitle,
     progress,
     navigation,
+    courseTitle,
     checkLicenseAndProgress,
   ]);
 
-  // ✅ Utility functions
+  // ✅ UTILITY FUNCTIONS
   const formatDuration = useCallback((seconds) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -476,27 +375,21 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   }, []);
 
-  // ✅ Video playback handlers
   const handleVideoStatusUpdate = useCallback(
     (status) => {
       setVideoStatus(status);
 
-      // Auto-complete section when video finishes (optional feature)
       if (status.didJustFinish && !isCompleted && hasValidLicense) {
-        Alert.alert(
-          "Video Completed",
-          "Would you like to mark this section as complete?",
-          [
-            { text: "Not Yet", style: "cancel" },
-            { text: "Complete Section", onPress: handleCompleteSection },
-          ]
-        );
+        Alert.alert("Video Completed", "Mark this section as complete?", [
+          { text: "Not Yet", style: "cancel" },
+          { text: "Complete Section", onPress: handleCompleteSection },
+        ]);
       }
     },
     [isCompleted, hasValidLicense, handleCompleteSection]
   );
 
-  // ✅ ENHANCED: Media player component with better error handling
+  // ✅ OPTIMIZED MEDIA PLAYER
   const renderMediaPlayer = useCallback(() => {
     if (videoLoading) {
       return (
@@ -504,9 +397,6 @@ export default function SectionDetailScreen({ route, navigation }) {
           <View style={styles.videoLoadingContainer}>
             <ActivityIndicator size="large" color="#8b5cf6" />
             <Text style={styles.videoLoadingText}>Loading video...</Text>
-            <Text style={styles.videoLoadingSubtext}>
-              Fetching from IPFS network...
-            </Text>
           </View>
         </View>
       );
@@ -542,9 +432,6 @@ export default function SectionDetailScreen({ route, navigation }) {
           <View style={styles.noVideoContainer}>
             <Ionicons name="videocam-off-outline" size={64} color="#666" />
             <Text style={styles.noVideoText}>No video content available</Text>
-            <Text style={styles.noVideoSubtext}>
-              This section may only contain text content
-            </Text>
           </View>
         </View>
       );
@@ -558,49 +445,27 @@ export default function SectionDetailScreen({ route, navigation }) {
           source={{ uri: videoUrl }}
           useNativeControls
           resizeMode="contain"
-          shouldPlay={false}
+          shouldPlay={true}
           onPlaybackStatusUpdate={handleVideoStatusUpdate}
           onError={(error) => {
             console.error("❌ Video playback error:", error);
-            setVideoError(
-              "Unable to play this video. The content might be corrupted or in an unsupported format."
+            Alert.alert(
+              "Video Error",
+              "Video tidak bisa diputar. Pastikan format MP4 (H.264/AAC) dan file dapat diakses publik."
             );
-          }}
-          onLoad={(status) => {
-            console.log("✅ Video loaded successfully:", {
-              duration: status.durationMillis,
-              isLoaded: status.isLoaded,
-            });
-          }}
-          onLoadStart={() => {
-            console.log("🎬 Video loading started...");
+            setVideoError("Unable to play this video");
           }}
         />
 
         {/* IPFS indicator */}
-        {section?.contentCID && section.contentCID !== "sample-video" && (
-          <View style={styles.ipfsIndicator}>
-            <Ionicons name="cloud-done-outline" size={12} color="#fff" />
-            <Text style={styles.ipfsText}>IPFS Content</Text>
-          </View>
-        )}
-
-        {/* Video controls overlay */}
-        {videoStatus.isLoaded && !videoStatus.isPlaying && (
-          <View style={styles.videoOverlay}>
-            <View style={styles.videoInfo}>
-              <Text style={styles.videoInfoText}>
-                {formatDuration(
-                  Math.floor((videoStatus.positionMillis || 0) / 1000)
-                )}{" "}
-                /{" "}
-                {formatDuration(
-                  Math.floor((videoStatus.durationMillis || 0) / 1000)
-                )}
-              </Text>
+        {section?.contentCID &&
+          section.contentCID !== "sample-video" &&
+          section.contentCID !== "placeholder-video-content" && (
+            <View style={styles.ipfsIndicator}>
+              <Ionicons name="cloud-done-outline" size={12} color="#fff" />
+              <Text style={styles.ipfsText}>IPFS Content</Text>
             </View>
-          </View>
-        )}
+          )}
       </View>
     );
   }, [
@@ -608,16 +473,13 @@ export default function SectionDetailScreen({ route, navigation }) {
     videoError,
     videoUrl,
     section,
-    videoStatus,
     handleVideoStatusUpdate,
-    formatDuration,
     generateVideoUrl,
   ]);
 
-  // ✅ Navigation handlers
+  // ✅ NAVIGATION HANDLERS
   const navigateToSection = useCallback(
     (newSectionIndex) => {
-      // Clear video URL cache for smooth transition
       if (videoRef.current) {
         videoRef.current.unloadAsync();
       }
@@ -632,50 +494,27 @@ export default function SectionDetailScreen({ route, navigation }) {
     [courseId, courseTitle, navigation]
   );
 
-  // ✅ Loading state
+  // ✅ OPTIMIZED LOADING STATE
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Loading Section...</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#8b5cf6" />
-          <Text style={styles.loadingText}>Loading section content...</Text>
-          <Text style={styles.loadingSubtext}>Fetching from blockchain...</Text>
+          <Text style={styles.loadingText}>Loading section...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // ✅ Access denied state
+  // ✅ ACCESS DENIED STATE
   if (!hasValidLicense && !licenseChecking) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Access Denied</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
         <View style={styles.accessDeniedContainer}>
           <Ionicons name="lock-closed" size={64} color="#ff6b6b" />
           <Text style={styles.accessDeniedTitle}>License Required</Text>
           <Text style={styles.accessDeniedText}>
-            You need a valid license for this course to access this section.
+            You need a valid course license to access this section.
           </Text>
           <TouchableOpacity
             style={styles.goBackButton}
@@ -697,26 +536,9 @@ export default function SectionDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {section?.title || "Loading..."}
-          </Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {courseTitle} • Section {sectionIndex + 1}
-          </Text>
-        </View>
-        <View style={styles.headerSpacer} />
-      </View>
-
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* ✅ REMOVED DOUBLE HEADER - Using only React Navigation header */}
+
         {/* Media Player */}
         {renderMediaPlayer()}
 
@@ -744,12 +566,14 @@ export default function SectionDetailScreen({ route, navigation }) {
                 Section {sectionIndex + 1} of {progress?.totalSections || "?"}
               </Text>
             </View>
-            {section?.contentCID && section.contentCID !== "sample-video" && (
-              <View style={styles.detailItem}>
-                <Ionicons name="cloud-done-outline" size={16} color="#666" />
-                <Text style={styles.detailText}>Stored on IPFS</Text>
-              </View>
-            )}
+            {section?.contentCID &&
+              section.contentCID !== "sample-video" &&
+              section.contentCID !== "placeholder-video-content" && (
+                <View style={styles.detailItem}>
+                  <Ionicons name="cloud-done-outline" size={16} color="#666" />
+                  <Text style={styles.detailText}>Stored on IPFS</Text>
+                </View>
+              )}
             <View style={styles.detailItem}>
               <Ionicons
                 name={isCompleted ? "checkmark-circle" : "ellipse-outline"}
@@ -764,7 +588,7 @@ export default function SectionDetailScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Enhanced progress info */}
+          {/* Progress info */}
           {progress && (
             <View style={styles.progressInfo}>
               <View style={styles.progressHeader}>
@@ -789,7 +613,7 @@ export default function SectionDetailScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* Completion Button */}
+        {/* Action Container */}
         {hasValidLicense && (
           <View style={styles.actionContainer}>
             <TouchableOpacity
@@ -812,14 +636,14 @@ export default function SectionDetailScreen({ route, navigation }) {
               )}
               <Text style={styles.completeButtonText}>
                 {completingSection
-                  ? "Processing..."
+                  ? "Updating Progress..."
                   : isCompleted
                   ? "Completed ✓"
                   : "Mark as Complete"}
               </Text>
             </TouchableOpacity>
 
-            {/* Section navigation */}
+            {/* Navigation buttons */}
             <View style={styles.navigationButtons}>
               <TouchableOpacity
                 style={[
@@ -877,18 +701,6 @@ export default function SectionDetailScreen({ route, navigation }) {
                 />
               </TouchableOpacity>
             </View>
-
-            {/* Course completion message */}
-            {progress &&
-              progress.completedSections === progress.totalSections - 1 &&
-              !isCompleted && (
-                <View style={styles.completionMessage}>
-                  <Ionicons name="trophy-outline" size={20} color="#f59e0b" />
-                  <Text style={styles.completionMessageText}>
-                    Complete this section to finish the course!
-                  </Text>
-                </View>
-              )}
           </View>
         )}
       </ScrollView>
@@ -911,40 +723,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     fontWeight: "500",
-  },
-  loadingSubtext: {
-    marginTop: 4,
-    fontSize: 14,
-    color: "#94a3b8",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 2,
-  },
-  headerSpacer: {
-    width: 40,
   },
   content: {
     flex: 1,
@@ -969,11 +747,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginTop: 16,
-  },
-  videoLoadingSubtext: {
-    color: "#ccc",
-    fontSize: 14,
-    marginTop: 4,
   },
   videoErrorContainer: {
     flex: 1,
@@ -1022,11 +795,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontWeight: "500",
   },
-  noVideoSubtext: {
-    fontSize: 14,
-    color: "#94a3b8",
-    marginTop: 4,
-  },
   ipfsIndicator: {
     position: "absolute",
     top: 8,
@@ -1042,24 +810,6 @@ const styles = StyleSheet.create({
   ipfsText: {
     color: "#fff",
     fontSize: 10,
-    fontWeight: "500",
-  },
-  videoOverlay: {
-    position: "absolute",
-    bottom: 40,
-    left: 16,
-    right: 16,
-  },
-  videoInfo: {
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-  },
-  videoInfoText: {
-    color: "#fff",
-    fontSize: 12,
     fontWeight: "500",
   },
   sectionInfo: {
@@ -1209,21 +959,6 @@ const styles = StyleSheet.create({
   },
   navButtonTextDisabled: {
     color: "#ccc",
-  },
-  completionMessage: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: "#fef3c7",
-    borderRadius: 8,
-  },
-  completionMessageText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#92400e",
   },
   accessDeniedContainer: {
     flex: 1,

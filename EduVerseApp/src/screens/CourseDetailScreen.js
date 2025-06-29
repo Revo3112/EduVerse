@@ -1,4 +1,4 @@
-// src/screens/CourseDetailScreen.js - Enhanced with latest SmartContract integration
+// src/screens/CourseDetailScreen.js - Enhanced with Smart Contract Integration
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAccount } from "wagmi";
-import { useSmartContract } from "../hooks/useBlockchain";
+import { useWeb3 } from "../contexts/Web3Context"; // ✅ Direct import
 
 // Cache for section data to improve performance
 const sectionCache = new Map();
@@ -21,12 +21,16 @@ const sectionCache = new Map();
 export default function CourseDetailScreen({ route, navigation }) {
   const { courseId, courseTitle } = route.params;
   const { address } = useAccount();
-  const { smartContractService, isInitialized } = useSmartContract();
+
+  // ✅ Use Web3Context directly instead of useSmartContract hook
+  const web3Context = useWeb3();
+  const { isInitialized } = web3Context;
 
   const [course, setCourse] = useState(null);
   const [sections, setSections] = useState([]);
   const [progress, setProgress] = useState(null);
   const [hasValidLicense, setHasValidLicense] = useState(false);
+  const [licenseData, setLicenseData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [licenseChecking, setLicenseChecking] = useState(false);
@@ -41,25 +45,26 @@ export default function CourseDetailScreen({ route, navigation }) {
     };
   }, []);
 
-  // ✅ ENHANCED: Enhanced useEffect sesuai dengan pattern initialization terbaru
+  // ✅ ENHANCED: Enhanced useEffect for smart contract initialization
   useEffect(() => {
     console.log("CourseDetailScreen useEffect triggered:", {
       courseId,
       address,
       isInitialized,
-      smartContractServiceAvailable: !!smartContractService,
+      web3ContextAvailable: !!web3Context,
+      contextMethods: Object.keys(web3Context || {}),
     });
 
-    // Load data hanya jika semua kondisi terpenuhi
-    if (courseId && address && isInitialized && smartContractService) {
+    // Load data only when all conditions are met
+    if (courseId && address && isInitialized && web3Context) {
       loadCourseData();
     } else {
       console.log("Skipping loadCourseData - conditions not met");
       setLoading(false);
     }
-  }, [courseId, address, isInitialized, smartContractService]);
+  }, [courseId, address, isInitialized, web3Context]);
 
-  // ✅ ENHANCED: Load course data dengan SmartContractService terbaru
+  // ✅ ENHANCED: Load course data using smart contract functions
   const loadCourseData = useCallback(async () => {
     try {
       setLoading(true);
@@ -70,9 +75,9 @@ export default function CourseDetailScreen({ route, navigation }) {
         address
       );
 
-      if (!smartContractService || !isInitialized) {
-        console.error("SmartContractService not ready:", {
-          serviceAvailable: !!smartContractService,
+      if (!web3Context || !isInitialized) {
+        console.error("Web3Context not ready:", {
+          contextAvailable: !!web3Context,
           isInitialized,
         });
         Alert.alert(
@@ -82,18 +87,16 @@ export default function CourseDetailScreen({ route, navigation }) {
         return;
       }
 
-      // ✅ Load course details menggunakan method terbaru
-      const courseData = await smartContractService.getCourse(courseId);
+      // ✅ Load course details using getCourse from CourseFactory
+      const courseData = await web3Context.getCourse(courseId);
       console.log("Course data loaded:", courseData?.title || "No title");
 
       if (isMountedRef.current) {
         setCourse(courseData);
       }
 
-      // ✅ Load course sections dengan URL support
-      const sectionsData = await smartContractService.getCourseSections(
-        courseId
-      );
+      // ✅ Load course sections using getCourseSections from CourseFactory
+      const sectionsData = await web3Context.getCourseSections(courseId);
       console.log("Sections loaded:", sectionsData?.length || 0, "sections");
 
       if (isMountedRef.current) {
@@ -103,7 +106,7 @@ export default function CourseDetailScreen({ route, navigation }) {
       }
 
       if (address) {
-        // ✅ Check license validity dengan caching mechanism
+        // ✅ Check license validity using hasValidLicense from CourseLicense
         console.log(
           "Checking license validity for address:",
           address,
@@ -113,7 +116,7 @@ export default function CourseDetailScreen({ route, navigation }) {
 
         setLicenseChecking(true);
         try {
-          const licenseValid = await smartContractService.hasValidLicense(
+          const licenseValid = await web3Context.hasValidLicense(
             address,
             courseId
           );
@@ -121,6 +124,26 @@ export default function CourseDetailScreen({ route, navigation }) {
 
           if (isMountedRef.current) {
             setHasValidLicense(licenseValid);
+          }
+
+          // ✅ Get license details using getLicense from CourseLicense
+          if (licenseValid) {
+            try {
+              const licenseDetails = await web3Context.getLicense(
+                address,
+                courseId
+              );
+              console.log("License details loaded:", licenseDetails);
+
+              if (isMountedRef.current) {
+                setLicenseData(licenseDetails);
+              }
+            } catch (licenseDetailError) {
+              console.warn(
+                "Could not fetch license details:",
+                licenseDetailError
+              );
+            }
           }
         } catch (licenseError) {
           console.error("Error checking license:", licenseError);
@@ -133,9 +156,9 @@ export default function CourseDetailScreen({ route, navigation }) {
           }
         }
 
-        // ✅ Get user progress dengan enhanced structure
+        // ✅ Get user progress using getUserProgress from ProgressTracker
         try {
-          const userProgress = await smartContractService.getUserProgress(
+          const userProgress = await web3Context.getUserProgress(
             address,
             courseId
           );
@@ -147,6 +170,7 @@ export default function CourseDetailScreen({ route, navigation }) {
         } catch (progressError) {
           console.error("Error loading user progress:", progressError);
           if (isMountedRef.current) {
+            // Set default progress structure matching ProgressTracker contract
             setProgress({
               courseId: courseId.toString(),
               completedSections: 0,
@@ -167,7 +191,7 @@ export default function CourseDetailScreen({ route, navigation }) {
         setLoading(false);
       }
     }
-  }, [courseId, address, smartContractService, isInitialized]);
+  }, [courseId, address, web3Context, isInitialized]);
 
   // ✅ ENHANCED: Refresh handler
   const handleRefresh = useCallback(async () => {
@@ -184,7 +208,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     }
   }, [courseId, loadCourseData]);
 
-  // ✅ ENHANCED: Section press handler dengan real-time license check
+  // ✅ ENHANCED: Section press handler with real-time license check
   const handleSectionPress = useCallback(
     async (section, index) => {
       console.log("Section pressed:", {
@@ -199,7 +223,7 @@ export default function CourseDetailScreen({ route, navigation }) {
         return;
       }
 
-      // Navigate to section detail
+      // Navigate to section detail with proper data structure
       navigation.navigate("SectionDetail", {
         courseId: courseId,
         sectionId: section.id,
@@ -211,11 +235,11 @@ export default function CourseDetailScreen({ route, navigation }) {
     [hasValidLicense, courseId, course, courseTitle, navigation, address]
   );
 
-  // ✅ ENHANCED: Real-time license check with better UX
+  // ✅ ENHANCED: Real-time license check using smart contract
   const checkLicenseRealTime = useCallback(
     async (section, index) => {
       try {
-        if (!address || !smartContractService) {
+        if (!address || !web3Context) {
           Alert.alert("Error", "Wallet not connected or service not available");
           return;
         }
@@ -223,7 +247,8 @@ export default function CourseDetailScreen({ route, navigation }) {
         console.log("Real-time license check for section access...");
         setLicenseChecking(true);
 
-        const licenseValid = await smartContractService.hasValidLicense(
+        // Use hasValidLicense from CourseLicense contract
+        const licenseValid = await web3Context.hasValidLicense(
           address,
           courseId
         );
@@ -246,7 +271,7 @@ export default function CourseDetailScreen({ route, navigation }) {
         } else {
           Alert.alert(
             "Access Denied",
-            "You need a valid license for this course to access sections.",
+            "You need a valid course license to access sections. Please purchase a license first.",
             [
               { text: "Cancel", style: "cancel" },
               { text: "Refresh", onPress: handleRefresh },
@@ -270,7 +295,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     },
     [
       address,
-      smartContractService,
+      web3Context,
       courseId,
       course,
       courseTitle,
@@ -279,7 +304,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     ]
   );
 
-  // ✅ Utility functions
+  // ✅ UTILITY FUNCTIONS
   const formatDuration = useCallback((seconds) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -294,7 +319,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     }
   }, []);
 
-  // ✅ ENHANCED: Check if section is completed using progress data
+  // ✅ ENHANCED: Check if section is completed using ProgressTracker data
   const isSectionCompleted = useCallback(
     (sectionIndex) => {
       if (!progress || !progress.sectionsProgress) return false;
@@ -303,7 +328,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     [progress]
   );
 
-  // ✅ Calculate total duration
+  // ✅ Calculate total duration from CourseSection structs
   const getTotalDuration = useCallback(() => {
     if (!sections || sections.length === 0) return 0;
     return sections.reduce(
@@ -312,7 +337,25 @@ export default function CourseDetailScreen({ route, navigation }) {
     );
   }, [sections]);
 
-  // ✅ ENHANCED: Render section item dengan completion status
+  // ✅ Format license expiry from CourseLicense data
+  const formatLicenseExpiry = useCallback((expiryTimestamp) => {
+    if (!expiryTimestamp) return "Unknown";
+
+    const expiryDate = new Date(expiryTimestamp);
+    const now = new Date();
+
+    if (expiryDate < now) return "Expired";
+
+    const diffMs = expiryDate - now;
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) return "Expires tomorrow";
+    if (diffDays <= 7) return `Expires in ${diffDays} days`;
+
+    return expiryDate.toLocaleDateString();
+  }, []);
+
+  // ✅ ENHANCED: Render section item with completion status from ProgressTracker
   const renderSectionItem = useCallback(
     ({ item, index }) => {
       const isCompleted = isSectionCompleted(index);
@@ -424,11 +467,11 @@ export default function CourseDetailScreen({ route, navigation }) {
     ]
   );
 
-  // ✅ ENHANCED: Header dengan course information
+  // ✅ ENHANCED: Header with course information from CourseFactory
   const renderHeader = useCallback(
     () => (
       <View style={styles.headerContent}>
-        {/* Course Info */}
+        {/* Course Info from CourseFactory.Course struct */}
         <View style={styles.courseInfo}>
           <Text style={styles.courseTitle}>{course?.title || courseTitle}</Text>
           {course?.description && (
@@ -456,10 +499,18 @@ export default function CourseDetailScreen({ route, navigation }) {
                 </Text>
               </View>
             )}
+            {course?.pricePerMonth && (
+              <View style={styles.statItem}>
+                <Ionicons name="card-outline" size={16} color="#666" />
+                <Text style={styles.statText}>
+                  {parseFloat(course.pricePerMonth).toFixed(4)} ETH/month
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Progress Card */}
+        {/* Progress Card from ProgressTracker data */}
         {hasValidLicense && progress && progress.totalSections > 0 && (
           <View style={styles.progressCard}>
             <View style={styles.progressHeader}>
@@ -483,7 +534,7 @@ export default function CourseDetailScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* License Status */}
+        {/* License Status from CourseLicense data */}
         <View
           style={[
             styles.licenseCard,
@@ -497,16 +548,23 @@ export default function CourseDetailScreen({ route, navigation }) {
             size={20}
             color={hasValidLicense ? "#4CAF50" : "#ff6b6b"}
           />
-          <Text
-            style={[
-              styles.licenseText,
-              hasValidLicense
-                ? styles.licenseTextValid
-                : styles.licenseTextInvalid,
-            ]}
-          >
-            {hasValidLicense ? "Licensed - Full Access" : "No Valid License"}
-          </Text>
+          <View style={styles.licenseTextContainer}>
+            <Text
+              style={[
+                styles.licenseText,
+                hasValidLicense
+                  ? styles.licenseTextValid
+                  : styles.licenseTextInvalid,
+              ]}
+            >
+              {hasValidLicense ? "Licensed - Full Access" : "No Valid License"}
+            </Text>
+            {hasValidLicense && licenseData && (
+              <Text style={styles.licenseExpiry}>
+                {formatLicenseExpiry(licenseData.expiryTimestamp)}
+              </Text>
+            )}
+          </View>
           {licenseChecking && (
             <ActivityIndicator
               size="small"
@@ -533,9 +591,11 @@ export default function CourseDetailScreen({ route, navigation }) {
       sections,
       progress,
       hasValidLicense,
+      licenseData,
       licenseChecking,
       formatDuration,
       getTotalDuration,
+      formatLicenseExpiry,
     ]
   );
 
@@ -557,7 +617,9 @@ export default function CourseDetailScreen({ route, navigation }) {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#8b5cf6" />
           <Text style={styles.loadingText}>Loading course details...</Text>
-          <Text style={styles.loadingSubtext}>Fetching from blockchain...</Text>
+          <Text style={styles.loadingSubtext}>
+            Fetching from CourseFactory and checking license status...
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -600,7 +662,8 @@ export default function CourseDetailScreen({ route, navigation }) {
             <Ionicons name="document-outline" size={64} color="#ccc" />
             <Text style={styles.emptyTitle}>No Sections Available</Text>
             <Text style={styles.emptySubtitle}>
-              This course doesn't have any sections yet.
+              This course doesn't have any sections yet. Sections are managed
+              through the CourseFactory contract.
             </Text>
             {course?.creator === address && (
               <TouchableOpacity
@@ -663,6 +726,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 14,
     color: "#94a3b8",
+    textAlign: "center",
   },
   listContent: {
     paddingBottom: 20,
@@ -732,7 +796,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#8b5cf6",
+    backgroundColor: "#8bcf6",
     borderRadius: 4,
   },
   progressText: {
@@ -758,16 +822,23 @@ const styles = StyleSheet.create({
     borderColor: "#ff6b6b",
     borderWidth: 1,
   },
+  licenseTextContainer: {
+    flex: 1,
+  },
   licenseText: {
     fontSize: 16,
     fontWeight: "500",
-    flex: 1,
   },
   licenseTextValid: {
     color: "#4CAF50",
   },
   licenseTextInvalid: {
     color: "#ff6b6b",
+  },
+  licenseExpiry: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
   },
   licenseLoader: {
     marginLeft: "auto",

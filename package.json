@@ -15,6 +15,7 @@
     "verify:manta": "hardhat run scripts/verify-separated.js --network mantaPacificTestnet",
     "console": "hardhat console",
     "interact:testnet": "hardhat run scripts/testnet-interact.js --network mantaPacificTestnet",
+    "interact:update": "hardhat run scripts/update_course.js --network mantaPacificTestnet",
     "explore-courses": "hardhat run scripts/testing-explore-courses.js --network mantaPacificTestnet",
     "my-licenses": "hardhat run scripts/testing-my-licenses.js --network mantaPacificTestnet",
     "export-abis": "hardhat compile && node scripts/ABI-Export.js",
