@@ -1,4 +1,4 @@
-// src/screens/SectionDetailScreen.js - OPTIMIZED VERSION
+// src/screens/SectionDetailScreen.js - Optimized for IPFS Video Playback
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -27,14 +27,19 @@ export default function SectionDetailScreen({ route, navigation }) {
     route.params;
   const { address } = useAccount();
 
-  // ✅ Use Web3Context directly
-  const web3Context = useWeb3();
-  const { isInitialized } = web3Context;
+  // Use Web3Context directly
+  const {
+    isInitialized,
+    getCourseSections,
+    hasValidLicense,
+    getUserProgress,
+    completeSection,
+  } = useWeb3();
 
-  // ✅ OPTIMIZED STATE MANAGEMENT
+  // State management
   const [section, setSection] = useState(sectionData || null);
-  const [loading, setLoading] = useState(!sectionData); // Don't load if we have data
-  const [hasValidLicense, setHasValidLicense] = useState(false);
+  const [loading, setLoading] = useState(!sectionData);
+  const [hasLicense, setHasLicense] = useState(false);
   const [progress, setProgress] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [videoStatus, setVideoStatus] = useState({});
@@ -58,48 +63,9 @@ export default function SectionDetailScreen({ route, navigation }) {
     };
   }, []);
 
-  // ✅ OPTIMIZED INITIALIZATION - Reduce redundant calls
-  useEffect(() => {
-    console.log("SectionDetailScreen initialized:", {
-      courseId,
-      sectionId,
-      sectionIndex,
-      address,
-      isInitialized,
-      hasSectionData: !!sectionData,
-      initialLoadDone: initialLoadDone.current,
-    });
-
-    // Early return if already processed
-    if (initialLoadDone.current) return;
-
-    // If we have section data, use it immediately and generate video URL
-    if (sectionData) {
-      setSection(sectionData);
-      if (
-        sectionData.contentCID &&
-        sectionData.contentCID !== "placeholder-video-content"
-      ) {
-        generateVideoUrl(sectionData.contentCID);
-      } else {
-        setFallbackVideoUrl();
-      }
-      setLoading(false);
-    } else {
-      // Only load section data if we don't have it
-      loadSectionData();
-    }
-
-    // Check license and progress only once
-    if (address && isInitialized && web3Context && !initialLoadDone.current) {
-      checkLicenseAndProgress();
-      initialLoadDone.current = true;
-    }
-  }, [courseId, sectionId, sectionIndex, address, isInitialized, web3Context]);
-
-  // ✅ OPTIMIZED: Load section data only when necessary
+  // Load section data
   const loadSectionData = useCallback(async () => {
-    if (!web3Context || !isInitialized) {
+    if (!isInitialized) {
       setFallbackSectionData();
       return;
     }
@@ -108,11 +74,11 @@ export default function SectionDetailScreen({ route, navigation }) {
       setLoading(true);
       console.log("Loading section data for:", { courseId, sectionIndex });
 
-      const sections = await web3Context.getCourseSections(courseId);
+      const sections = await getCourseSections(courseId);
 
       if (sections && sections[sectionIndex]) {
         const sectionData = sections[sectionIndex];
-        console.log("✅ Section data loaded from CourseFactory:", sectionData);
+        console.log("✅ Section data loaded:", sectionData);
 
         if (isMountedRef.current) {
           setSection(sectionData);
@@ -137,36 +103,30 @@ export default function SectionDetailScreen({ route, navigation }) {
         setLoading(false);
       }
     }
-  }, [courseId, sectionIndex, web3Context, isInitialized]);
+  }, [courseId, sectionIndex, isInitialized, getCourseSections]);
 
-  // ✅ OPTIMIZED: Single license and progress check
+  // Check license and progress
   const checkLicenseAndProgress = useCallback(async () => {
-    if (!address || !web3Context) {
+    if (!address || !isInitialized) {
       console.log("Missing requirements for license check");
       return;
     }
 
-    console.log(
-      "Checking license and progress from smart contracts (OPTIMIZED):",
-      {
-        address,
-        courseId,
-      }
-    );
+    console.log("Checking license and progress:", { address, courseId });
 
     try {
       setLicenseChecking(true);
 
-      // ✅ PARALLEL EXECUTION - Check both at the same time
+      // Parallel execution
       const [licenseValid, userProgress] = await Promise.all([
-        web3Context.hasValidLicense(address, courseId),
-        web3Context.getUserProgress(address, courseId),
+        hasValidLicense(address, courseId),
+        getUserProgress(address, courseId),
       ]);
 
-      console.log("✅ PARALLEL results:", { licenseValid, userProgress });
+      console.log("✅ Check results:", { licenseValid, userProgress });
 
       if (isMountedRef.current) {
-        setHasValidLicense(licenseValid);
+        setHasLicense(licenseValid);
         setProgress(userProgress);
 
         // Check if this specific section is completed
@@ -177,15 +137,15 @@ export default function SectionDetailScreen({ route, navigation }) {
           const sectionCompleted = userProgress.sectionsProgress[sectionIndex];
           setIsCompleted(sectionCompleted);
           console.log(
-            `📊 Section ${sectionIndex} completion status:`,
+            `Section ${sectionIndex} completion status:`,
             sectionCompleted
           );
         }
       }
     } catch (error) {
-      console.error("❌ Error in checkLicenseAndProgress:", error);
+      console.error("❌ Error checking license and progress:", error);
       if (isMountedRef.current) {
-        setHasValidLicense(false);
+        setHasLicense(false);
         setProgress({
           courseId: courseId.toString(),
           completedSections: 0,
@@ -199,9 +159,62 @@ export default function SectionDetailScreen({ route, navigation }) {
         setLicenseChecking(false);
       }
     }
-  }, [address, courseId, sectionIndex, web3Context]);
+  }, [
+    address,
+    courseId,
+    sectionIndex,
+    isInitialized,
+    hasValidLicense,
+    getUserProgress,
+  ]);
 
-  // ✅ OPTIMIZED VIDEO URL GENERATION
+  // Initial load
+  useEffect(() => {
+    console.log("SectionDetailScreen initialized:", {
+      courseId,
+      sectionId,
+      sectionIndex,
+      address,
+      isInitialized,
+      hasSectionData: !!sectionData,
+      initialLoadDone: initialLoadDone.current,
+    });
+
+    if (initialLoadDone.current) return;
+
+    // If we have section data, use it immediately
+    if (sectionData) {
+      setSection(sectionData);
+      if (
+        sectionData.contentCID &&
+        sectionData.contentCID !== "placeholder-video-content"
+      ) {
+        generateVideoUrl(sectionData.contentCID);
+      } else {
+        setFallbackVideoUrl();
+      }
+      setLoading(false);
+    } else {
+      loadSectionData();
+    }
+
+    // Check license and progress
+    if (address && isInitialized && !initialLoadDone.current) {
+      checkLicenseAndProgress();
+      initialLoadDone.current = true;
+    }
+  }, [
+    courseId,
+    sectionId,
+    sectionIndex,
+    address,
+    isInitialized,
+    sectionData,
+    loadSectionData,
+    checkLicenseAndProgress,
+  ]);
+
+  // Generate video URL for IPFS content
   const generateVideoUrl = useCallback(async (contentCID) => {
     try {
       setVideoLoading(true);
@@ -223,31 +236,76 @@ export default function SectionDetailScreen({ route, navigation }) {
         return;
       }
 
-      // Try PinataService first
+      console.log("🎥 Generating video URL for CID:", cleanCID);
+
+      // Try multiple IPFS gateways for better availability
+      const gateways = [
+        `https://gateway.pinata.cloud/ipfs/${cleanCID}`,
+        `https://ipfs.io/ipfs/${cleanCID}`,
+        `https://cloudflare-ipfs.com/ipfs/${cleanCID}`,
+        `https://w3s.link/ipfs/${cleanCID}`,
+      ];
+
+      // Try to get optimized URL from PinataService first
       try {
         const optimizedUrl = await pinataService.getOptimizedFileUrl(cleanCID, {
           forcePublic: true,
           network: "public",
           fileType: "video",
-          expires: 7200,
+          expires: 7200, // 2 hours for video streaming
         });
 
-        if (isMountedRef.current) {
+        if (optimizedUrl && isMountedRef.current) {
+          console.log("✅ Got optimized URL from PinataService");
           setVideoUrl(optimizedUrl);
           videoUrlCache.set(contentCID, optimizedUrl);
+          setVideoLoading(false);
+          return;
         }
       } catch (pinataError) {
-        // Fallback to IPFS gateways
-        const fallbackUrl = `https://gateway.pinata.cloud/ipfs/${cleanCID}`;
-        if (isMountedRef.current) {
-          setVideoUrl(fallbackUrl);
-          videoUrlCache.set(contentCID, fallbackUrl);
+        console.warn(
+          "⚠️ PinataService optimization failed, trying gateways:",
+          pinataError.message
+        );
+      }
+
+      // Test gateways to find the fastest one
+      let workingUrl = null;
+
+      for (const gateway of gateways) {
+        try {
+          console.log(`🔍 Testing gateway: ${gateway}`);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+          const response = await fetch(gateway, {
+            method: "HEAD",
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            console.log(`✅ Gateway working: ${gateway}`);
+            workingUrl = gateway;
+            break;
+          }
+        } catch (error) {
+          console.log(`❌ Gateway failed: ${gateway}`);
+          continue;
         }
+      }
+
+      if (workingUrl && isMountedRef.current) {
+        setVideoUrl(workingUrl);
+        videoUrlCache.set(contentCID, workingUrl);
+      } else {
+        throw new Error("No working IPFS gateway found");
       }
     } catch (error) {
       console.error("❌ Error generating video URL:", error);
       if (isMountedRef.current) {
-        setVideoError("Failed to load video content");
+        setVideoError("Failed to load video content. Please try again later.");
         setFallbackVideoUrl();
       }
     } finally {
@@ -281,9 +339,9 @@ export default function SectionDetailScreen({ route, navigation }) {
     }
   }, []);
 
-  // ✅ COMPLETE SECTION - Optimized with error handling
+  // Complete section handler
   const handleCompleteSection = useCallback(async () => {
-    if (!hasValidLicense) {
+    if (!hasLicense) {
       Alert.alert(
         "Access Denied",
         "You need a valid license to complete sections"
@@ -291,7 +349,7 @@ export default function SectionDetailScreen({ route, navigation }) {
       return;
     }
 
-    if (!web3Context) {
+    if (!isInitialized) {
       Alert.alert("Error", "Smart contract service not available");
       return;
     }
@@ -305,7 +363,7 @@ export default function SectionDetailScreen({ route, navigation }) {
       setCompletingSection(true);
       console.log("🎯 Completing section:", { courseId, sectionIndex });
 
-      const result = await web3Context.completeSection(courseId, sectionIndex);
+      const result = await completeSection(courseId, sectionIndex);
 
       if (result.success) {
         if (isMountedRef.current) {
@@ -349,18 +407,19 @@ export default function SectionDetailScreen({ route, navigation }) {
       }
     }
   }, [
-    hasValidLicense,
-    web3Context,
+    hasLicense,
+    isInitialized,
     isCompleted,
     courseId,
     sectionIndex,
     progress,
     navigation,
     courseTitle,
+    completeSection,
     checkLicenseAndProgress,
   ]);
 
-  // ✅ UTILITY FUNCTIONS
+  // Utility functions
   const formatDuration = useCallback((seconds) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -379,24 +438,29 @@ export default function SectionDetailScreen({ route, navigation }) {
     (status) => {
       setVideoStatus(status);
 
-      if (status.didJustFinish && !isCompleted && hasValidLicense) {
+      if (status.didJustFinish && !isCompleted && hasLicense) {
         Alert.alert("Video Completed", "Mark this section as complete?", [
           { text: "Not Yet", style: "cancel" },
           { text: "Complete Section", onPress: handleCompleteSection },
         ]);
       }
     },
-    [isCompleted, hasValidLicense, handleCompleteSection]
+    [isCompleted, hasLicense, handleCompleteSection]
   );
 
-  // ✅ OPTIMIZED MEDIA PLAYER
+  // Media player component
   const renderMediaPlayer = useCallback(() => {
     if (videoLoading) {
       return (
         <View style={styles.mediaContainer}>
           <View style={styles.videoLoadingContainer}>
             <ActivityIndicator size="large" color="#8b5cf6" />
-            <Text style={styles.videoLoadingText}>Loading video...</Text>
+            <Text style={styles.videoLoadingText}>
+              Loading video from IPFS...
+            </Text>
+            <Text style={styles.videoLoadingSubtext}>
+              This may take a few moments
+            </Text>
           </View>
         </View>
       );
@@ -445,15 +509,34 @@ export default function SectionDetailScreen({ route, navigation }) {
           source={{ uri: videoUrl }}
           useNativeControls
           resizeMode="contain"
-          shouldPlay={true}
+          shouldPlay={false}
+          isLooping={false}
           onPlaybackStatusUpdate={handleVideoStatusUpdate}
           onError={(error) => {
             console.error("❌ Video playback error:", error);
             Alert.alert(
               "Video Error",
-              "Video tidak bisa diputar. Pastikan format MP4 (H.264/AAC) dan file dapat diakses publik."
+              "Unable to play this video. The video might be in an unsupported format or the IPFS gateway is temporarily unavailable.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Try Again",
+                  onPress: () => {
+                    if (section?.contentCID) {
+                      videoUrlCache.delete(section.contentCID);
+                      generateVideoUrl(section.contentCID);
+                    }
+                  },
+                },
+              ]
             );
             setVideoError("Unable to play this video");
+          }}
+          onLoad={(status) => {
+            console.log("✅ Video loaded successfully:", {
+              duration: status.durationMillis,
+              isLoaded: status.isLoaded,
+            });
           }}
         />
 
@@ -466,6 +549,18 @@ export default function SectionDetailScreen({ route, navigation }) {
               <Text style={styles.ipfsText}>IPFS Content</Text>
             </View>
           )}
+
+        {/* Video controls hint */}
+        {videoStatus.isPlaying === false && !videoStatus.didJustFinish && (
+          <View style={styles.playHint}>
+            <Ionicons
+              name="play-circle"
+              size={48}
+              color="rgba(255,255,255,0.8)"
+            />
+            <Text style={styles.playHintText}>Tap to play</Text>
+          </View>
+        )}
       </View>
     );
   }, [
@@ -473,11 +568,12 @@ export default function SectionDetailScreen({ route, navigation }) {
     videoError,
     videoUrl,
     section,
+    videoStatus,
     handleVideoStatusUpdate,
     generateVideoUrl,
   ]);
 
-  // ✅ NAVIGATION HANDLERS
+  // Navigation handlers
   const navigateToSection = useCallback(
     (newSectionIndex) => {
       if (videoRef.current) {
@@ -494,7 +590,7 @@ export default function SectionDetailScreen({ route, navigation }) {
     [courseId, courseTitle, navigation]
   );
 
-  // ✅ OPTIMIZED LOADING STATE
+  // Loading state
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -506,8 +602,8 @@ export default function SectionDetailScreen({ route, navigation }) {
     );
   }
 
-  // ✅ ACCESS DENIED STATE
-  if (!hasValidLicense && !licenseChecking) {
+  // Access denied state
+  if (!hasLicense && !licenseChecking) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.accessDeniedContainer}>
@@ -537,8 +633,6 @@ export default function SectionDetailScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* ✅ REMOVED DOUBLE HEADER - Using only React Navigation header */}
-
         {/* Media Player */}
         {renderMediaPlayer()}
 
@@ -614,7 +708,7 @@ export default function SectionDetailScreen({ route, navigation }) {
         </View>
 
         {/* Action Container */}
-        {hasValidLicense && (
+        {hasLicense && (
           <View style={styles.actionContainer}>
             <TouchableOpacity
               style={[
@@ -748,6 +842,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 16,
   },
+  videoLoadingSubtext: {
+    color: "#ccc",
+    fontSize: 14,
+    marginTop: 4,
+  },
   videoErrorContainer: {
     flex: 1,
     justifyContent: "center",
@@ -811,6 +910,18 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 10,
     fontWeight: "500",
+  },
+  playHint: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: [{ translateX: -50 }, { translateY: -30 }],
+    alignItems: "center",
+  },
+  playHintText: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 14,
+    marginTop: 4,
   },
   sectionInfo: {
     padding: 20,

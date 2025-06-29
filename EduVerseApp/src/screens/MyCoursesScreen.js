@@ -1,4 +1,4 @@
-// src/screens/MyCoursesScreen.js - PRODUCTION READY - Updated for Smart Contract Integration
+// src/screens/MyCoursesScreen.js - Updated for Latest Smart Contract
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
@@ -15,40 +15,38 @@ import { useFocusEffect } from "@react-navigation/native";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
 import CourseCard from "../components/CourseCard";
-import {
-  useUserCourses,
-  useCreatorCourses,
-  useSmartContract,
-} from "../hooks/useBlockchain";
+import { useWeb3 } from "../contexts/Web3Context";
 
 export default function MyCoursesScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const { isInitialized, modalPreventionActive } = useSmartContract();
+
+  // Use Web3Context directly
+  const {
+    isInitialized,
+    modalPreventionActive,
+    getUserLicenses,
+    getCourse,
+    getUserProgress,
+    getCreatorCourses,
+  } = useWeb3();
 
   const [activeTab, setActiveTab] = useState("enrolled");
   const [refreshing, setRefreshing] = useState(false);
   const [navigating, setNavigating] = useState(false);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [createdCourses, setCreatedCourses] = useState([]);
+  const [enrolledLoading, setEnrolledLoading] = useState(false);
+  const [createdLoading, setCreatedLoading] = useState(false);
+  const [enrolledError, setEnrolledError] = useState(null);
+  const [createdError, setCreatedError] = useState(null);
+
   const navigationTimeoutRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   // State untuk kurs ETH -> IDR
   const [ethToIdrRate, setEthToIdrRate] = useState(null);
   const [rateLoading, setRateLoading] = useState(true);
-
-  // Use blockchain hooks - Updated to match smart contract functions
-  const {
-    enrolledCourses,
-    loading: enrolledLoading,
-    error: enrolledError,
-    refetch: refetchEnrolled,
-  } = useUserCourses();
-
-  const {
-    createdCourses,
-    loading: createdLoading,
-    error: createdError,
-    refetch: refetchCreated,
-  } = useCreatorCourses();
 
   // Helper untuk format Rupiah
   const formatRupiah = (number) => {
@@ -60,7 +58,7 @@ export default function MyCoursesScreen({ navigation }) {
     }).format(number);
   };
 
-  // Helper function to format price in IDR - Updated for smart contract pricePerMonth
+  // Helper function to format price in IDR
   const formatPriceInIDR = (priceInETH) => {
     if (!priceInETH || priceInETH === "0" || parseFloat(priceInETH) === 0) {
       return "Free";
@@ -105,6 +103,81 @@ export default function MyCoursesScreen({ navigation }) {
     }
   }, []);
 
+  // Fetch enrolled courses
+  const fetchEnrolledCourses = useCallback(async () => {
+    if (!isInitialized || !address) return;
+
+    setEnrolledLoading(true);
+    setEnrolledError(null);
+
+    try {
+      const licenses = await getUserLicenses(address);
+
+      if (!isMountedRef.current) return;
+
+      const coursesWithProgress = [];
+
+      for (const license of licenses) {
+        try {
+          const [course, progress] = await Promise.all([
+            getCourse(license.courseId),
+            getUserProgress(address, license.courseId),
+          ]);
+
+          if (isMountedRef.current && course) {
+            coursesWithProgress.push({
+              ...course,
+              license,
+              progress: progress?.progressPercentage || 0,
+              completedSections: progress?.completedSections || 0,
+              totalSections: progress?.totalSections || 0,
+            });
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch course ${license.courseId}:`, err);
+        }
+      }
+
+      if (isMountedRef.current) {
+        setEnrolledCourses(coursesWithProgress);
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        console.error("Error fetching user courses:", err);
+        setEnrolledError(err.message);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setEnrolledLoading(false);
+      }
+    }
+  }, [isInitialized, address, getUserLicenses, getCourse, getUserProgress]);
+
+  // Fetch created courses
+  const fetchCreatedCourses = useCallback(async () => {
+    if (!isInitialized || !address) return;
+
+    setCreatedLoading(true);
+    setCreatedError(null);
+
+    try {
+      const courses = await getCreatorCourses(address);
+
+      if (isMountedRef.current) {
+        setCreatedCourses(courses);
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        console.error("Error fetching creator courses:", err);
+        setCreatedError(err.message);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setCreatedLoading(false);
+      }
+    }
+  }, [isInitialized, address, getCreatorCourses]);
+
   // Reset navigation state when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
@@ -126,27 +199,34 @@ export default function MyCoursesScreen({ navigation }) {
     fetchEthPriceInIdr();
   }, [fetchEthPriceInIdr]);
 
-  // Cleanup timeout when component unmounts
   useEffect(() => {
+    isMountedRef.current = true;
+
+    if (isInitialized && address) {
+      fetchEnrolledCourses();
+      fetchCreatedCourses();
+    }
+
     return () => {
+      isMountedRef.current = false;
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);
       }
     };
-  }, []);
+  }, [isInitialized, address, fetchEnrolledCourses, fetchCreatedCourses]);
 
-  // Refresh handler - Updated to work with getUserLicenses and getCreatorCourses
+  // Refresh handler
   const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.allSettled([
-      refetchEnrolled(),
-      refetchCreated(),
+      fetchEnrolledCourses(),
+      fetchCreatedCourses(),
       fetchEthPriceInIdr(),
     ]);
     setRefreshing(false);
   };
 
-  // Course press handler - Updated for course detail navigation
+  // Course press handler
   const handleCoursePress = (course) => {
     if (navigating || modalPreventionActive) {
       console.log("Navigation prevented during smart contract operations");
@@ -162,7 +242,7 @@ export default function MyCoursesScreen({ navigation }) {
 
     try {
       navigation.navigate("CourseDetail", {
-        courseId: course.id.toString(), // Ensure courseId is string for smart contract calls
+        courseId: course.id.toString(),
         courseTitle: course.title,
       });
     } catch (navigationError) {
@@ -340,7 +420,7 @@ export default function MyCoursesScreen({ navigation }) {
             </View>
           ) : enrolledCourses.length > 0 ? (
             <>
-              {/* Learning Progress Stats - Updated for smart contract data */}
+              {/* Learning Progress Stats */}
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryTitle}>Learning Progress</Text>
                 <View style={styles.summaryStats}>
@@ -386,7 +466,7 @@ export default function MyCoursesScreen({ navigation }) {
                 </View>
               </View>
 
-              {/* Enrolled Courses List - Updated for license data */}
+              {/* Enrolled Courses List */}
               <View style={styles.coursesContainer}>
                 {enrolledCourses.map((course) => (
                   <CourseCard
@@ -419,7 +499,7 @@ export default function MyCoursesScreen({ navigation }) {
           </View>
         ) : createdCourses.length > 0 ? (
           <>
-            {/* Creator Stats - Updated for smart contract data */}
+            {/* Creator Stats */}
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Creator Stats</Text>
               <View style={styles.summaryStats}>
@@ -460,7 +540,7 @@ export default function MyCoursesScreen({ navigation }) {
               </View>
             </View>
 
-            {/* Created Courses List - Updated for smart contract data */}
+            {/* Created Courses List */}
             <View style={styles.coursesContainer}>
               {createdCourses.map((course) => (
                 <CourseCard

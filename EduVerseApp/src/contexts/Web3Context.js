@@ -567,6 +567,28 @@ export function Web3Provider({ children }) {
     [isInitialized, publicClient, contractAddresses]
   );
 
+  const getCourseSectionsCount = useCallback(async (courseId) => {
+    if (!isInitialized || !publicClient) {
+      throw new Error("Not initialized");
+    }
+    try {
+      const count = await publicClient.readContract({
+        address: contractAddresses.courseFactory,
+        abi: CourseFactoryABI,
+        functionName: "getCourseSections",
+        args: [BigInt(courseId)],
+      });
+      return count.length;
+    } catch (error) {
+      console.error(
+        `Get course sections count error for course ${courseId}:`,
+        error
+      );
+      // Kembalikan 0 jika terjadi error agar tidak merusak UI
+      return 0;
+    }
+  });
+
   const getCreatorCourses = useCallback(
     async (creatorAddress) => {
       if (!isInitialized || !publicClient) {
@@ -1082,6 +1104,7 @@ export function Web3Provider({ children }) {
       getAllCourses,
       getCourse,
       getCourseSections,
+      getCourseSectionsCount,
       addCourseSection,
       getCreatorCourses,
       getTotalCourses,
@@ -1112,6 +1135,7 @@ export function Web3Provider({ children }) {
       getAllCourses,
       getCourse,
       getCourseSections,
+      getCourseSectionsCount,
       addCourseSection,
       getCreatorCourses,
       getTotalCourses,

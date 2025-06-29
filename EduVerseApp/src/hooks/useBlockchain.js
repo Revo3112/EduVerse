@@ -662,6 +662,47 @@ export const useCourseSections = (courseId) => {
   };
 };
 
+export const useCourseSectionsCount = (courseId) => {
+  const { getCourseSectionsCount, isInitialized } = useWeb3();
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const fetchCount = useCallback(async () => {
+    if (!isInitialized || !courseId) {
+      setCount(0);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const sectionsCount = await getCourseSectionsCount(courseId);
+      setCount(sectionsCount);
+    } catch (err) {
+      console.error("Error fetching course sections count:", err);
+      setError(err.message);
+      setCount(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [isInitialized, courseId, getCourseSectionsCount]);
+
+  useEffect(() => {
+    if (isInitialized && courseId) {
+      fetchCount();
+    }
+  }, [fetchCount]);
+
+  return {
+    count,
+    loading,
+    error,
+    refetch: fetchCount,
+  };
+};
+
 // Export all hooks
 export default {
   useSmartContract,
@@ -675,6 +716,7 @@ export default {
   useUserCertificates,
   useHasActiveLicense,
   useCourseSections,
+  useCourseSectionsCount,
   useCourseCompletion,
   useUserProgress,
   useIssueCertificate,

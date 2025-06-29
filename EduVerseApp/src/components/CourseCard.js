@@ -1,5 +1,3 @@
-// src/components/CourseCard.js - Enhanced with Pinata image integration and performance optimization
-
 import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
@@ -11,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { pinataService } from "../services/PinataService";
+import { useCourseSectionsCount } from "../hooks/useBlockchain";
 
 // Helper untuk memformat timestamp menjadi format "X hari yang lalu"
 const timeAgo = (timestamp) => {
@@ -43,6 +42,10 @@ const CourseCard = ({
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
 
+  // ✅ Gunakan hook untuk mendapatkan jumlah section
+  const { count: sectionsCount, loading: sectionsLoading } =
+    useCourseSectionsCount(course.id);
+
   // ✅ Memoized course data untuk prevent unnecessary re-renders
   const courseData = useMemo(
     () => ({
@@ -53,10 +56,10 @@ const CourseCard = ({
       thumbnailUrl: course.thumbnailUrl,
       creator: course.creator,
       pricePerMonth: course.pricePerMonth,
-      sectionsCount: course.sectionsCount || 0,
+      sectionsCount: sectionsLoading ? "..." : sectionsCount,
       createdAt: course.createdAt,
     }),
-    [course]
+    [course, sectionsCount, sectionsLoading]
   );
 
   // ✅ Enhanced thumbnail loading dengan caching dan fallback

@@ -1,4 +1,4 @@
-// src/screens/CourseDetailScreen.js - Enhanced with Smart Contract Integration
+// src/screens/CourseDetailScreen.js - Updated Without Double Header
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAccount } from "wagmi";
-import { useWeb3 } from "../contexts/Web3Context"; // ✅ Direct import
+import { useWeb3 } from "../contexts/Web3Context";
 
 // Cache for section data to improve performance
 const sectionCache = new Map();
@@ -22,14 +22,20 @@ export default function CourseDetailScreen({ route, navigation }) {
   const { courseId, courseTitle } = route.params;
   const { address } = useAccount();
 
-  // ✅ Use Web3Context directly instead of useSmartContract hook
-  const web3Context = useWeb3();
-  const { isInitialized } = web3Context;
+  // Use Web3Context directly
+  const {
+    isInitialized,
+    getCourse,
+    getCourseSections,
+    hasValidLicense,
+    getLicense,
+    getUserProgress,
+  } = useWeb3();
 
   const [course, setCourse] = useState(null);
   const [sections, setSections] = useState([]);
   const [progress, setProgress] = useState(null);
-  const [hasValidLicense, setHasValidLicense] = useState(false);
+  const [hasLicense, setHasLicense] = useState(false);
   const [licenseData, setLicenseData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,26 +51,7 @@ export default function CourseDetailScreen({ route, navigation }) {
     };
   }, []);
 
-  // ✅ ENHANCED: Enhanced useEffect for smart contract initialization
-  useEffect(() => {
-    console.log("CourseDetailScreen useEffect triggered:", {
-      courseId,
-      address,
-      isInitialized,
-      web3ContextAvailable: !!web3Context,
-      contextMethods: Object.keys(web3Context || {}),
-    });
-
-    // Load data only when all conditions are met
-    if (courseId && address && isInitialized && web3Context) {
-      loadCourseData();
-    } else {
-      console.log("Skipping loadCourseData - conditions not met");
-      setLoading(false);
-    }
-  }, [courseId, address, isInitialized, web3Context]);
-
-  // ✅ ENHANCED: Load course data using smart contract functions
+  // Load course data
   const loadCourseData = useCallback(async () => {
     try {
       setLoading(true);
@@ -75,11 +62,8 @@ export default function CourseDetailScreen({ route, navigation }) {
         address
       );
 
-      if (!web3Context || !isInitialized) {
-        console.error("Web3Context not ready:", {
-          contextAvailable: !!web3Context,
-          isInitialized,
-        });
+      if (!isInitialized) {
+        console.error("Web3Context not ready");
         Alert.alert(
           "Error",
           "Smart contract service not ready. Please try again."
@@ -87,16 +71,16 @@ export default function CourseDetailScreen({ route, navigation }) {
         return;
       }
 
-      // ✅ Load course details using getCourse from CourseFactory
-      const courseData = await web3Context.getCourse(courseId);
+      // Load course details
+      const courseData = await getCourse(courseId);
       console.log("Course data loaded:", courseData?.title || "No title");
 
       if (isMountedRef.current) {
         setCourse(courseData);
       }
 
-      // ✅ Load course sections using getCourseSections from CourseFactory
-      const sectionsData = await web3Context.getCourseSections(courseId);
+      // Load course sections
+      const sectionsData = await getCourseSections(courseId);
       console.log("Sections loaded:", sectionsData?.length || 0, "sections");
 
       if (isMountedRef.current) {
@@ -106,7 +90,7 @@ export default function CourseDetailScreen({ route, navigation }) {
       }
 
       if (address) {
-        // ✅ Check license validity using hasValidLicense from CourseLicense
+        // Check license validity
         console.log(
           "Checking license validity for address:",
           address,
@@ -116,23 +100,17 @@ export default function CourseDetailScreen({ route, navigation }) {
 
         setLicenseChecking(true);
         try {
-          const licenseValid = await web3Context.hasValidLicense(
-            address,
-            courseId
-          );
+          const licenseValid = await hasValidLicense(address, courseId);
           console.log("License check result:", licenseValid);
 
           if (isMountedRef.current) {
-            setHasValidLicense(licenseValid);
+            setHasLicense(licenseValid);
           }
 
-          // ✅ Get license details using getLicense from CourseLicense
+          // Get license details
           if (licenseValid) {
             try {
-              const licenseDetails = await web3Context.getLicense(
-                address,
-                courseId
-              );
+              const licenseDetails = await getLicense(address, courseId);
               console.log("License details loaded:", licenseDetails);
 
               if (isMountedRef.current) {
@@ -148,7 +126,7 @@ export default function CourseDetailScreen({ route, navigation }) {
         } catch (licenseError) {
           console.error("Error checking license:", licenseError);
           if (isMountedRef.current) {
-            setHasValidLicense(false);
+            setHasLicense(false);
           }
         } finally {
           if (isMountedRef.current) {
@@ -156,12 +134,9 @@ export default function CourseDetailScreen({ route, navigation }) {
           }
         }
 
-        // ✅ Get user progress using getUserProgress from ProgressTracker
+        // Get user progress
         try {
-          const userProgress = await web3Context.getUserProgress(
-            address,
-            courseId
-          );
+          const userProgress = await getUserProgress(address, courseId);
           console.log("User progress loaded:", userProgress);
 
           if (isMountedRef.current) {
@@ -170,7 +145,7 @@ export default function CourseDetailScreen({ route, navigation }) {
         } catch (progressError) {
           console.error("Error loading user progress:", progressError);
           if (isMountedRef.current) {
-            // Set default progress structure matching ProgressTracker contract
+            // Set default progress structure
             setProgress({
               courseId: courseId.toString(),
               completedSections: 0,
@@ -191,9 +166,34 @@ export default function CourseDetailScreen({ route, navigation }) {
         setLoading(false);
       }
     }
-  }, [courseId, address, web3Context, isInitialized]);
+  }, [
+    courseId,
+    address,
+    isInitialized,
+    getCourse,
+    getCourseSections,
+    hasValidLicense,
+    getLicense,
+    getUserProgress,
+  ]);
 
-  // ✅ ENHANCED: Refresh handler
+  // Initial load
+  useEffect(() => {
+    console.log("CourseDetailScreen useEffect triggered:", {
+      courseId,
+      address,
+      isInitialized,
+    });
+
+    if (courseId && isInitialized) {
+      loadCourseData();
+    } else {
+      console.log("Skipping loadCourseData - conditions not met");
+      setLoading(false);
+    }
+  }, [courseId, address, isInitialized, loadCourseData]);
+
+  // Refresh handler
   const handleRefresh = useCallback(async () => {
     console.log("Manual refresh triggered");
     setRefreshing(true);
@@ -208,55 +208,51 @@ export default function CourseDetailScreen({ route, navigation }) {
     }
   }, [courseId, loadCourseData]);
 
-  // ✅ ENHANCED: Section press handler with real-time license check
+  // Section press handler
   const handleSectionPress = useCallback(
     async (section, index) => {
       console.log("Section pressed:", {
         sectionId: section.id,
         sectionIndex: index,
-        hasValidLicense,
+        hasLicense,
         address,
       });
 
-      if (!hasValidLicense) {
+      if (!hasLicense) {
         await checkLicenseRealTime(section, index);
         return;
       }
 
-      // Navigate to section detail with proper data structure
+      // Navigate to section detail
       navigation.navigate("SectionDetail", {
         courseId: courseId,
         sectionId: section.id,
         sectionIndex: index,
         courseTitle: course?.title || courseTitle,
-        sectionData: section, // Pass section data for faster loading
+        sectionData: section,
       });
     },
-    [hasValidLicense, courseId, course, courseTitle, navigation, address]
+    [hasLicense, courseId, course, courseTitle, navigation, address]
   );
 
-  // ✅ ENHANCED: Real-time license check using smart contract
+  // Real-time license check
   const checkLicenseRealTime = useCallback(
     async (section, index) => {
       try {
-        if (!address || !web3Context) {
-          Alert.alert("Error", "Wallet not connected or service not available");
+        if (!address) {
+          Alert.alert("Error", "Wallet not connected");
           return;
         }
 
         console.log("Real-time license check for section access...");
         setLicenseChecking(true);
 
-        // Use hasValidLicense from CourseLicense contract
-        const licenseValid = await web3Context.hasValidLicense(
-          address,
-          courseId
-        );
+        const licenseValid = await hasValidLicense(address, courseId);
         console.log("Real-time license check result:", licenseValid);
 
         if (isMountedRef.current) {
           setLicenseChecking(false);
-          setHasValidLicense(licenseValid);
+          setHasLicense(licenseValid);
         }
 
         if (licenseValid) {
@@ -295,16 +291,16 @@ export default function CourseDetailScreen({ route, navigation }) {
     },
     [
       address,
-      web3Context,
       courseId,
       course,
       courseTitle,
       navigation,
       handleRefresh,
+      hasValidLicense,
     ]
   );
 
-  // ✅ UTILITY FUNCTIONS
+  // Utility functions
   const formatDuration = useCallback((seconds) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -319,7 +315,6 @@ export default function CourseDetailScreen({ route, navigation }) {
     }
   }, []);
 
-  // ✅ ENHANCED: Check if section is completed using ProgressTracker data
   const isSectionCompleted = useCallback(
     (sectionIndex) => {
       if (!progress || !progress.sectionsProgress) return false;
@@ -328,7 +323,6 @@ export default function CourseDetailScreen({ route, navigation }) {
     [progress]
   );
 
-  // ✅ Calculate total duration from CourseSection structs
   const getTotalDuration = useCallback(() => {
     if (!sections || sections.length === 0) return 0;
     return sections.reduce(
@@ -337,7 +331,6 @@ export default function CourseDetailScreen({ route, navigation }) {
     );
   }, [sections]);
 
-  // ✅ Format license expiry from CourseLicense data
   const formatLicenseExpiry = useCallback((expiryTimestamp) => {
     if (!expiryTimestamp) return "Unknown";
 
@@ -355,11 +348,11 @@ export default function CourseDetailScreen({ route, navigation }) {
     return expiryDate.toLocaleDateString();
   }, []);
 
-  // ✅ ENHANCED: Render section item with completion status from ProgressTracker
+  // Render section item
   const renderSectionItem = useCallback(
     ({ item, index }) => {
       const isCompleted = isSectionCompleted(index);
-      const isLocked = !hasValidLicense;
+      const isLocked = !hasLicense;
 
       return (
         <TouchableOpacity
@@ -459,7 +452,7 @@ export default function CourseDetailScreen({ route, navigation }) {
       );
     },
     [
-      hasValidLicense,
+      hasLicense,
       licenseChecking,
       formatDuration,
       handleSectionPress,
@@ -467,11 +460,11 @@ export default function CourseDetailScreen({ route, navigation }) {
     ]
   );
 
-  // ✅ ENHANCED: Header with course information from CourseFactory
+  // Header component
   const renderHeader = useCallback(
     () => (
       <View style={styles.headerContent}>
-        {/* Course Info from CourseFactory.Course struct */}
+        {/* Course Info */}
         <View style={styles.courseInfo}>
           <Text style={styles.courseTitle}>{course?.title || courseTitle}</Text>
           {course?.description && (
@@ -510,8 +503,8 @@ export default function CourseDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Progress Card from ProgressTracker data */}
-        {hasValidLicense && progress && progress.totalSections > 0 && (
+        {/* Progress Card */}
+        {hasLicense && progress && progress.totalSections > 0 && (
           <View style={styles.progressCard}>
             <View style={styles.progressHeader}>
               <Text style={styles.progressTitle}>Your Progress</Text>
@@ -534,32 +527,30 @@ export default function CourseDetailScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* License Status from CourseLicense data */}
+        {/* License Status */}
         <View
           style={[
             styles.licenseCard,
-            hasValidLicense
-              ? styles.licenseCardValid
-              : styles.licenseCardInvalid,
+            hasLicense ? styles.licenseCardValid : styles.licenseCardInvalid,
           ]}
         >
           <Ionicons
-            name={hasValidLicense ? "shield-checkmark" : "shield-outline"}
+            name={hasLicense ? "shield-checkmark" : "shield-outline"}
             size={20}
-            color={hasValidLicense ? "#4CAF50" : "#ff6b6b"}
+            color={hasLicense ? "#4CAF50" : "#ff6b6b"}
           />
           <View style={styles.licenseTextContainer}>
             <Text
               style={[
                 styles.licenseText,
-                hasValidLicense
+                hasLicense
                   ? styles.licenseTextValid
                   : styles.licenseTextInvalid,
               ]}
             >
-              {hasValidLicense ? "Licensed - Full Access" : "No Valid License"}
+              {hasLicense ? "Licensed - Full Access" : "No Valid License"}
             </Text>
-            {hasValidLicense && licenseData && (
+            {hasLicense && licenseData && (
               <Text style={styles.licenseExpiry}>
                 {formatLicenseExpiry(licenseData.expiryTimestamp)}
               </Text>
@@ -568,7 +559,7 @@ export default function CourseDetailScreen({ route, navigation }) {
           {licenseChecking && (
             <ActivityIndicator
               size="small"
-              color={hasValidLicense ? "#4CAF50" : "#ff6b6b"}
+              color={hasLicense ? "#4CAF50" : "#ff6b6b"}
               style={styles.licenseLoader}
             />
           )}
@@ -578,7 +569,7 @@ export default function CourseDetailScreen({ route, navigation }) {
         <View style={styles.sectionsHeader}>
           <Text style={styles.sectionsTitle}>Course Sections</Text>
           <Text style={styles.sectionsSubtitle}>
-            {hasValidLicense
+            {hasLicense
               ? "Tap any section to start learning"
               : "Get a license to unlock all content"}
           </Text>
@@ -590,7 +581,7 @@ export default function CourseDetailScreen({ route, navigation }) {
       courseTitle,
       sections,
       progress,
-      hasValidLicense,
+      hasLicense,
       licenseData,
       licenseChecking,
       formatDuration,
@@ -599,21 +590,10 @@ export default function CourseDetailScreen({ route, navigation }) {
     ]
   );
 
-  // ✅ Loading state
+  // Loading state
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Course Details</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#8b5cf6" />
           <Text style={styles.loadingText}>Loading course details...</Text>
@@ -627,18 +607,6 @@ export default function CourseDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Course Details</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
       {/* Content */}
       <FlatList
         data={sections}
@@ -687,29 +655,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    flex: 1,
-    textAlign: "center",
-  },
-  headerSpacer: {
-    width: 40,
   },
   loadingContainer: {
     flex: 1,
@@ -796,7 +741,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#8bcf6",
+    backgroundColor: "#8b5cf6",
     borderRadius: 4,
   },
   progressText: {

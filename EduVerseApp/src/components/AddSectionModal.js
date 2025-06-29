@@ -44,6 +44,8 @@ const AddSectionModal = ({
     title: "", // Smart contract: max 200 chars
     duration: "", // Smart contract: in seconds, max 86400 (24 hours)
   });
+  // ✅ ENHANCED: Auto-fill duration state
+  const [isDurationAutoFilled, setIsDurationAutoFilled] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [selectedVideoFile, setSelectedVideoFile] = useState(null); // Store file for later upload
@@ -238,13 +240,18 @@ const AddSectionModal = ({
   const processVideoSelection = (videoFile, asset) => {
     setSelectedVideoFile(videoFile);
 
-    // Auto-estimate duration if available and form duration is empty
-    if (!formData.duration && asset.duration && asset.duration > 0) {
-      const estimatedMinutes = Math.ceil(asset.duration / 60000); // Convert ms to minutes, round up
+    // Auto-fill duration based on video duration (always update, not just when empty)
+    if (asset.duration && asset.duration > 0) {
+      const exactMinutes = (asset.duration / 60000).toFixed(2);
       setFormData((prev) => ({
         ...prev,
-        duration: estimatedMinutes.toString(),
+        duration: exactMinutes.toString(),
       }));
+      setIsDurationAutoFilled(true); // Tandai bahwa durasi terisi otomatis
+
+      console.log(
+        `✅ Duration auto-filled: ${exactMinutes} minutes from video duration`
+      );
     }
 
     Alert.alert(
@@ -260,6 +267,9 @@ const AddSectionModal = ({
           asset.duration
             ? `${Math.round(asset.duration / 60000)} minutes`
             : "Unknown"
+        }\n` +
+        `${
+          asset.duration ? "⏱️ Duration automatically filled in form!" : ""
         }\n\n` +
         "Video will be uploaded to IPFS when you create the course."
     );
@@ -477,6 +487,11 @@ const AddSectionModal = ({
       [field]: value,
     }));
 
+    // Reset auto-fill indicator when user manually changes duration
+    if (field === "duration") {
+      setIsDurationAutoFilled(false);
+    }
+
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({
@@ -485,7 +500,6 @@ const AddSectionModal = ({
       }));
     }
   };
-
   // ✅ Helper: Format duration display
   const formatDurationDisplay = () => {
     if (!formData.duration) return "";
@@ -628,8 +642,14 @@ const AddSectionModal = ({
                 <Text style={styles.helperText}>
                   {formData.duration ? (
                     <>
-                      Duration: {formatDurationDisplay()} • Smart contract
-                      stores in seconds (max 86400)
+                      Duration: {formatDurationDisplay()}
+                      {isDurationAutoFilled && (
+                        <Text style={{ color: Colors.success }}>
+                          {" "}
+                          • Auto-filled from video ✓
+                        </Text>
+                      )}
+                      • Smart contract stores in seconds (max 86400)
                     </>
                   ) : (
                     "Smart contract limit: 1440 minutes (24 hours). Will be converted to seconds."
