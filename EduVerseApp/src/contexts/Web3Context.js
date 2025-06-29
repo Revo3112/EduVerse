@@ -206,7 +206,8 @@ export function Web3Provider({ children }) {
   // Get MAX_PRICE_ETH constant from contract
   const getMaxPriceETH = useCallback(async () => {
     if (!isInitialized || !publicClient) {
-      throw new Error("Not initialized");
+      console.log("getMaxPriceETH: Not initialized yet");
+      return "0.002"; // Return default while initializing
     }
 
     try {
@@ -216,7 +217,9 @@ export function Web3Provider({ children }) {
         functionName: "MAX_PRICE_ETH",
       });
 
-      return formatEther(maxPriceWei);
+      const maxPriceETH = formatEther(maxPriceWei);
+      console.log("✅ MAX_PRICE_ETH from contract:", maxPriceETH, "ETH");
+      return maxPriceETH;
     } catch (error) {
       console.error("Get max price error:", error);
       // Fallback to hardcoded value from contract

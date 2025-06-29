@@ -1,5 +1,4 @@
-// src/components/CourseDetailModal.js - Enhanced with duration selection and better UX
-
+// src/components/CourseDetailModal.js - Enhanced for Indonesian Users with IDR Display
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Modal,
@@ -38,6 +37,17 @@ const timeAgo = (timestamp) => {
   return `${Math.floor(diffInSeconds / 31536000)} tahun lalu`;
 };
 
+// Helper untuk format Rupiah
+const formatRupiah = (number) => {
+  if (typeof number !== "number" || isNaN(number)) return "Rp 0";
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(number);
+};
+
 // ✅ Duration options dengan discount
 const DURATION_OPTIONS = [
   {
@@ -45,14 +55,14 @@ const DURATION_OPTIONS = [
     label: "1 Bulan",
     discount: 0,
     popular: false,
-    description: "Akses selama 1 bulan",
+    description: "Akses penuh selama 1 bulan",
   },
   {
     months: 3,
     label: "3 Bulan",
     discount: 10,
     popular: true,
-    description: "Hemat 10% + akses extended",
+    description: "Hemat 10% + akses diperpanjang",
   },
   {
     months: 6,
@@ -66,7 +76,7 @@ const DURATION_OPTIONS = [
     label: "1 Tahun",
     discount: 25,
     popular: false,
-    description: "Hemat 25% + lifetime support",
+    description: "Hemat 25% + dukungan selamanya",
   },
 ];
 
@@ -76,11 +86,12 @@ const CourseDetailModal = ({
   onClose,
   onMintLicense,
   isMinting,
-  priceCalculator, // ✅ Function untuk calculate price berdasarkan duration
+  priceCalculator, // Function to calculate price in IDR
   priceLoading,
   hasLicense,
-  licenseData, // ✅ Detailed license information
+  licenseData,
   licenseLoading,
+  ethToIdrRate = 55000000, // Default rate if not provided
 }) => {
   const [selectedDuration, setSelectedDuration] = useState(1);
   const [thumbnailUrl, setThumbnailUrl] = useState(null);
@@ -99,8 +110,10 @@ const CourseDetailModal = ({
       thumbnailUrl: course.thumbnailUrl,
       creator: course.creator,
       pricePerMonth: parseFloat(course.pricePerMonth || "0"),
+      pricePerMonthWei: course.pricePerMonthWei || "0",
       sectionsCount: course.sectionsCount || 0,
       createdAt: course.createdAt,
+      isActive: course.isActive !== false,
     };
   }, [course]);
 
@@ -171,52 +184,64 @@ const CourseDetailModal = ({
     }
   }, [visible]);
 
-  // ✅ Memoized price calculations
+  // ✅ Enhanced price calculations with IDR
   const priceInfo = useMemo(() => {
-    if (!courseData || priceLoading) {
+    if (!courseData || priceLoading || !ethToIdrRate) {
       return {
         loading: true,
-        originalPrice: "Menghitung...",
-        finalPrice: "Menghitung...",
-        savings: null,
-        pricePerMonth: "Menghitung...",
+        originalPriceIDR: "Menghitung...",
+        finalPriceIDR: "Menghitung...",
+        savingsIDR: null,
+        pricePerMonthIDR: "Menghitung...",
+        pricePerMonthETH: "0",
+        totalPriceETH: "0",
+        discount: 0,
       };
     }
 
     const selectedOption = DURATION_OPTIONS.find(
       (opt) => opt.months === selectedDuration
     );
-    const originalTotal = courseData.pricePerMonth * selectedDuration;
+
+    const pricePerMonthETH = courseData.pricePerMonth;
+    const originalTotalETH = pricePerMonthETH * selectedDuration;
     const discount = selectedOption?.discount || 0;
-    const finalTotal = originalTotal * (1 - discount / 100);
-    const savings = originalTotal - finalTotal;
+    const finalTotalETH = originalTotalETH * (1 - discount / 100);
+    const savingsETH = originalTotalETH - finalTotalETH;
+
+    // Use the actual ethToIdrRate or fallback
+    const currentRate = ethToIdrRate || 55000000;
+
+    // Convert to IDR
+    const pricePerMonthIDR = pricePerMonthETH * currentRate;
+    const originalTotalIDR = originalTotalETH * currentRate;
+    const finalTotalIDR = finalTotalETH * currentRate;
+    const savingsIDR = savingsETH * currentRate;
 
     return {
       loading: false,
-      originalPrice: priceCalculator
-        ? priceCalculator(selectedDuration)
-        : `Rp ${(originalTotal * 55000000).toLocaleString("id-ID")}`,
-      finalPrice: priceCalculator
-        ? priceCalculator(selectedDuration)
-        : `Rp ${(finalTotal * 55000000).toLocaleString("id-ID")}`,
-      savings:
-        savings > 0
-          ? `Rp ${(savings * 55000000).toLocaleString("id-ID")}`
-          : null,
-      pricePerMonth: `Rp ${(courseData.pricePerMonth * 55000000).toLocaleString(
-        "id-ID"
-      )}/bulan`,
+      // IDR values for display
+      originalPriceIDR: formatRupiah(originalTotalIDR),
+      finalPriceIDR: formatRupiah(finalTotalIDR),
+      savingsIDR: savingsIDR > 0 ? formatRupiah(savingsIDR) : null,
+      pricePerMonthIDR: formatRupiah(pricePerMonthIDR),
+      // ETH values for backend
+      pricePerMonthETH: pricePerMonthETH.toFixed(6),
+      totalPriceETH: finalTotalETH.toFixed(6),
+      originalTotalETH: originalTotalETH.toFixed(6),
       discount: discount,
+      // Additional info
+      isFree: pricePerMonthETH === 0,
     };
-  }, [courseData, selectedDuration, priceCalculator, priceLoading]);
+  }, [courseData, selectedDuration, priceLoading, ethToIdrRate]);
 
   if (!visible || !courseData) return null;
 
   // ✅ Enhanced creator display
   const creatorDisplay = `${courseData.creator.slice(
     0,
-    8
-  )}...${courseData.creator.slice(-6)}`;
+    6
+  )}...${courseData.creator.slice(-4)}`;
 
   // ✅ License status display
   const renderLicenseStatus = () => {
@@ -229,9 +254,13 @@ const CourseDetailModal = ({
       );
     }
 
-    if (hasLicense) {
+    if (hasLicense && licenseData) {
       const expiryDate = licenseData?.expiryTimestamp
-        ? new Date(licenseData.expiryTimestamp).toLocaleDateString("id-ID")
+        ? new Date(licenseData.expiryTimestamp).toLocaleDateString("id-ID", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
         : "Tidak diketahui";
 
       return (
@@ -262,6 +291,7 @@ const CourseDetailModal = ({
               option.popular && styles.durationOptionPopular,
             ]}
             onPress={() => setSelectedDuration(option.months)}
+            activeOpacity={0.7}
           >
             {option.popular && (
               <View style={styles.popularBadge}>
@@ -294,22 +324,73 @@ const CourseDetailModal = ({
             >
               {option.description}
             </Text>
+
+            {/* Show price per month for this option */}
+            {selectedDuration === option.months && !priceInfo.isFree && (
+              <Text style={styles.optionPrice}>
+                {priceCalculator
+                  ? priceCalculator(option.months)
+                  : formatRupiah(
+                      courseData.pricePerMonth *
+                        ethToIdrRate *
+                        option.months *
+                        (1 - option.discount / 100)
+                    )}
+              </Text>
+            )}
           </TouchableOpacity>
         ))}
       </View>
     </View>
   );
 
-  // ✅ Main action button
+  // ✅ Enhanced action button with better UX
   const renderActionButton = () => {
     if (hasLicense) {
       return (
-        <TouchableOpacity style={[styles.actionButton, styles.accessButton]}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.accessButton]}
+          onPress={() => {
+            Alert.alert(
+              "Mulai Belajar",
+              "Fitur pembelajaran akan segera tersedia. Terima kasih atas kesabaran Anda!",
+              [{ text: "OK" }]
+            );
+          }}
+        >
           <Ionicons name="play-circle" size={20} color="#ffffff" />
           <Text style={styles.actionButtonText}>Mulai Belajar</Text>
         </TouchableOpacity>
       );
     }
+
+    const handlePurchase = () => {
+      if (priceInfo.isFree) {
+        // Free course - direct mint
+        onMintLicense(courseData, selectedDuration);
+      } else {
+        // Paid course - show confirmation with IDR price
+        Alert.alert(
+          "Konfirmasi Pembelian",
+          `Anda akan membeli lisensi "${courseData.title}" untuk ${
+            DURATION_OPTIONS.find((opt) => opt.months === selectedDuration)
+              ?.label
+          }.\n\n` +
+            `Harga: ${priceInfo.finalPriceIDR}\n` +
+            (priceInfo.savingsIDR ? `Hemat: ${priceInfo.savingsIDR}\n` : "") +
+            `\nPembayaran: ${priceInfo.totalPriceETH} ETH\n` +
+            `\n⚠️ Pastikan Anda memiliki cukup ETH untuk gas fee.`,
+          [
+            { text: "Batal", style: "cancel" },
+            {
+              text: "Beli Sekarang",
+              onPress: () => onMintLicense(courseData, selectedDuration),
+              style: "default",
+            },
+          ]
+        );
+      }
+    };
 
     return (
       <TouchableOpacity
@@ -317,32 +398,9 @@ const CourseDetailModal = ({
           styles.actionButton,
           (isMinting || priceInfo.loading) && styles.actionButtonDisabled,
         ]}
-        onPress={() => {
-          if (courseData.pricePerMonth === 0) {
-            // Free course
-            onMintLicense(courseData, selectedDuration);
-          } else {
-            // Paid course - show confirmation
-            Alert.alert(
-              "Konfirmasi Pembelian",
-              `Anda akan membeli lisensi ${
-                DURATION_OPTIONS.find((opt) => opt.months === selectedDuration)
-                  ?.label
-              } untuk "${courseData.title}".\n\nTotal: ${priceInfo.finalPrice}${
-                priceInfo.savings ? `\nHemat: ${priceInfo.savings}` : ""
-              }`,
-              [
-                { text: "Batal", style: "cancel" },
-                {
-                  text: "Beli Sekarang",
-                  onPress: () => onMintLicense(courseData, selectedDuration),
-                  style: "default",
-                },
-              ]
-            );
-          }
-        }}
+        onPress={handlePurchase}
         disabled={isMinting || priceInfo.loading}
+        activeOpacity={0.7}
       >
         {isMinting ? (
           <>
@@ -352,18 +410,14 @@ const CourseDetailModal = ({
         ) : (
           <>
             <Ionicons
-              name={
-                courseData.pricePerMonth === 0
-                  ? "download-outline"
-                  : "card-outline"
-              }
+              name={priceInfo.isFree ? "download-outline" : "card-outline"}
               size={20}
               color="#ffffff"
             />
             <Text style={styles.actionButtonText}>
-              {courseData.pricePerMonth === 0
+              {priceInfo.isFree
                 ? "Ambil Gratis"
-                : `Beli ${priceInfo.finalPrice}`}
+                : `Beli - ${priceInfo.finalPriceIDR}`}
             </Text>
           </>
         )}
@@ -417,15 +471,27 @@ const CourseDetailModal = ({
                     color="#ffffff"
                   />
                   <Text style={styles.statText}>
-                    {courseData.sectionsCount} Video
+                    {courseData.sectionsCount || "Beberapa"} Video
                   </Text>
                 </View>
                 <View style={styles.statItem}>
                   <Ionicons name="time-outline" size={16} color="#ffffff" />
                   <Text style={styles.statText}>
-                    ~{courseData.sectionsCount * 15} menit
+                    ~{(courseData.sectionsCount || 1) * 15} menit
                   </Text>
                 </View>
+                {!priceInfo.isFree && (
+                  <View style={styles.statItem}>
+                    <Ionicons
+                      name="pricetag-outline"
+                      size={16}
+                      color="#ffffff"
+                    />
+                    <Text style={styles.statText}>
+                      {priceInfo.pricePerMonthIDR}/bulan
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -469,12 +535,10 @@ const CourseDetailModal = ({
             </View>
 
             {/* ✅ Only show duration options if no active license */}
-            {!hasLicense &&
-              courseData.pricePerMonth > 0 &&
-              renderDurationOptions()}
+            {!hasLicense && !priceInfo.isFree && renderDurationOptions()}
 
-            {/* ✅ Price summary */}
-            {!hasLicense && (
+            {/* ✅ Price summary - Enhanced for Indonesian users */}
+            {!hasLicense && !priceInfo.isFree && (
               <View style={styles.priceSection}>
                 <Text style={styles.sectionTitle}>Ringkasan Harga</Text>
                 <View style={styles.priceDetails}>
@@ -485,43 +549,120 @@ const CourseDetailModal = ({
                       <View style={styles.priceRow}>
                         <Text style={styles.priceLabel}>Harga per bulan</Text>
                         <Text style={styles.priceValue}>
-                          {priceInfo.pricePerMonth}
+                          {priceInfo.pricePerMonthIDR}
                         </Text>
                       </View>
 
                       {selectedDuration > 1 && (
-                        <View style={styles.priceRow}>
-                          <Text style={styles.priceLabel}>
-                            Durasi ({selectedDuration} bulan)
-                          </Text>
-                          <Text style={styles.priceValue}>
-                            {priceInfo.originalPrice}
-                          </Text>
-                        </View>
-                      )}
+                        <>
+                          <View style={styles.priceRow}>
+                            <Text style={styles.priceLabel}>
+                              Subtotal ({selectedDuration} bulan)
+                            </Text>
+                            <Text style={styles.priceValue}>
+                              {priceInfo.originalPriceIDR}
+                            </Text>
+                          </View>
 
-                      {priceInfo.discount > 0 && (
-                        <View style={styles.priceRow}>
-                          <Text
-                            style={[styles.priceLabel, styles.discountLabel]}
-                          >
-                            Diskon ({priceInfo.discount}%)
-                          </Text>
-                          <Text
-                            style={[styles.priceValue, styles.discountValue]}
-                          >
-                            -{priceInfo.savings}
-                          </Text>
-                        </View>
+                          {priceInfo.discount > 0 && (
+                            <View style={styles.priceRow}>
+                              <Text
+                                style={[
+                                  styles.priceLabel,
+                                  styles.discountLabel,
+                                ]}
+                              >
+                                Diskon ({priceInfo.discount}%)
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.priceValue,
+                                  styles.discountValue,
+                                ]}
+                              >
+                                -{priceInfo.savingsIDR}
+                              </Text>
+                            </View>
+                          )}
+                        </>
                       )}
 
                       <View style={[styles.priceRow, styles.totalRow]}>
                         <Text style={styles.totalLabel}>Total</Text>
-                        <Text style={styles.totalValue}>
-                          {priceInfo.finalPrice}
-                        </Text>
+                        <View style={styles.totalPriceContainer}>
+                          <Text style={styles.totalValue}>
+                            {priceInfo.finalPriceIDR}
+                          </Text>
+                          <Text style={styles.ethEquivalent}>
+                            ≈ {priceInfo.totalPriceETH} ETH
+                          </Text>
+                        </View>
                       </View>
                     </>
+                  )}
+                </View>
+
+                {/* ETH Rate Info */}
+                <View style={styles.rateInfo}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={14}
+                    color="#64748b"
+                  />
+                  <Text style={styles.rateInfoText}>
+                    1 ETH = {formatRupiah(ethToIdrRate || 55000000)} • Harga
+                    dapat berubah
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* ✅ Benefits section */}
+            {!hasLicense && (
+              <View style={styles.benefitsSection}>
+                <Text style={styles.sectionTitle}>Yang Anda Dapatkan</Text>
+                <View style={styles.benefitsList}>
+                  <View style={styles.benefitItem}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="#10b981"
+                    />
+                    <Text style={styles.benefitText}>
+                      Akses penuh ke semua video pembelajaran
+                    </Text>
+                  </View>
+                  <View style={styles.benefitItem}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="#10b981"
+                    />
+                    <Text style={styles.benefitText}>
+                      Sertifikat setelah menyelesaikan kursus
+                    </Text>
+                  </View>
+                  <View style={styles.benefitItem}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="#10b981"
+                    />
+                    <Text style={styles.benefitText}>
+                      Pembelajaran berbasis blockchain yang aman
+                    </Text>
+                  </View>
+                  {selectedDuration >= 6 && (
+                    <View style={styles.benefitItem}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="#10b981"
+                      />
+                      <Text style={styles.benefitText}>
+                        Bonus: Akses ke materi tambahan
+                      </Text>
+                    </View>
                   )}
                 </View>
               </View>
@@ -594,6 +735,7 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: "row",
     gap: 16,
+    flexWrap: "wrap",
   },
   statItem: {
     flexDirection: "row",
@@ -740,6 +882,12 @@ const styles = StyleSheet.create({
   durationDescriptionSelected: {
     color: "#7c3aed",
   },
+  optionPrice: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#8b5cf6",
+    marginTop: 8,
+  },
   priceSection: {
     marginBottom: 24,
   },
@@ -781,10 +929,48 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1e293b",
   },
+  totalPriceContainer: {
+    alignItems: "flex-end",
+  },
   totalValue: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#8b5cf6",
+  },
+  ethEquivalent: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  rateInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+  },
+  rateInfoText: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  benefitsSection: {
+    marginBottom: 24,
+  },
+  benefitsList: {
+    gap: 12,
+  },
+  benefitItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  benefitText: {
+    fontSize: 14,
+    color: "#64748b",
+    flex: 1,
+    lineHeight: 20,
   },
   actionSection: {
     padding: 20,
