@@ -2,8 +2,8 @@
 pragma solidity ^0.8.24;
 
 /**
- * NOTE: This contract is not used in the actual deployment.
- * Instead, contracts are deployed separately to reduce gas costs and avoid contract size limitations.
+ * NOTE: This contract is OPTIONAL and not required for deployment.
+ * The deploy-manta-pacific.js script deploys contracts individually.
  * This file is kept for reference purposes only.
  */
 
@@ -15,7 +15,7 @@ import "./CertificateManager.sol";
 
 /**
  * @title PlatformFactory
- * @dev Factory contract to deploy and connect all platform components
+ * @dev Factory contract to deploy all platform components (OPTIONAL)
  */
 contract PlatformFactory is Ownable {
     CourseFactory public courseFactory;
@@ -33,20 +33,18 @@ contract PlatformFactory is Ownable {
     constructor() Ownable(msg.sender) {}
 
     /**
-    * @dev Deploys all platform contracts
-    * @param platformWallet Address to receive platform fees
-    * @param priceFeed Address of the price feed
-    */
-    function deployPlatform(address platformWallet, address priceFeed) external onlyOwner {
+     * @dev Deploys all platform contracts
+     * @param platformWallet Address to receive platform fees
+     */
+    function deployPlatform(address platformWallet) external onlyOwner {
         require(address(courseFactory) == address(0), "Platform already deployed");
         require(platformWallet != address(0), "Invalid platform wallet");
-        require(priceFeed != address(0), "Invalid price feed");
 
-        // Deploy CourseFactory
-        courseFactory = new CourseFactory(priceFeed);
+        // Deploy CourseFactory (no parameters needed)
+        courseFactory = new CourseFactory();
 
-        // Deploy CourseLicense
-        courseLicense = new CourseLicense(address(courseFactory), platformWallet, priceFeed);
+        // Deploy CourseLicense (2 parameters only)
+        courseLicense = new CourseLicense(address(courseFactory), platformWallet);
 
         // Deploy ProgressTracker
         progressTracker = new ProgressTracker(address(courseFactory), address(courseLicense));

@@ -5,27 +5,23 @@ async function main() {
   try {
     console.log("🔬 Eduverse Platform - Comprehensive Testing Script");
 
-    // Load deployed contract addresses
+    // Muat alamat kontrak yang sudah di-deploy
     const addresses = JSON.parse(
       fs.readFileSync("deployed-contracts.json", "utf8")
     );
 
-    // On testnet, we'll use the same account for all roles
+    // Di testnet, kita akan menggunakan akun yang sama untuk semua peran
     const [deployer] = await ethers.getSigners();
     const creator = deployer;
     const student = deployer;
 
     console.log(
-      "\n⚠️ Running on testnet - using deployer account for all roles"
+      "\n⚠️ Menjalankan di testnet - menggunakan akun deployer untuk semua peran"
     );
-    console.log(`👤 Account: ${deployer.address}`);
+    console.log(`👤 Akun: ${deployer.address}`);
 
-    // Attach to contracts
-    console.log("\n📋 Connecting to deployed contracts...");
-    const MockV3Aggregator = await ethers.getContractFactory(
-      "MockV3Aggregator"
-    );
-    const mockPriceFeed = MockV3Aggregator.attach(addresses.mockPriceFeed);
+    // Terhubung ke kontrak
+    console.log("\n📋 Menghubungkan ke kontrak yang sudah di-deploy...");
 
     const CourseFactory = await ethers.getContractFactory("CourseFactory");
     const courseFactory = CourseFactory.attach(addresses.courseFactory);
@@ -43,38 +39,36 @@ async function main() {
       addresses.certificateManager
     );
 
-    console.log("✅ Connected to all contracts");
+    console.log("✅ Berhasil terhubung ke semua kontrak");
 
-    // PART 1: CREATE TWO DIFFERENT COURSES
-    console.log("\n\n🔷 PART 1: CREATING MULTIPLE COURSES");
+    // BAGIAN 1: MEMBUAT DUA KURSUS YANG BERBEDA
+    console.log("\n\n🔷 BAGIAN 1: MEMBUAT BEBERAPA KURSUS");
 
-    // Create Course 1: Web3 Development
+    // Buat Kursus 1: Web3 Development
     const pricePerMonth1 = ethers.parseEther("0.0005"); // ~$1
-    console.log("\n👨‍🏫 Creating Web3 Development course...");
+    console.log("\n👨‍🏫 Membuat kursus Web3 Development...");
 
-    // ✅ PERBAIKAN: Gunakan parameter yang sesuai dengan smart contract
     const createCourseTx1 = await courseFactory.connect(creator).createCourse(
       "Web3 Development 101", // title
       "Introduction to blockchain application development", // description
-      "QmWebDevThumbnail", // ✅ thumbnailCID (bukan full URI)
+      "bafybeihnscsqugu4k62fgk2rwjkajzh3ioqy473frd6osmutuokngc3js4", // thumbnailCID
       pricePerMonth1 // pricePerMonth
     );
     await createCourseTx1.wait();
 
-    // Get first course ID
+    // Dapatkan ID kursus pertama
     const courseId1 = await courseFactory.getTotalCourses();
-    console.log(`✅ Course 1 created with ID: ${courseId1}`);
+    console.log(`✅ Kursus 1 dibuat dengan ID: ${courseId1}`);
 
-    // Add sections to Course 1
-    console.log("\n👨‍🏫 Adding sections to Web3 Development course...");
+    // Tambahkan bagian ke Kursus 1
+    console.log("\n👨‍🏫 Menambahkan bagian ke kursus Web3 Development...");
 
-    // ✅ PERBAIKAN: Gunakan contentCID bukan contentURI
     await (
       await courseFactory.connect(creator).addCourseSection(
         courseId1,
         "Introduction to Blockchain", // title
-        "QmWebDev1", // ✅ contentCID (bukan full URI)
-        3600 // 1 hour
+        "bafybeiffnr3jq3gxaesi4rpxpbvi2nhlqvosztpvoxx6cognsqyfbkhvuq", // contentCID
+        3600 // 1 jam
       )
     ).wait();
 
@@ -82,36 +76,36 @@ async function main() {
       await courseFactory.connect(creator).addCourseSection(
         courseId1,
         "Smart Contracts with Solidity", // title
-        "QmWebDev2", // ✅ contentCID
-        4800 // 1 hour 20 minutes
+        "bafybeiffnr3jq3gxaesi4rpxpbvi2nhlqvosztpvoxx6cognsqyfbkhvuq", // contentCID
+        4800 // 1 jam 20 menit
       )
     ).wait();
 
-    // Create Course 2: DeFi Fundamentals
-    const pricePerMonth2 = ethers.parseEther("0.0003"); // cheaper course
-    console.log("\n👨‍🏫 Creating DeFi Fundamentals course...");
+    // Buat Kursus 2: DeFi Fundamentals
+    const pricePerMonth2 = ethers.parseEther("0.0003"); // kursus lebih murah
+    console.log("\n👨‍🏫 Membuat kursus DeFi Fundamentals...");
 
     const createCourseTx2 = await courseFactory.connect(creator).createCourse(
       "DeFi Fundamentals", // title
       "Learn about decentralized finance protocols and applications", // description
-      "QmDeFiThumbnail", // ✅ thumbnailCID
+      "bafybeidzrqisv744qlihum3xprvinqubofuwwm7jplpaqryibid47wndoa", // thumbnailCID
       pricePerMonth2 // pricePerMonth
     );
     await createCourseTx2.wait();
 
-    // Get second course ID
+    // Dapatkan ID kursus kedua
     const courseId2 = await courseFactory.getTotalCourses();
-    console.log(`✅ Course 2 created with ID: ${courseId2}`);
+    console.log(`✅ Kursus 2 dibuat dengan ID: ${courseId2}`);
 
-    // Add sections to Course 2
-    console.log("\n👨‍🏫 Adding sections to DeFi Fundamentals course...");
+    // Tambahkan bagian ke Kursus 2
+    console.log("\n👨‍🏫 Menambahkan bagian ke kursus DeFi Fundamentals...");
 
     await (
       await courseFactory.connect(creator).addCourseSection(
         courseId2,
         "Understanding DeFi Protocols", // title
-        "QmDeFi1", // ✅ contentCID
-        2700 // 45 minutes
+        "bafybeiffnr3jq3gxaesi4rpxpbvi2nhlqvosztpvoxx6cognsqyfbkhvuq", // contentCID
+        2700 // 45 menit
       )
     ).wait();
 
@@ -119,8 +113,8 @@ async function main() {
       await courseFactory.connect(creator).addCourseSection(
         courseId2,
         "Yield Farming Strategies", // title
-        "QmDeFi2", // ✅ contentCID
-        3300 // 55 minutes
+        "bafybeiffnr3jq3gxaesi4rpxpbvi2nhlqvosztpvoxx6cognsqyfbkhvuq", // contentCID
+        3300 // 55 menit
       )
     ).wait();
 
@@ -128,235 +122,231 @@ async function main() {
       await courseFactory.connect(creator).addCourseSection(
         courseId2,
         "DeFi Security Considerations", // title
-        "QmDeFi3", // ✅ contentCID
-        3600 // 1 hour
+        "bafybeiffnr3jq3gxaesi4rpxpbvi2nhlqvosztpvoxx6cognsqyfbkhvuq", // contentCID
+        3600 // 1 jam
       )
     ).wait();
 
-    console.log("✅ Successfully created two courses with multiple sections");
+    console.log("✅ Berhasil membuat dua kursus dengan beberapa bagian");
 
-    // PART 2: LOOKUP COURSE DETAILS BY ID
-    console.log("\n\n🔷 PART 2: LOOKING UP COURSE DETAILS");
+    // BAGIAN 2: MENCARI DETAIL KURSUS BERDASARKAN ID
+    console.log("\n\n🔷 BAGIAN 2: MENCARI DETAIL KURSUS");
 
-    console.log("\n🔍 Looking up details for Course ID 1...");
+    console.log("\n🔍 Mencari detail untuk Kursus ID 1...");
     const course1Details = await courseFactory.getCourse(courseId1);
-    console.log("\nCourse 1 Details:");
-    console.log(`- Title: ${course1Details.title}`);
-    console.log(`- Description: ${course1Details.description}`);
-    console.log(`- Thumbnail CID: ${course1Details.thumbnailCID}`); // ✅ Menampilkan thumbnailCID
-    console.log(`- Creator: ${course1Details.creator}`);
+    console.log("\nDetail Kursus 1:");
+    console.log(`- Judul: ${course1Details.title}`);
+    console.log(`- Deskripsi: ${course1Details.description}`);
+    console.log(`- Thumbnail CID: ${course1Details.thumbnailCID}`);
+    console.log(`- Pembuat: ${course1Details.creator}`);
     console.log(
-      `- Price Per Month: ${ethers.formatEther(
+      `- Harga Per Bulan: ${ethers.formatEther(
         course1Details.pricePerMonth
       )} ETH`
     );
-    console.log(`- Is Active: ${course1Details.isActive}`);
+    console.log(`- Aktif: ${course1Details.isActive}`);
 
-    console.log("\n🔍 Looking up details for Course ID 2...");
+    console.log("\n🔍 Mencari detail untuk Kursus ID 2...");
     const course2Details = await courseFactory.getCourse(courseId2);
-    console.log("\nCourse 2 Details:");
-    console.log(`- Title: ${course2Details.title}`);
-    console.log(`- Description: ${course2Details.description}`);
-    console.log(`- Thumbnail CID: ${course2Details.thumbnailCID}`); // ✅ Menampilkan thumbnailCID
-    console.log(`- Creator: ${course2Details.creator}`);
+    console.log("\nDetail Kursus 2:");
+    console.log(`- Judul: ${course2Details.title}`);
+    console.log(`- Deskripsi: ${course2Details.description}`);
+    console.log(`- Thumbnail CID: ${course2Details.thumbnailCID}`);
+    console.log(`- Pembuat: ${course2Details.creator}`);
     console.log(
-      `- Price Per Month: ${ethers.formatEther(
+      `- Harga Per Bulan: ${ethers.formatEther(
         course2Details.pricePerMonth
       )} ETH`
     );
-    console.log(`- Is Active: ${course2Details.isActive}`);
+    console.log(`- Aktif: ${course2Details.isActive}`);
 
-    // Looking up sections for both courses
-    console.log("\n🔍 Looking up sections for Course ID 1...");
+    // Mencari bagian untuk kedua kursus
+    console.log("\n🔍 Mencari bagian untuk Kursus ID 1...");
     const sections1 = await courseFactory.getCourseSections(courseId1);
-    console.log(`Course 1 has ${sections1.length} sections:`);
+    console.log(`Kursus 1 memiliki ${sections1.length} bagian:`);
     for (let i = 0; i < sections1.length; i++) {
       console.log(
-        `- Section ${i + 1}: ${sections1[i].title} (${
+        `- Bagian ${i + 1}: ${sections1[i].title} (${
           sections1[i].duration
-        } seconds)`
+        } detik)`
       );
-      console.log(`  Content CID: ${sections1[i].contentCID}`); // ✅ Menampilkan contentCID
+      console.log(`  Content CID: ${sections1[i].contentCID}`);
     }
 
-    console.log("\n🔍 Looking up sections for Course ID 2...");
+    console.log("\n🔍 Mencari bagian untuk Kursus ID 2...");
     const sections2 = await courseFactory.getCourseSections(courseId2);
-    console.log(`Course 2 has ${sections2.length} sections:`);
+    console.log(`Kursus 2 memiliki ${sections2.length} bagian:`);
     for (let i = 0; i < sections2.length; i++) {
       console.log(
-        `- Section ${i + 1}: ${sections2[i].title} (${
+        `- Bagian ${i + 1}: ${sections2[i].title} (${
           sections2[i].duration
-        } seconds)`
+        } detik)`
       );
-      console.log(`  Content CID: ${sections2[i].contentCID}`); // ✅ Menampilkan contentCID
+      console.log(`  Content CID: ${sections2[i].contentCID}`);
     }
 
-    // ✅ TAMBAHAN: Test getCourseMetadata function
-    console.log("\n🔍 Testing getCourseMetadata function...");
+    console.log("\n🔍 Menguji fungsi getCourseMetadata...");
     const metadata1 = await courseFactory.getCourseMetadata(courseId1);
     console.log(
-      `Course 1 Metadata - Title: ${metadata1[0]}, Sections: ${metadata1[3]}`
+      `Metadata Kursus 1 - Judul: ${metadata1[0]}, Bagian: ${metadata1[3]}`
     );
 
     const metadata2 = await courseFactory.getCourseMetadata(courseId2);
     console.log(
-      `Course 2 Metadata - Title: ${metadata2[0]}, Sections: ${metadata2[3]}`
+      `Metadata Kursus 2 - Judul: ${metadata2[0]}, Bagian: ${metadata2[3]}`
     );
 
-    // PART 3: PURCHASE LICENSES FOR BOTH COURSES
-    console.log("\n\n🔷 PART 3: PURCHASING LICENSES");
+    // BAGIAN 3: MEMBELI LISENSI UNTUK KEDUA KURSUS
+    console.log("\n\n🔷 BAGIAN 3: MEMBELI LISENSI");
 
-    // Purchase license for first course (very short duration for testing expiry)
-    console.log("\n🧑‍🎓 Buying a license for Course 1 with 1 month duration...");
+    // Beli lisensi untuk kursus pertama
+    console.log("\n🧑‍🎓 Membeli lisensi untuk Kursus 1 dengan durasi 1 bulan...");
     const mintTx1 = await courseLicense.connect(student).mintLicense(
       courseId1,
-      1, // 1 month
+      1, // 1 bulan
       { value: pricePerMonth1 }
     );
     await mintTx1.wait();
 
     const license1 = await courseLicense.getLicense(student.address, courseId1);
     console.log(
-      `✅ License for Course 1 purchased, expires: ${new Date(
+      `✅ Lisensi untuk Kursus 1 dibeli, kedaluwarsa: ${new Date(
         Number(license1.expiryTimestamp) * 1000
       ).toLocaleString()}`
     );
 
-    // Purchase license for second course
-    console.log("\n🧑‍🎓 Buying a license for Course 2 with 2 month duration...");
+    // Beli lisensi untuk kursus kedua
+    console.log("\n🧑‍🎓 Membeli lisensi untuk Kursus 2 dengan durasi 2 bulan...");
     const mintTx2 = await courseLicense.connect(student).mintLicense(
       courseId2,
-      2, // 2 months
+      2, // 2 bulan
       { value: pricePerMonth2 * BigInt(2) }
     );
     await mintTx2.wait();
 
     const license2 = await courseLicense.getLicense(student.address, courseId2);
     console.log(
-      `✅ License for Course 2 purchased, expires: ${new Date(
+      `✅ Lisensi untuk Kursus 2 dibeli, kedaluwarsa: ${new Date(
         Number(license2.expiryTimestamp) * 1000
       ).toLocaleString()}`
     );
 
-    // Check license validity
-    console.log("\n📋 Checking license validity...");
+    // Periksa validitas lisensi
+    console.log("\n📋 Memeriksa validitas lisensi...");
     const isLicense1Valid = await courseLicense.hasValidLicense(
       student.address,
       courseId1
     );
-    console.log(`- Course 1 license valid: ${isLicense1Valid}`);
+    console.log(`- Lisensi Kursus 1 valid: ${isLicense1Valid}`);
 
     const isLicense2Valid = await courseLicense.hasValidLicense(
       student.address,
       courseId2
     );
-    console.log(`- Course 2 license valid: ${isLicense2Valid}`);
+    console.log(`- Lisensi Kursus 2 valid: ${isLicense2Valid}`);
 
-    // ✅ TAMBAHAN: Test getTokenId function
-    console.log("\n🔍 Checking token IDs for licenses...");
+    console.log("\n🔍 Memeriksa ID token untuk lisensi...");
     const tokenId1 = await courseLicense.getTokenId(student.address, courseId1);
     const tokenId2 = await courseLicense.getTokenId(student.address, courseId2);
-    console.log(`- Course 1 token ID: ${tokenId1}`);
-    console.log(`- Course 2 token ID: ${tokenId2}`);
+    console.log(`- ID Token Kursus 1: ${tokenId1}`);
+    console.log(`- ID Token Kursus 2: ${tokenId2}`);
 
-    // PART 4: SIMULATE LICENSE EXPIRATION (In a real scenario, we'd need to wait)
-    console.log("\n\n🔷 PART 4: LICENSE EXPIRATION & RENEWAL");
+    // BAGIAN 4: SIMULASI KEDALUWARSA LISENSI & PEMBARUAN
+    console.log("\n\n🔷 BAGIAN 4: KEDALUWARSA LISENSI & PEMBARUAN");
     console.log(
-      "\n⚠️ In a real scenario, we would need to wait for license expiration."
+      "\n⚠️ Dalam skenario nyata, kita perlu menunggu lisensi kedaluwarsa."
     );
     console.log(
-      "⚠️ For this test, we'll check license status and then renew regardless."
+      "⚠️ Untuk tes ini, kita akan memeriksa status lisensi dan kemudian memperbaruinya."
     );
 
-    // Renew the first license
-    console.log("\n🔄 Renewing license for Course 1...");
+    // Perbarui lisensi pertama
+    console.log("\n🔄 Memperbarui lisensi untuk Kursus 1...");
     const renewTx = await courseLicense.connect(student).renewLicense(
       courseId1,
-      2, // Renew for 2 months
+      2, // Perbarui selama 2 bulan
       { value: pricePerMonth1 * BigInt(2) }
     );
     await renewTx.wait();
 
-    // Check renewed license
     const renewedLicense = await courseLicense.getLicense(
       student.address,
       courseId1
     );
     console.log(
-      `✅ License renewed, new expiry: ${new Date(
+      `✅ Lisensi diperbarui, kedaluwarsa baru: ${new Date(
         Number(renewedLicense.expiryTimestamp) * 1000
       ).toLocaleString()}`
     );
 
-    // Verify license is now valid
+    // Verifikasi lisensi sekarang valid
     const isRenewedLicenseValid = await courseLicense.hasValidLicense(
       student.address,
       courseId1
     );
-    console.log(`- Course 1 renewed license valid: ${isRenewedLicenseValid}`);
+    console.log(
+      `- Lisensi Kursus 1 yang diperbarui valid: ${isRenewedLicenseValid}`
+    );
 
-    // PART 5: COURSE COMPLETION AND TRACKING
-    console.log("\n\n🔷 PART 5: COURSE COMPLETION AND PROGRESS TRACKING");
+    // BAGIAN 5: PENYELESAIAN KURSUS DAN PELACAKAN PROGRES
+    console.log("\n\n🔷 BAGIAN 5: PENYELESAIAN KURSUS DAN PELACAKAN PROGRES");
 
-    // Complete Course 1 sections
-    console.log("\n📚 Completing sections for Course 1...");
+    // Selesaikan bagian Kursus 1
+    console.log("\n📚 Menyelesaikan bagian untuk Kursus 1...");
     for (let i = 0; i < sections1.length; i++) {
-      console.log(`- Completing section ${i}...`);
+      console.log(`- Menyelesaikan bagian ${i}...`);
       await (
         await progressTracker.connect(student).completeSection(courseId1, i)
       ).wait();
     }
 
-    // Check progress for Course 1
     const progress1 = await progressTracker.getCourseProgressPercentage(
       student.address,
       courseId1
     );
-    console.log(`✅ Course 1 progress: ${progress1}%`);
+    console.log(`✅ Progres Kursus 1: ${progress1}%`);
 
-    // Complete only 2 sections of Course 2 (partial completion)
-    console.log("\n📚 Partially completing Course 2 (2 out of 3 sections)...");
+    // Selesaikan hanya 2 bagian dari Kursus 2 (penyelesaian sebagian)
+    console.log("\n📚 Menyelesaikan sebagian Kursus 2 (2 dari 3 bagian)...");
     for (let i = 0; i < 2; i++) {
-      console.log(`- Completing section ${i}...`);
+      console.log(`- Menyelesaikan bagian ${i}...`);
       await (
         await progressTracker.connect(student).completeSection(courseId2, i)
       ).wait();
     }
 
-    // Check progress for Course 2
     const progress2 = await progressTracker.getCourseProgressPercentage(
       student.address,
       courseId2
     );
-    console.log(`✅ Course 2 progress: ${progress2}%`);
+    console.log(`✅ Progres Kursus 2: ${progress2}%`);
 
-    // Check course completion status
+    // Periksa status penyelesaian kursus
     const isCompleted1 = await progressTracker.isCourseCompleted(
       student.address,
       courseId1
     );
-    console.log(`- Course 1 completed: ${isCompleted1}`);
+    console.log(`- Kursus 1 selesai: ${isCompleted1}`);
 
     const isCompleted2 = await progressTracker.isCourseCompleted(
       student.address,
       courseId2
     );
-    console.log(`- Course 2 completed: ${isCompleted2}`);
+    console.log(`- Kursus 2 selesai: ${isCompleted2}`);
 
-    // Get section-by-section progress
-    console.log("\n📋 Detailed section progress for Course 2:");
+    // Dapatkan progres per bagian
+    console.log("\n📋 Detail progres bagian untuk Kursus 2:");
     const sectionProgress = await progressTracker.getCourseSectionsProgress(
       student.address,
       courseId2
     );
     for (let i = 0; i < sectionProgress.length; i++) {
       console.log(
-        `- Section ${i}: ${sectionProgress[i] ? "Completed" : "Not Completed"}`
+        `- Bagian ${i}: ${sectionProgress[i] ? "Selesai" : "Belum Selesai"}`
       );
     }
 
-    // ✅ TAMBAHAN: Test isSectionCompleted function
-    console.log("\n🔍 Testing individual section completion status...");
+    console.log("\n🔍 Menguji status penyelesaian bagian individual...");
     for (let i = 0; i < sections1.length; i++) {
       const sectionCompleted = await progressTracker.isSectionCompleted(
         student.address,
@@ -364,49 +354,46 @@ async function main() {
         i
       );
       console.log(
-        `- Course 1, Section ${i}: ${
-          sectionCompleted ? "Completed" : "Not Completed"
+        `- Kursus 1, Bagian ${i}: ${
+          sectionCompleted ? "Selesai" : "Belum Selesai"
         }`
       );
     }
 
-    // PART 6: CERTIFICATE ISSUANCE
-    console.log("\n\n🔷 PART 6: CERTIFICATE ISSUANCE");
+    // BAGIAN 6: PENERBITAN SERTIFIKAT
+    console.log("\n\n🔷 BAGIAN 6: PENERBITAN SERTIFIKAT");
 
-    // Try to issue certificate for Course 2 (should fail because it's not complete)
     console.log(
-      "\n❌ Attempting to issue certificate for incomplete Course 2 (should fail)..."
+      "\n❌ Mencoba menerbitkan sertifikat untuk Kursus 2 yang belum selesai (seharusnya gagal)..."
     );
     try {
       const certFee = await certificateManager.certificateFee();
       await certificateManager
         .connect(student)
         .issueCertificate(courseId2, "John Doe", { value: certFee });
-      console.log("⚠️ This should have failed but didn't!");
+      console.log("⚠️ Ini seharusnya gagal tetapi tidak!");
     } catch (error) {
       console.log(
-        "✅ Certificate issuance correctly failed for incomplete course"
+        "✅ Penerbitan sertifikat gagal dengan benar untuk kursus yang belum selesai"
       );
-      console.log(`   Error: ${error.reason || error.message}`);
     }
 
-    // Complete the final section of Course 2
-    console.log("\n📚 Completing final section of Course 2...");
+    // Selesaikan bagian terakhir dari Kursus 2
+    console.log("\n📚 Menyelesaikan bagian terakhir dari Kursus 2...");
     await (
       await progressTracker.connect(student).completeSection(courseId2, 2)
     ).wait();
 
-    // Verify both courses are now completed
     const isNowCompleted2 = await progressTracker.isCourseCompleted(
       student.address,
       courseId2
     );
-    console.log(`- Course 2 now completed: ${isNowCompleted2}`);
+    console.log(`- Kursus 2 sekarang selesai: ${isNowCompleted2}`);
 
-    // Issue certificates for both completed courses
-    console.log("\n🏆 Issuing certificate for Course 1...");
+    // Terbitkan sertifikat untuk kedua kursus yang telah selesai
+    console.log("\n🏆 Menerbitkan sertifikat untuk Kursus 1...");
     const certFee = await certificateManager.certificateFee();
-    console.log(`Certificate fee: ${ethers.formatEther(certFee)} ETH`);
+    console.log(`Biaya sertifikat: ${ethers.formatEther(certFee)} ETH`);
 
     const certTx1 = await certificateManager
       .connect(student)
@@ -417,136 +404,125 @@ async function main() {
       student.address,
       courseId1
     );
-    console.log(`✅ Certificate issued for Course 1 with ID: ${certId1}`);
+    console.log(
+      `✅ Sertifikat diterbitkan untuk Kursus 1 dengan ID: ${certId1}`
+    );
 
-    console.log("\n🏆 Issuing certificate for Course 2...");
+    console.log("\n🏆 Menerbitkan sertifikat untuk Kursus 2...");
     const certTx2 = await certificateManager
       .connect(student)
-      .issueCertificate(courseId2, "John Doe", { value: certFee });
+      .issueCertificate(courseId2, "Jane Doe", { value: certFee });
     await certTx2.wait();
 
     const certId2 = await certificateManager.getStudentCertificate(
       student.address,
       courseId2
     );
-    console.log(`✅ Certificate issued for Course 2 with ID: ${certId2}`);
+    console.log(
+      `✅ Sertifikat diterbitkan untuk Kursus 2 dengan ID: ${certId2}`
+    );
 
-    // Get certificate details and verification
-    console.log("\n🔍 Getting certificate details...");
+    // Dapatkan detail sertifikat dan verifikasi
+    console.log("\n🔍 Mendapatkan detail sertifikat...");
     const cert1 = await certificateManager.getCertificate(certId1);
     const cert2 = await certificateManager.getCertificate(certId2);
 
-    console.log("\nCertificate 1 Details:");
-    console.log(`- Certificate ID: ${cert1.certificateId}`);
-    console.log(`- Course ID: ${cert1.courseId}`);
-    console.log(`- Student Name: ${cert1.studentName}`);
-    console.log(`- Student Address: ${cert1.student}`);
+    console.log("\nDetail Sertifikat 1:");
+    console.log(`- ID Sertifikat: ${cert1.certificateId}`);
+    console.log(`- ID Kursus: ${cert1.courseId}`);
+    console.log(`- Nama Siswa: ${cert1.studentName}`);
+    console.log(`- Alamat Siswa: ${cert1.student}`);
     console.log(
-      `- Issued At: ${new Date(Number(cert1.issuedAt) * 1000).toLocaleString()}`
+      `- Diterbitkan pada: ${new Date(
+        Number(cert1.issuedAt) * 1000
+      ).toLocaleString()}`
     );
     console.log(`- Valid: ${cert1.isValid}`);
 
-    console.log("\nCertificate 2 Details:");
-    console.log(`- Certificate ID: ${cert2.certificateId}`);
-    console.log(`- Course ID: ${cert2.courseId}`);
-    console.log(`- Student Name: ${cert2.studentName}`);
-    console.log(`- Student Address: ${cert2.student}`);
+    console.log("\nDetail Sertifikat 2:");
+    console.log(`- ID Sertifikat: ${cert2.certificateId}`);
+    console.log(`- ID Kursus: ${cert2.courseId}`);
+    console.log(`- Nama Siswa: ${cert2.studentName}`);
+    console.log(`- Alamat Siswa: ${cert2.student}`);
     console.log(
-      `- Issued At: ${new Date(Number(cert2.issuedAt) * 1000).toLocaleString()}`
+      `- Diterbitkan pada: ${new Date(
+        Number(cert2.issuedAt) * 1000
+      ).toLocaleString()}`
     );
     console.log(`- Valid: ${cert2.isValid}`);
 
-    // ✅ TAMBAHAN: Test new certificate functions
-    console.log("\n🔍 Testing certificate verification...");
+    console.log("\n🔍 Menguji verifikasi sertifikat...");
     const isValid1 = await certificateManager.verifyCertificate(certId1);
     const isValid2 = await certificateManager.verifyCertificate(certId2);
-    console.log(`- Certificate 1 verification: ${isValid1}`);
-    console.log(`- Certificate 2 verification: ${isValid2}`);
+    console.log(`- Verifikasi Sertifikat 1: ${isValid1}`);
+    console.log(`- Verifikasi Sertifikat 2: ${isValid2}`);
 
-    console.log("\n🔍 Certificate verification URLs:");
+    console.log("\n🔍 URL verifikasi sertifikat:");
     const verificationData1 = await certificateManager.getVerificationData(
       certId1
     );
     const verificationData2 = await certificateManager.getVerificationData(
       certId2
     );
-    console.log(`- Certificate 1: ${verificationData1}`);
-    console.log(`- Certificate 2: ${verificationData2}`);
+    console.log(`- Sertifikat 1: ${verificationData1}`);
+    console.log(`- Sertifikat 2: ${verificationData2}`);
 
-    // ✅ TAMBAHAN: Test certificate metadata
-    console.log("\n🔍 Certificate metadata:");
+    console.log("\n🔍 Metadata sertifikat:");
     try {
-      const metadata1 = await certificateManager.getCertificateMetadata(
+      const certMetadata1 = await certificateManager.getCertificateMetadata(
         certId1
       );
-      const metadata2 = await certificateManager.getCertificateMetadata(
+      const certMetadata2 = await certificateManager.getCertificateMetadata(
         certId2
       );
-      console.log(`- Certificate 1 metadata: ${metadata1}`);
-      console.log(`- Certificate 2 metadata: ${metadata2}`);
+      console.log(`- Metadata Sertifikat 1: ${certMetadata1}`);
+      console.log(`- Metadata Sertifikat 2: ${certMetadata2}`);
     } catch (error) {
       console.log(
-        `⚠️ Certificate metadata error: ${error.reason || error.message}`
+        `⚠️ Kesalahan metadata sertifikat: ${error.reason || error.message}`
       );
     }
 
-    // ✅ TAMBAHAN: Test contract security features
-    console.log("\n\n🔷 PART 7: SECURITY TESTS");
+    // BAGIAN 7: PENGUJIAN KEAMANAN & VALIDASI
+    console.log("\n\n🔷 BAGIAN 7: PENGUJIAN KEAMANAN & VALIDASI");
 
-    console.log("\n🔒 Testing duplicate section completion (should fail)...");
+    console.log(
+      "\n🔒 Menguji penyelesaian bagian duplikat (seharusnya gagal)..."
+    );
     try {
       await progressTracker.connect(student).completeSection(courseId1, 0);
-      console.log("⚠️ Duplicate completion should have failed but didn't!");
+      console.log("⚠️ Penyelesaian duplikat seharusnya gagal tetapi tidak!");
     } catch (error) {
-      console.log("✅ Duplicate section completion correctly blocked");
+      console.log("✅ Penyelesaian bagian duplikat berhasil diblokir");
     }
 
-    console.log("\n🔒 Testing duplicate certificate issuance (should fail)...");
+    console.log(
+      "\n🔒 Menguji penerbitan sertifikat duplikat (seharusnya gagal)..."
+    );
     try {
       await certificateManager
         .connect(student)
         .issueCertificate(courseId1, "John Doe", { value: certFee });
-      console.log("⚠️ Duplicate certificate should have failed but didn't!");
+      console.log("⚠️ Sertifikat duplikat seharusnya gagal tetapi tidak!");
     } catch (error) {
-      console.log("✅ Duplicate certificate issuance correctly blocked");
+      console.log("✅ Penerbitan sertifikat duplikat berhasil diblokir");
     }
 
-    // ✅ TAMBAHAN: Test price validation
-    console.log("\n🔒 Testing maximum price validation...");
-    const maxPriceInETH = await courseFactory.getMaxPriceInETH();
+    // Uji validasi harga
+    console.log("\n🔒 Menguji validasi harga maksimum...");
+    const maxPriceInETH = await courseFactory.MAX_PRICE_ETH();
     console.log(
-      `Maximum allowed price: ${ethers.formatEther(maxPriceInETH)} ETH`
+      `Harga maksimum yang diizinkan: ${ethers.formatEther(maxPriceInETH)} ETH`
     );
 
-    console.log("\n🎉 Comprehensive testing completed successfully!");
-    console.log("\n📊 Test Summary:");
-    console.log(`- Created ${await courseFactory.getTotalCourses()} courses`);
-    console.log(
-      `- Issued ${
-        (await certificateManager._nextCertificateId()) - BigInt(1)
-      } certificates`
-    );
-    console.log(`- All security measures working correctly`);
+    console.log("\n🎉 Pengujian komprehensif berhasil diselesaikan!");
+    console.log("\n📊 Ringkasan Tes:");
+    console.log(`- Dibuat ${await courseFactory.getTotalCourses()} kursus`);
+    const nextCertId = await certificateManager._nextCertificateId();
+    console.log(`- Diterbitkan ${nextCertId - BigInt(1)} sertifikat`);
+    console.log(`- Semua tindakan keamanan berfungsi dengan benar`);
   } catch (error) {
-    console.error("\n❌ Error:", error);
-
-    // More detailed error information
-    if (error.reason) {
-      console.error("Reason:", error.reason);
-    }
-
-    if (error.code) {
-      console.error("Code:", error.code);
-    }
-
-    if (error.transaction) {
-      console.error("Failed transaction:", error.transaction);
-    }
-
-    if (error.data) {
-      console.error("Error data:", error.data);
-    }
-
+    console.error("\n❌ Kesalahan selama eksekusi skrip:", error);
     process.exit(1);
   }
 }

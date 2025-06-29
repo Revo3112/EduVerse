@@ -15,43 +15,55 @@ async function main() {
 
   const [deployer] = await ethers.getSigners();
   console.log(`📝 Deploying contracts with address: ${deployer.address}`);
-  console.log(`💰 Account balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
+  console.log(
+    `💰 Account balance: ${ethers.formatEther(
+      await ethers.provider.getBalance(deployer.address)
+    )} ETH`
+  );
 
   try {
-    // Deploy contracts
-    const mockPriceFeed = await deployContract("MockV3Aggregator", 8, 200000000000);
-    const courseFactory = await deployContract("CourseFactory", mockPriceFeed.target);
-    const courseLicense = await deployContract("CourseLicense", courseFactory.target, deployer.address, mockPriceFeed.target);
-    const progressTracker = await deployContract("ProgressTracker", courseFactory.target, courseLicense.target);
-    const certificateManager = await deployContract("CertificateManager", courseFactory.target, progressTracker.target, deployer.address);
-    const platformRegistry = await deployContract("PlatformRegistry");
+    // Contract yang sudah di-deploy
+    const deployedCourseFactory = "0x58052b96b05fFbE5ED31C376E7762b0F6051e15A";
+    const deployedCourseLicense = "0x32b235fDabbcF4575aF259179e30a228b1aC72a9";
 
-    // Register components in PlatformRegistry
-    console.log("\n🔗 Registering platform components...");
-    const registerTx = await platformRegistry.registerPlatform(
-      courseFactory.target,
-      courseLicense.target,
-      progressTracker.target,
-      certificateManager.target
+    console.log("\n📋 Using existing contracts:");
+    console.log(`   CourseFactory: ${deployedCourseFactory}`);
+    console.log(`   CourseLicense: ${deployedCourseLicense}`);
+
+    // Deploy contracts yang belum
+    const progressTracker = await deployContract(
+      "ProgressTracker",
+      deployedCourseFactory,
+      deployedCourseLicense
     );
-    await registerTx.wait();
-    console.log("✅ All components registered in PlatformRegistry");
+    const certificateManager = await deployContract(
+      "CertificateManager",
+      deployedCourseFactory,
+      progressTracker.target,
+      deployer.address
+    );
+
+    // Skip PlatformRegistry karena optional
+    console.log("\n⚠️  Skipping PlatformRegistry deployment (optional)");
 
     // Save contract addresses to JSON file
     const addresses = {
       network: network.name,
       chainId: network.config.chainId,
       deployer: deployer.address,
-      mockPriceFeed: mockPriceFeed.target,
-      courseFactory: courseFactory.target,
-      courseLicense: courseLicense.target,
+      mockPriceFeed: "NOT_USED", // Tidak digunakan di versi baru
+      courseFactory: deployedCourseFactory,
+      courseLicense: deployedCourseLicense,
       progressTracker: progressTracker.target,
       certificateManager: certificateManager.target,
-      platformRegistry: platformRegistry.target,
-      deployDate: new Date().toISOString()
+      platformRegistry: "NOT_DEPLOYED", // Optional, skip
+      deployDate: new Date().toISOString(),
     };
 
-    fs.writeFileSync("deployed-contracts.json", JSON.stringify(addresses, null, 2));
+    fs.writeFileSync(
+      "deployed-contracts.json",
+      JSON.stringify(addresses, null, 2)
+    );
     console.log("\n💾 Contract addresses saved to deployed-contracts.json");
 
     console.log("\n🎉 Deployment completed successfully!");

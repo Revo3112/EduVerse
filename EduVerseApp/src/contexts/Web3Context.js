@@ -1,4 +1,4 @@
-// src/contexts/Web3Context.js - FIXED: Proper Wagmi v2 Hook Usage
+// src/contexts/Web3Context.js - Fixed for Manta Pacific Sepolia
 import React, {
   createContext,
   useContext,
@@ -14,7 +14,7 @@ import {
   useWalletClient,
   useChainId,
 } from "wagmi";
-import { parseEther, formatEther, formatUnits, decodeEventLog } from "viem";
+import { parseEther, formatEther, decodeEventLog } from "viem";
 import { BLOCKCHAIN_CONFIG } from "../constants/blockchain";
 
 // Import ABIs
@@ -40,12 +40,12 @@ export function Web3Provider({ children }) {
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
 
-  // ✅ FIXED: State management
+  // State management
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState(null);
   const [modalPreventionActive, setModalPreventionActive] = useState(false);
 
-  // ✅ Cache management
+  // Cache management
   const cacheRef = useRef({
     licenses: new Map(),
     progress: new Map(),
@@ -53,7 +53,7 @@ export function Web3Provider({ children }) {
     cacheExpiry: 30000, // 30 seconds
   });
 
-  // ✅ Contract addresses
+  // Contract addresses
   const contractAddresses = useMemo(
     () => ({
       courseFactory: BLOCKCHAIN_CONFIG.CONTRACTS.courseFactory,
@@ -64,7 +64,7 @@ export function Web3Provider({ children }) {
     []
   );
 
-  // ✅ Initialization effect
+  // Initialization effect
   useEffect(() => {
     const checkInitialization = async () => {
       try {
@@ -120,7 +120,6 @@ export function Web3Provider({ children }) {
 
   // ==================== COURSE FACTORY FUNCTIONS ====================
 
-  // ✅ CRITICAL FIX: Proper Wagmi v2 createCourse implementation
   const createCourse = useCallback(
     async (courseData) => {
       if (!isInitialized || !walletClient || !publicClient) {
@@ -132,14 +131,13 @@ export function Web3Provider({ children }) {
       try {
         console.log("📝 Preparing course creation transaction...");
 
-        // CRITICAL: Ensure wallet is ready
         if (!walletClient.account) {
           throw new Error("Wallet not properly connected. Please reconnect.");
         }
 
         const priceInWei = parseEther(pricePerMonth.toString());
 
-        // FIX 1: Properly format the transaction for Wagmi v2
+        // Prepare transaction
         const transactionRequest = {
           address: contractAddresses.courseFactory,
           abi: CourseFactoryABI,
@@ -160,48 +158,9 @@ export function Web3Provider({ children }) {
           from: walletClient.account.address,
         });
 
-        // FIX 2: Skip simulation if it's causing issues
-        // Some wallets/RPCs have issues with simulation
-        let skipSimulation = false;
-        let gasEstimate = null;
-
-        try {
-          // Try simulation first
-          const simulateResult = await publicClient.simulateContract({
-            ...transactionRequest,
-            account: walletClient.account.address, // Use address string for simulation
-          });
-
-          console.log("✅ Transaction simulated successfully");
-
-          // Extract gas estimate if available
-          if (simulateResult.request?.gas) {
-            gasEstimate = simulateResult.request.gas;
-          }
-        } catch (simError) {
-          console.warn(
-            "⚠️ Simulation failed, proceeding without simulation:",
-            simError
-          );
-          skipSimulation = true;
-
-          // Try to estimate gas directly
-          try {
-            gasEstimate = await publicClient.estimateContractGas({
-              ...transactionRequest,
-              account: walletClient.account.address,
-            });
-            console.log("⛽ Gas estimated:", gasEstimate);
-          } catch (gasError) {
-            console.warn("⚠️ Gas estimation failed:", gasError);
-          }
-        }
-
-        // FIX 3: Prepare the write transaction with proper Wagmi v2 format
+        // Write transaction
         console.log("📤 Sending transaction...");
-
-        // Build the transaction config
-        const writeConfig = {
+        const hash = await walletClient.writeContract({
           address: contractAddresses.courseFactory,
           abi: CourseFactoryABI,
           functionName: "createCourse",
@@ -211,96 +170,30 @@ export function Web3Provider({ children }) {
             thumbnailCID.trim(),
             priceInWei,
           ],
-        };
+        });
 
-        // Add gas if we have an estimate
-        if (gasEstimate) {
-          writeConfig.gas = (BigInt(gasEstimate) * 120n) / 100n; // 20% buffer
-        }
-
-        // FIX 4: Execute transaction with proper error handling
-        let hash;
-        try {
-          hash = await walletClient.writeContract(writeConfig);
-          console.log("✅ Transaction hash received:", hash);
-        } catch (writeError) {
-          console.error("❌ Write contract error:", writeError);
-
-          // Check for specific error types
-          if (
-            writeError.cause?.code === 4001 ||
-            writeError.message?.toLowerCase().includes("user rejected") ||
-            writeError.message?.toLowerCase().includes("user denied")
-          ) {
-            throw new Error("Transaction was rejected by user");
-          } else if (
-            writeError.message?.toLowerCase().includes("insufficient funds")
-          ) {
-            throw new Error("Insufficient ETH for gas fees");
-          } else if (writeError.cause?.code === -32603) {
-            // Internal JSON-RPC error - could be various issues
-            throw new Error(
-              "Transaction failed. Please check your wallet connection and try again."
-            );
-          }
-
-          throw writeError;
-        }
-
+        console.log("✅ Transaction hash received:", hash);
         console.log("⏳ Waiting for transaction confirmation...");
 
-        // FIX 5: Wait for receipt with better error handling
-        let receipt;
-        try {
-          receipt = await publicClient.waitForTransactionReceipt({
-            hash,
-            confirmations: 1,
-            timeout: 90000, // 90 seconds timeout
-            onReplaced: (replacement) => {
-              console.log("⚠️ Transaction was replaced:", replacement);
-              if (replacement.reason === "cancelled") {
-                throw new Error("Transaction was cancelled");
-              }
-              return replacement.receipt;
-            },
-          });
+        // Wait for receipt
+        const receipt = await publicClient.waitForTransactionReceipt({
+          hash,
+          confirmations: 1,
+          timeout: 90000, // 90 seconds
+        });
 
-          console.log("✅ Transaction confirmed:", {
-            status: receipt.status,
-            blockNumber: receipt.blockNumber,
-            gasUsed: receipt.gasUsed?.toString(),
-          });
-        } catch (waitError) {
-          console.error("❌ Wait for receipt error:", waitError);
+        console.log("✅ Transaction confirmed:", {
+          status: receipt.status,
+          blockNumber: receipt.blockNumber,
+          gasUsed: receipt.gasUsed?.toString(),
+        });
 
-          // Check if transaction exists on chain
-          try {
-            const tx = await publicClient.getTransaction({ hash });
-            if (tx) {
-              console.log(
-                "ℹ️ Transaction found on chain but not confirmed yet"
-              );
-              throw new Error(
-                `Transaction pending. Hash: ${hash}. Please check your wallet or explorer.`
-              );
-            }
-          } catch (txCheckError) {
-            console.error("Failed to check transaction:", txCheckError);
-          }
-
-          throw new Error(`Transaction may have failed. Hash: ${hash}`);
-        }
-
-        // Check transaction status
         if (receipt.status === "reverted") {
-          throw new Error(
-            "Transaction reverted on-chain. Please check your inputs."
-          );
+          throw new Error("Transaction reverted on-chain");
         }
 
-        // FIX 6: Parse event logs more robustly
+        // Parse event logs
         let courseId = null;
-
         if (receipt.logs && receipt.logs.length > 0) {
           for (const log of receipt.logs) {
             try {
@@ -321,7 +214,6 @@ export function Web3Provider({ children }) {
                 }
               }
             } catch (e) {
-              // Skip logs that don't match
               continue;
             }
           }
@@ -329,9 +221,7 @@ export function Web3Provider({ children }) {
 
         // Fallback: get courseId from creator's courses
         if (!courseId && walletClient.account) {
-          console.log("⚠️ Could not parse CourseCreated event, using fallback");
           try {
-            // Get creator's courses
             const creatorCourses = await publicClient.readContract({
               address: contractAddresses.courseFactory,
               abi: CourseFactoryABI,
@@ -340,12 +230,8 @@ export function Web3Provider({ children }) {
             });
 
             if (creatorCourses && creatorCourses.length > 0) {
-              // The last course should be the one we just created
               courseId = creatorCourses[creatorCourses.length - 1].toString();
-              console.log(
-                "📍 Fallback courseId from creator courses:",
-                courseId
-              );
+              console.log("📍 Fallback courseId:", courseId);
             }
           } catch (fallbackError) {
             console.error(
@@ -361,39 +247,22 @@ export function Web3Provider({ children }) {
           transactionHash: receipt.transactionHash,
         };
       } catch (error) {
-        console.error("Create course error details:", {
-          error,
-          message: error.message,
-          cause: error.cause,
-          details: error.details,
-        });
+        console.error("Create course error:", error);
 
-        // Enhanced error messages
-        if (error.message?.includes("rejected by user")) {
+        if (error.message?.includes("user rejected")) {
           throw new Error("Transaction was cancelled by user");
         } else if (error.message?.includes("insufficient funds")) {
-          throw new Error(
-            "Insufficient ETH for gas fees. Please add funds to your wallet."
-          );
-        } else if (error.message?.includes("wallet not properly connected")) {
-          throw new Error(
-            "Wallet disconnected. Please reconnect and try again."
-          );
-        } else if (error.message?.includes("Transaction pending")) {
-          throw error; // Pass through as-is
-        } else if (error.message?.includes("Transaction may have failed")) {
-          throw error; // Pass through as-is
-        } else if (error.shortMessage) {
-          throw new Error(`Contract error: ${error.shortMessage}`);
+          throw new Error("Insufficient ETH for gas fees");
+        } else if (error.message?.includes("Price exceeds maximum")) {
+          throw new Error("Course price exceeds maximum allowed (0.002 ETH)");
         }
 
-        throw new Error(`Failed to create course: ${error.message}`);
+        throw error;
       }
     },
     [isInitialized, walletClient, publicClient, contractAddresses]
   );
 
-  // ✅ CRITICAL FIX: Proper Wagmi v2 addCourseSection implementation
   const addCourseSection = useCallback(
     async (courseId, sectionData) => {
       if (!isInitialized || !walletClient || !publicClient) {
@@ -405,13 +274,11 @@ export function Web3Provider({ children }) {
       try {
         console.log("📝 Adding course section...");
 
-        // Ensure wallet is ready
         if (!walletClient.account) {
           throw new Error("Wallet not properly connected. Please reconnect.");
         }
 
-        // Prepare transaction
-        const writeConfig = {
+        const hash = await walletClient.writeContract({
           address: contractAddresses.courseFactory,
           abi: CourseFactoryABI,
           functionName: "addCourseSection",
@@ -421,30 +288,10 @@ export function Web3Provider({ children }) {
             contentCID.trim(),
             BigInt(duration),
           ],
-        };
+        });
 
-        // Try to estimate gas
-        try {
-          const gasEstimate = await publicClient.estimateContractGas({
-            ...writeConfig,
-            account: walletClient.account.address,
-          });
-
-          if (gasEstimate) {
-            writeConfig.gas = (BigInt(gasEstimate) * 120n) / 100n; // 20% buffer
-          }
-        } catch (gasError) {
-          console.warn(
-            "⚠️ Gas estimation failed, proceeding without gas limit:",
-            gasError
-          );
-        }
-
-        // Execute transaction
-        const hash = await walletClient.writeContract(writeConfig);
         console.log("✅ Section transaction hash:", hash);
 
-        // Wait for receipt
         const receipt = await publicClient.waitForTransactionReceipt({
           hash,
           confirmations: 1,
@@ -460,11 +307,7 @@ export function Web3Provider({ children }) {
       } catch (error) {
         console.error("Add section error:", error);
 
-        if (
-          error.cause?.code === 4001 ||
-          error.message?.toLowerCase().includes("user rejected") ||
-          error.message?.toLowerCase().includes("user denied")
-        ) {
+        if (error.message?.includes("user rejected")) {
           throw new Error("Transaction was cancelled by user");
         }
 
@@ -633,47 +476,8 @@ export function Web3Provider({ children }) {
     }
   }, [isInitialized, publicClient, contractAddresses]);
 
-  const getETHPrice = useCallback(async () => {
-    if (!isInitialized || !publicClient) {
-      throw new Error("Not initialized");
-    }
-
-    try {
-      const price = await publicClient.readContract({
-        address: contractAddresses.courseFactory,
-        abi: CourseFactoryABI,
-        functionName: "getETHPrice",
-      });
-
-      return formatUnits(price, 8);
-    } catch (error) {
-      console.error("Get ETH price error:", error);
-      throw error;
-    }
-  }, [isInitialized, publicClient, contractAddresses]);
-
-  const getMaxPriceInETH = useCallback(async () => {
-    if (!isInitialized || !publicClient) {
-      throw new Error("Not initialized");
-    }
-
-    try {
-      const maxPrice = await publicClient.readContract({
-        address: contractAddresses.courseFactory,
-        abi: CourseFactoryABI,
-        functionName: "getMaxPriceInETH",
-      });
-
-      return formatEther(maxPrice);
-    } catch (error) {
-      console.error("Get max price error:", error);
-      throw error;
-    }
-  }, [isInitialized, publicClient, contractAddresses]);
-
   // ==================== COURSE LICENSE FUNCTIONS ====================
 
-  // ✅ FIXED: Proper mintLicense without hooks inside
   const mintLicense = useCallback(
     async (courseId, duration = 1) => {
       if (!isInitialized || !walletClient || !publicClient) {
@@ -681,7 +485,6 @@ export function Web3Provider({ children }) {
       }
 
       try {
-        // Ensure wallet is ready
         if (!walletClient.account) {
           throw new Error("Wallet not properly connected. Please reconnect.");
         }
@@ -697,29 +500,14 @@ export function Web3Provider({ children }) {
           totalPrice: totalPrice.toString(),
         });
 
-        const writeConfig = {
+        const hash = await walletClient.writeContract({
           address: contractAddresses.courseLicense,
           abi: CourseLicenseABI,
           functionName: "mintLicense",
           args: [BigInt(courseId), BigInt(duration)],
           value: totalPrice,
-        };
+        });
 
-        // Try to estimate gas
-        try {
-          const gasEstimate = await publicClient.estimateContractGas({
-            ...writeConfig,
-            account: walletClient.account.address,
-          });
-
-          if (gasEstimate) {
-            writeConfig.gas = (BigInt(gasEstimate) * 120n) / 100n;
-          }
-        } catch (gasError) {
-          console.warn("⚠️ Gas estimation failed:", gasError);
-        }
-
-        const hash = await walletClient.writeContract(writeConfig);
         const receipt = await publicClient.waitForTransactionReceipt({
           hash,
           confirmations: 1,
@@ -874,28 +662,13 @@ export function Web3Provider({ children }) {
           throw new Error("Wallet not properly connected. Please reconnect.");
         }
 
-        const writeConfig = {
+        const hash = await walletClient.writeContract({
           address: contractAddresses.progressTracker,
           abi: ProgressTrackerABI,
           functionName: "completeSection",
           args: [BigInt(courseId), BigInt(sectionId)],
-        };
+        });
 
-        // Try to estimate gas
-        try {
-          const gasEstimate = await publicClient.estimateContractGas({
-            ...writeConfig,
-            account: walletClient.account.address,
-          });
-
-          if (gasEstimate) {
-            writeConfig.gas = (BigInt(gasEstimate) * 120n) / 100n;
-          }
-        } catch (gasError) {
-          console.warn("⚠️ Gas estimation failed:", gasError);
-        }
-
-        const hash = await walletClient.writeContract(writeConfig);
         const receipt = await publicClient.waitForTransactionReceipt({
           hash,
           confirmations: 1,
@@ -1028,29 +801,14 @@ export function Web3Provider({ children }) {
           functionName: "certificateFee",
         });
 
-        const writeConfig = {
+        const hash = await walletClient.writeContract({
           address: contractAddresses.certificateManager,
           abi: CertificateManagerABI,
           functionName: "issueCertificate",
           args: [BigInt(courseId), studentName.trim()],
           value: fee,
-        };
+        });
 
-        // Try to estimate gas
-        try {
-          const gasEstimate = await publicClient.estimateContractGas({
-            ...writeConfig,
-            account: walletClient.account.address,
-          });
-
-          if (gasEstimate) {
-            writeConfig.gas = (BigInt(gasEstimate) * 120n) / 100n;
-          }
-        } catch (gasError) {
-          console.warn("⚠️ Gas estimation failed:", gasError);
-        }
-
-        const hash = await walletClient.writeContract(writeConfig);
         const receipt = await publicClient.waitForTransactionReceipt({
           hash,
           confirmations: 1,
@@ -1169,8 +927,6 @@ export function Web3Provider({ children }) {
       addCourseSection,
       getCreatorCourses,
       getTotalCourses,
-      getETHPrice,
-      getMaxPriceInETH,
 
       // Course License
       mintLicense,
@@ -1200,8 +956,6 @@ export function Web3Provider({ children }) {
       addCourseSection,
       getCreatorCourses,
       getTotalCourses,
-      getETHPrice,
-      getMaxPriceInETH,
       mintLicense,
       hasValidLicense,
       getLicense,

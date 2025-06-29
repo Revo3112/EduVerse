@@ -1,4 +1,4 @@
-// src/hooks/useBlockchain.js - PRODUCTION READY: Complete Wagmi v2 Hooks
+// src/hooks/useBlockchain.js - Updated for Manta Pacific
 import { useWeb3 } from "../contexts/Web3Context";
 import { useAccount, useChainId } from "wagmi";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -184,8 +184,6 @@ export const useUserCourses = () => {
 
 // Helper function for retrying transactions
 export const useTransactionWithRetry = () => {
-  const { walletClient, publicClient } = useWeb3();
-
   const executeWithRetry = useCallback(async (txFunction, maxRetries = 2) => {
     let lastError;
 
@@ -625,99 +623,6 @@ export const useIssueCertificate = () => {
 
 // ==================== UTILITY HOOKS ====================
 
-export const useETHPrice = () => {
-  const { getETHPrice, getMaxPriceInETH, isInitialized } = useWeb3();
-  const [price, setPrice] = useState("0");
-  const [maxPriceETH, setMaxPriceETH] = useState("0");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const fetchPriceData = useCallback(async () => {
-    if (!isInitialized) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const [ethPrice, maxPrice] = await Promise.all([
-        getETHPrice(),
-        getMaxPriceInETH(),
-      ]);
-
-      setPrice(ethPrice);
-      setMaxPriceETH(maxPrice);
-    } catch (err) {
-      console.error("Error fetching ETH price:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [isInitialized, getETHPrice, getMaxPriceInETH]);
-
-  useEffect(() => {
-    if (isInitialized) {
-      fetchPriceData();
-
-      // Update price every 2 minutes
-      const interval = setInterval(fetchPriceData, 2 * 60 * 1000);
-      return () => clearInterval(interval);
-    }
-  }, [isInitialized, fetchPriceData]);
-
-  return {
-    price,
-    maxPriceETH,
-    loading,
-    error,
-    refetch: fetchPriceData,
-  };
-};
-
-export const useCourseMetadata = (courseId) => {
-  const { getCourse, getCourseSections, isInitialized } = useWeb3();
-  const [metadata, setMetadata] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const fetchMetadata = useCallback(async () => {
-    if (!isInitialized || !courseId) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const [course, sections] = await Promise.all([
-        getCourse(courseId),
-        getCourseSections(courseId),
-      ]);
-
-      setMetadata({
-        ...course,
-        sectionsCount: sections.length,
-        sections,
-      });
-    } catch (err) {
-      console.error("Error fetching course metadata:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [isInitialized, courseId, getCourse, getCourseSections]);
-
-  useEffect(() => {
-    if (isInitialized && courseId) {
-      fetchMetadata();
-    }
-  }, [fetchMetadata]);
-
-  return {
-    metadata,
-    loading,
-    error,
-    refetch: fetchMetadata,
-  };
-};
-
 export const useCourseSections = (courseId) => {
   const { getCourseSections, isInitialized } = useWeb3();
   const [sections, setSections] = useState([]);
@@ -766,9 +671,7 @@ export default {
   useMintLicense,
   useUpdateProgress,
   useUserCertificates,
-  useETHPrice,
   useHasActiveLicense,
-  useCourseMetadata,
   useCourseSections,
   useCourseCompletion,
   useUserProgress,

@@ -2,13 +2,13 @@
   "networkName": "mantaPacificTestnet",
   "chainId": 3441006,
   "deployer": "0xb5075eB5734bc8A6a9bbC1Ca299Fd8C0bd4Cff58",
-  "deployDate": "2025-06-27T07:24:14.132Z",
+  "deployDate": "2025-06-29T09:45:36.812Z",
   "addresses": {
-    "courseFactory": "0xA41010082101aeC02236811fE96fBa762a6542aB",
-    "courseLicense": "0xc7EF8951aBfF100f94c830cFFB2835267d5B5189",
-    "progressTracker": "0x2fb8ff04764287A438d63da852ef6EB8BA337c9b",
-    "certificateManager": "0x973a7C39c5B34c05A464972Af29Ffc52E6f5C516",
-    "platformRegistry": "0xC7BcF0E2B43912B487a8867baFE9823ad2680BCb",
-    "mockV3Aggregator": "0x927d764d56D40BdA39210f824f11af08858F8d74"
+    "courseFactory": "0x58052b96b05fFbE5ED31C376E7762b0F6051e15A",
+    "courseLicense": "0x32b235fDabbcF4575aF259179e30a228b1aC72a9",
+    "progressTracker": "0x6e3B6FbE90Ae4fca8Ff5eB207A61193ef204FA18",
+    "certificateManager": "0x857e484cd949888736d71C0EfC7D981897Df3e61",
+    "platformRegistry": "NOT_DEPLOYED",
+    "mockV3Aggregator": "NOT_USED"
   }
 }
