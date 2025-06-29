@@ -2,7 +2,9 @@
   "expo": {
     "name": "EduVerseApp",
     "slug": "EduVerseApp",
-    "plugins": ["./queries.js"],
+    "plugins": [
+      "./queries.js"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,11 +15,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.eduverse.app",
-      "associatedDomains": ["applinks:eduverse.app"],
+      "associatedDomains": [
+        "applinks:eduverse.app"
+      ],
       "infoPlist": {
         "LSApplicationQueriesSchemes": [
           "metamask",
@@ -84,13 +90,21 @@
               "host": "*"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "scheme": "eduverse"
+    "scheme": "eduverse",
+    "extra": {
+      "eas": {
+        "projectId": "9e1007d2-281f-4f4b-bf10-a163cfc53fdc"
+      }
+    }
   }
 }
