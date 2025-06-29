@@ -679,6 +679,7 @@ const styles = StyleSheet.create({
   headerContent: {
     backgroundColor: "#fff",
     marginBottom: 16,
+    paddingTop: 0,
   },
   courseInfo: {
     padding: 20,

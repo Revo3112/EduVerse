@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAccount } from "wagmi";
 import { useWeb3 } from "../contexts/Web3Context";
 import { pinataService } from "../services/PinataService";
+import * as ScreenOrientation from "expo-screen-orientation";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -548,9 +549,9 @@ export default function SectionDetailScreen({ route, navigation }) {
           resizeMode={ResizeMode.CONTAIN}
           shouldPlay={false}
           isLooping={false}
-          isMuted={false} // ✅ Tambahkan ini
-          volume={1.0} // ✅ Tambahkan ini
-          rate={1.0} // ✅ Tambahkan ini
+          isMuted={false}
+          volume={1.0}
+          rate={1.0}
           onPlaybackStatusUpdate={handleVideoStatusUpdate}
           onError={(error) => {
             console.error("expo-av video error:", error);
@@ -560,6 +561,20 @@ export default function SectionDetailScreen({ route, navigation }) {
             console.log("✅ Video loaded successfully");
             setVideoError(null);
             setVideoRetryCount(0);
+          }}
+          onFullscreenUpdate={async ({ fullscreenUpdate }) => {
+            if (fullscreenUpdate === 1) {
+              // Masuk fullscreen
+              await ScreenOrientation.lockAsync(
+                ScreenOrientation.OrientationLock.LANDSCAPE
+              );
+            }
+            if (fullscreenUpdate === 3) {
+              // Keluar fullscreen
+              await ScreenOrientation.lockAsync(
+                ScreenOrientation.OrientationLock.PORTRAIT_UP
+              );
+            }
           }}
         />
 

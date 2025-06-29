@@ -34,44 +34,15 @@ function MyCoursesStack() {
         name="CourseDetail"
         component={CourseDetailScreen}
         options={{
-          headerShown: true,
+          headerShown: false,
           title: "Course Details",
-          headerStyle: {
-            backgroundColor: "#fff",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 3,
-            elevation: 3,
-          },
-          headerTitleStyle: {
-            fontWeight: "600",
-            color: "#333",
-          },
-          headerBackTitleVisible: false,
-          headerTintColor: "#007AFF",
         }}
       />
       <Stack.Screen
         name="SectionDetail"
         component={SectionDetailScreen}
         options={{
-          headerShown: true,
-          title: "Section Details",
-          headerStyle: {
-            backgroundColor: "#fff",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 3,
-            elevation: 3,
-          },
-          headerTitleStyle: {
-            fontWeight: "600",
-            color: "#333",
-          },
-          headerBackTitleVisible: false,
-          headerTintColor: "#007AFF",
+          headerShown: false,
         }}
       />
     </Stack.Navigator>
