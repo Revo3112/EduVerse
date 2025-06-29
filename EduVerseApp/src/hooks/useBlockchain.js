@@ -182,6 +182,43 @@ export const useUserCourses = () => {
   };
 };
 
+// Helper function for retrying transactions
+export const useTransactionWithRetry = () => {
+  const { walletClient, publicClient } = useWeb3();
+
+  const executeWithRetry = useCallback(async (txFunction, maxRetries = 2) => {
+    let lastError;
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        console.log(`Transaction attempt ${i + 1}/${maxRetries}`);
+        const result = await txFunction();
+        return result;
+      } catch (error) {
+        lastError = error;
+        console.error(`Attempt ${i + 1} failed:`, error);
+
+        // Don't retry if user rejected
+        if (
+          error.cause?.code === 4001 ||
+          error.message.includes("User rejected")
+        ) {
+          throw error;
+        }
+
+        // Wait before retry
+        if (i < maxRetries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+    }
+
+    throw lastError;
+  }, []);
+
+  return { executeWithRetry };
+};
+
 export const useCreatorCourses = () => {
   const { address } = useAccount();
   const { getCreatorCourses, isInitialized } = useWeb3();
