@@ -1,4 +1,4 @@
-// src/navigation/MainNavigation.js - UPGRADED: Expo optimized with Ionicons
+// src/navigation/MainNavigation.js - Clean Version with No Headers
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createStackNavigator } from "@react-navigation/stack";
@@ -20,7 +20,7 @@ import IPFSTestScreen from "../screens/IPFSTestScreen";
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-// ✅ Stack Navigator for MyCourses flow
+// Stack Navigator for MyCourses flow
 function MyCoursesStack() {
   return (
     <Stack.Navigator
@@ -30,104 +30,37 @@ function MyCoursesStack() {
       }}
     >
       <Stack.Screen name="MyCoursesMain" component={MyCoursesScreen} />
-      <Stack.Screen
-        name="CourseDetail"
-        component={CourseDetailScreen}
-        options={{
-          headerShown: false,
-          title: "Course Details",
-        }}
-      />
-      <Stack.Screen
-        name="SectionDetail"
-        component={SectionDetailScreen}
-        options={{
-          headerShown: false,
-        }}
-      />
+      <Stack.Screen name="CourseDetail" component={CourseDetailScreen} />
+      <Stack.Screen name="SectionDetail" component={SectionDetailScreen} />
     </Stack.Navigator>
   );
 }
 
-// ✅ Stack Navigator for Profile flow
+// Stack Navigator for Profile flow
 function ProfileStack() {
   return (
     <Stack.Navigator
       screenOptions={{
-        headerStyle: {
-          backgroundColor: "#fff",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 3,
-          elevation: 3,
-        },
-        headerTitleStyle: {
-          fontWeight: "600",
-          color: "#333",
-        },
-        headerBackTitleVisible: false,
-        headerTintColor: "#007AFF",
+        headerShown: false,
         cardStyle: { backgroundColor: "#f8f9fa" },
       }}
     >
-      <Stack.Screen
-        name="ProfileMain"
-        component={ProfileScreen}
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="HelpSupport"
-        component={HelpSupportScreen}
-        options={{
-          title: "Help & Support",
-          headerShown: true,
-        }}
-      />
-      <Stack.Screen
-        name="About"
-        component={AboutScreen}
-        options={{
-          title: "About EduVerse",
-          headerShown: true,
-        }}
-      />
-      <Stack.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          title: "Settings",
-          headerShown: true,
-        }}
-      />
-      <Stack.Screen
-        name="TermsPrivacy"
-        component={TermsPrivacyScreen}
-        options={{
-          title: "Terms & Privacy",
-          headerShown: true,
-        }}
-      />
-      <Stack.Screen
-        name="IPFSTest"
-        component={IPFSTestScreen}
-        options={{
-          title: "IPFS Test",
-          headerShown: true,
-        }}
-      />
+      <Stack.Screen name="ProfileMain" component={ProfileScreen} />
+      <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+      <Stack.Screen name="About" component={AboutScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="TermsPrivacy" component={TermsPrivacyScreen} />
+      <Stack.Screen name="IPFSTest" component={IPFSTestScreen} />
     </Stack.Navigator>
   );
 }
 
-// ✅ Main Tab Navigator - Expo optimized
+// Main Tab Navigator
 export default function MainNavigation() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        // ✅ Dynamic tab bar icons using Ionicons
+        // Tab bar icons
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
@@ -150,7 +83,7 @@ export default function MainNavigation() {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        // ✅ Enhanced tab bar styling
+        // Tab bar styling
         tabBarStyle: {
           backgroundColor: "#fff",
           borderTopWidth: 1,
@@ -171,28 +104,14 @@ export default function MainNavigation() {
           fontWeight: "600",
           marginTop: 2,
         },
-        // ✅ Header styling for consistency
-        headerStyle: {
-          backgroundColor: "#fff",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 3,
-          elevation: 3,
-        },
-        headerTitleStyle: {
-          fontWeight: "600",
-          color: "#333",
-          fontSize: 18,
-        },
-        headerTintColor: "#007AFF",
+        // Disable all headers - will be handled by screens
+        headerShown: false,
       })}
     >
       <Tab.Screen
         name="Dashboard"
         component={DashboardScreen}
         options={{
-          headerShown: false,
           tabBarLabel: "Home",
         }}
       />
@@ -200,7 +119,6 @@ export default function MainNavigation() {
         name="Create Course"
         component={CreateCourseScreen}
         options={{
-          headerShown: false,
           tabBarLabel: "Create",
         }}
       />
@@ -208,7 +126,6 @@ export default function MainNavigation() {
         name="MyCourses"
         component={MyCoursesStack}
         options={{
-          headerShown: false,
           tabBarLabel: "My Courses",
         }}
       />
@@ -216,7 +133,6 @@ export default function MainNavigation() {
         name="Wallet"
         component={ProfileStack}
         options={{
-          headerShown: false,
           tabBarLabel: "Profile",
         }}
       />

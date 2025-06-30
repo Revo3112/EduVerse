@@ -1,4 +1,4 @@
-// src/screens/ProfileScreen.js - PRODUCTION READY
+// src/screens/ProfileScreen.js - PRODUCTION READY WITH BLOCKCHAIN DATA
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -13,7 +13,12 @@ import { useAccount, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import { AppKitButton, useAppKit } from "@reown/appkit-wagmi-react-native";
 import { mantaPacificTestnet } from "../constants/blockchain";
 import { Ionicons } from "@expo/vector-icons";
-import { useSmartContract } from "../hooks/useBlockchain";
+import {
+  useSmartContract,
+  useUserCourses,
+  useCreatorCourses,
+  useUserCertificates,
+} from "../hooks/useBlockchain";
 
 export default function ProfileScreen({ navigation }) {
   const { address, isConnected, connector } = useAccount();
@@ -25,6 +30,11 @@ export default function ProfileScreen({ navigation }) {
   // ✅ Get modal prevention status
   const { modalPreventionActive, isInitialized } = useSmartContract();
 
+  // ✅ Get blockchain data using hooks
+  const { enrolledCourses, loading: coursesLoading } = useUserCourses();
+  const { createdCourses, loading: createdLoading } = useCreatorCourses();
+  const { certificates, loading: certificatesLoading } = useUserCertificates();
+
   // User stats state
   const [userStats, setUserStats] = useState({
     coursesEnrolled: 0,
@@ -32,24 +42,51 @@ export default function ProfileScreen({ navigation }) {
     certificatesEarned: 0,
   });
 
+  // ✅ Update stats when blockchain data changes
   useEffect(() => {
-    if (isConnected && address) {
-      fetchUserStats();
+    if (isConnected && address && isInitialized) {
+      // Update stats from blockchain data
+      setUserStats({
+        coursesEnrolled: enrolledCourses?.length || 0,
+        coursesCreated: createdCourses?.length || 0,
+        certificatesEarned: certificates?.length || 0,
+      });
+    } else {
+      // Reset stats when disconnected
+      setUserStats({
+        coursesEnrolled: 0,
+        coursesCreated: 0,
+        certificatesEarned: 0,
+      });
     }
-  }, [isConnected, address]);
+  }, [
+    isConnected,
+    address,
+    isInitialized,
+    enrolledCourses,
+    createdCourses,
+    certificates,
+  ]);
 
+  // ✅ Keep the original fetchUserStats for compatibility but it now uses blockchain data
   const fetchUserStats = async () => {
     try {
-      // Mock data - replace with actual blockchain calls
-      setUserStats({
-        coursesEnrolled: 5,
-        coursesCreated: 2,
-        certificatesEarned: 3,
+      // Stats are now automatically updated via useEffect when blockchain data changes
+      console.log("User stats updated from blockchain:", {
+        enrolled: enrolledCourses?.length || 0,
+        created: createdCourses?.length || 0,
+        certificates: certificates?.length || 0,
       });
     } catch (error) {
       console.error("Error fetching user stats:", error);
     }
   };
+
+  useEffect(() => {
+    if (isConnected && address) {
+      fetchUserStats();
+    }
+  }, [isConnected, address]);
 
   const handleSwitchToManta = async () => {
     if (modalPreventionActive) {
@@ -106,6 +143,9 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
+
+  // ✅ Calculate loading state for stats
+  const statsLoading = coursesLoading || createdLoading || certificatesLoading;
 
   // Menu item component
   const MenuItem = ({
@@ -175,23 +215,84 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Quick Stats */}
+        {/* Quick Stats - Now with blockchain data */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{userStats.coursesEnrolled}</Text>
+            {statsLoading ? (
+              <View style={styles.statLoading}>
+                <Text style={styles.statLoadingText}>...</Text>
+              </View>
+            ) : (
+              <Text style={styles.statNumber}>{userStats.coursesEnrolled}</Text>
+            )}
             <Text style={styles.statLabel}>Courses</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>{userStats.coursesCreated}</Text>
+            {statsLoading ? (
+              <View style={styles.statLoading}>
+                <Text style={styles.statLoadingText}>...</Text>
+              </View>
+            ) : (
+              <Text style={styles.statNumber}>{userStats.coursesCreated}</Text>
+            )}
             <Text style={styles.statLabel}>Created</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>
-              {userStats.certificatesEarned}
-            </Text>
+            {statsLoading ? (
+              <View style={styles.statLoading}>
+                <Text style={styles.statLoadingText}>...</Text>
+              </View>
+            ) : (
+              <Text style={styles.statNumber}>
+                {userStats.certificatesEarned}
+              </Text>
+            )}
             <Text style={styles.statLabel}>Certificates</Text>
           </View>
         </View>
+
+        {/* ✅ Additional Blockchain Data Section (Optional - shows detailed info) */}
+        {isInitialized &&
+          (enrolledCourses.length > 0 || createdCourses.length > 0) && (
+            <View style={styles.blockchainDataSection}>
+              <Text style={styles.blockchainDataTitle}>
+                Blockchain Activity
+              </Text>
+
+              {/* Enrolled Courses Summary */}
+              {enrolledCourses.length > 0 && (
+                <View style={styles.blockchainDataItem}>
+                  <Ionicons name="book-outline" size={16} color="#007AFF" />
+                  <Text style={styles.blockchainDataText}>
+                    {enrolledCourses.length} active course license
+                    {enrolledCourses.length !== 1 ? "s" : ""}
+                  </Text>
+                </View>
+              )}
+
+              {/* Created Courses Summary */}
+              {createdCourses.length > 0 && (
+                <View style={styles.blockchainDataItem}>
+                  <Ionicons name="create-outline" size={16} color="#34C759" />
+                  <Text style={styles.blockchainDataText}>
+                    {createdCourses.length} course
+                    {createdCourses.length !== 1 ? "s" : ""} created
+                  </Text>
+                </View>
+              )}
+
+              {/* Certificates Summary */}
+              {certificates.length > 0 && (
+                <View style={styles.blockchainDataItem}>
+                  <Ionicons name="trophy-outline" size={16} color="#FF9500" />
+                  <Text style={styles.blockchainDataText}>
+                    {certificates.length} certificate
+                    {certificates.length !== 1 ? "s" : ""} earned
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
 
         {/* Wallet Control Buttons */}
         <View style={styles.walletButtons}>
@@ -287,6 +388,16 @@ export default function ProfileScreen({ navigation }) {
             />
             <Text style={styles.systemStatusText}>
               Network: {isOnMantaNetwork ? "Connected" : "Switch Required"}
+            </Text>
+          </View>
+          <View style={styles.systemStatusItem}>
+            <Ionicons
+              name={statsLoading ? "time-outline" : "checkmark-circle"}
+              size={16}
+              color={statsLoading ? "#FF9500" : "#34C759"}
+            />
+            <Text style={styles.systemStatusText}>
+              Blockchain Data: {statsLoading ? "Loading..." : "Synced"}
             </Text>
           </View>
         </View>
@@ -450,6 +561,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#8E8E93",
     marginTop: 2,
+  },
+  statLoading: {
+    height: 24,
+    justifyContent: "center",
+  },
+  statLoadingText: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#C7C7CC",
+  },
+
+  // Blockchain Data Section
+  blockchainDataSection: {
+    backgroundColor: "white",
+    marginTop: 8,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+  },
+  blockchainDataTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 12,
+  },
+  blockchainDataItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  blockchainDataText: {
+    fontSize: 13,
+    color: "#8E8E93",
+    marginLeft: 8,
   },
 
   // Wallet Buttons

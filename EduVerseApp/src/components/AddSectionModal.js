@@ -1,4 +1,4 @@
-// AddSectionModal.js - FULLY OPTIMIZED for Smart Contract Integration
+// src/components/AddSectionModal.js - Enhanced UI/UX with Auto Duration
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -15,13 +15,37 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { Colors } from "../constants/Colors";
+import { LinearGradient } from "expo-linear-gradient";
 import { videoService } from "../services/VideoService";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+
+// Enhanced color palette
+const COLORS = {
+  primary: "#9747FF",
+  primaryLight: "#B47FFF",
+  primaryDark: "#7A37CC",
+  secondary: "#FF6B6B",
+  tertiary: "#4ECDC4",
+  quaternary: "#FFD93D",
+  success: "#4CAF50",
+  error: "#FF5252",
+  warning: "#FF9800",
+  info: "#2196F3",
+  background: "#FFFFFF",
+  surface: "#F8F9FA",
+  border: "#E0E0E0",
+  text: "#333333",
+  textSecondary: "#666666",
+  textMuted: "#999999",
+  gradientStart: "#667eea",
+  gradientEnd: "#764ba2",
+  backdrop: "rgba(0, 0, 0, 0.5)",
+};
 
 const AddSectionModal = ({
   visible,
@@ -34,41 +58,46 @@ const AddSectionModal = ({
   const slideValue = useRef(new Animated.Value(screenHeight)).current;
   const opacityValue = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const scaleValue = useRef(new Animated.Value(0.9)).current;
 
   // Modal height states
   const [modalHeight, setModalHeight] = useState(screenHeight * 0.85);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  // ✅ FIXED: Form state aligned with smart contract requirements
+  // Form state
   const [formData, setFormData] = useState({
-    title: "", // Smart contract: max 200 chars
-    duration: "", // Smart contract: in seconds, max 86400 (24 hours)
+    title: "",
+    duration: "",
   });
-  // ✅ ENHANCED: Auto-fill duration state
+
+  // Enhanced states
   const [isDurationAutoFilled, setIsDurationAutoFilled] = useState(false);
+  const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false);
+  const [videoDurationSeconds, setVideoDurationSeconds] = useState(null);
 
   const [errors, setErrors] = useState({});
-  const [selectedVideoFile, setSelectedVideoFile] = useState(null); // Store file for later upload
+  const [selectedVideoFile, setSelectedVideoFile] = useState(null);
   const [isSelectingVideo, setIsSelectingVideo] = useState(false);
 
-  // ✅ ENHANCED: Initialize form data when modal opens
+  // Initialize form data when modal opens
   useEffect(() => {
     if (visible) {
       if (isEditing && initialData) {
         setFormData({
           title: initialData.title || "",
           duration: initialData.duration
-            ? Math.round(initialData.duration / 60).toString() // Convert seconds to minutes for display
+            ? Math.round(initialData.duration / 60).toString()
             : "",
         });
         setSelectedVideoFile(initialData.videoFile || null);
       } else {
-        // Reset for new section
         setFormData({
           title: "",
           duration: "",
         });
         setSelectedVideoFile(null);
+        setIsDurationAutoFilled(false);
+        setVideoDurationSeconds(null);
       }
       setErrors({});
       setModalHeight(screenHeight * 0.85);
@@ -82,7 +111,7 @@ const AddSectionModal = ({
   const showModal = () => {
     Animated.parallel([
       Animated.timing(backdropOpacity, {
-        toValue: 0.5,
+        toValue: 1,
         duration: 300,
         useNativeDriver: true,
       }),
@@ -93,6 +122,12 @@ const AddSectionModal = ({
       }),
       Animated.spring(slideValue, {
         toValue: 0,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }),
+      Animated.spring(scaleValue, {
+        toValue: 1,
         useNativeDriver: true,
         tension: 100,
         friction: 8,
@@ -118,11 +153,19 @@ const AddSectionModal = ({
         tension: 100,
         friction: 8,
       }),
+      Animated.spring(scaleValue, {
+        toValue: 0.9,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }),
     ]).start(() => {
-      // Clean up after animation
       setFormData({ title: "", duration: "" });
       setErrors({});
       setSelectedVideoFile(null);
+      setIsDurationAutoFilled(false);
+      setVideoDurationSeconds(null);
+      setIsAnalyzingVideo(false);
     });
   };
 
@@ -150,17 +193,15 @@ const AddSectionModal = ({
     }).start();
   };
 
-  // ✅ ENHANCED: Video selection with comprehensive validation
+  // Enhanced video selection with auto-duration detection
   const handleVideoSelection = async () => {
     if (isSelectingVideo) return;
 
     try {
       setIsSelectingVideo(true);
 
-      // Request permission
       const permissionResult =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
-
       if (permissionResult.granted === false) {
         Alert.alert(
           "Permission Required",
@@ -169,18 +210,17 @@ const AddSectionModal = ({
         return;
       }
 
-      // Launch video picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: false,
         quality: 1.0,
-        videoMaxDuration: 3600, // 1 hour max selection
+        videoMaxDuration: 3600,
       });
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
+        setIsAnalyzingVideo(true);
 
-        // ✅ FIXED: Create file object compatible with upload services
         const videoFile = {
           uri: asset.uri,
           type:
@@ -199,15 +239,14 @@ const AddSectionModal = ({
           type: videoFile.type,
         });
 
-        // ✅ ENHANCED: Comprehensive validation
         const validationResult = await validateVideoFile(videoFile);
 
         if (!validationResult.isValid) {
           Alert.alert("Video Validation Error", validationResult.error);
+          setIsAnalyzingVideo(false);
           return;
         }
 
-        // Show warnings if any
         if (validationResult.warnings.length > 0) {
           Alert.alert(
             "Video Selected with Warnings",
@@ -233,55 +272,58 @@ const AddSectionModal = ({
       );
     } finally {
       setIsSelectingVideo(false);
+      setIsAnalyzingVideo(false);
     }
   };
 
-  // ✅ NEW: Process video selection after validation
   const processVideoSelection = (videoFile, asset) => {
     setSelectedVideoFile(videoFile);
 
-    // Auto-fill duration based on video duration (always update, not just when empty)
+    // Auto-fill duration from video metadata
     if (asset.duration && asset.duration > 0) {
-      const exactMinutes = (asset.duration / 60000).toFixed(2);
+      const durationInSeconds = Math.round(asset.duration / 1000); // Convert ms to seconds
+      const durationInMinutes = (durationInSeconds / 60).toFixed(2);
+
       setFormData((prev) => ({
         ...prev,
-        duration: exactMinutes.toString(),
+        duration: durationInMinutes.toString(),
       }));
-      setIsDurationAutoFilled(true); // Tandai bahwa durasi terisi otomatis
+      setVideoDurationSeconds(durationInSeconds);
+      setIsDurationAutoFilled(true);
 
       console.log(
-        `✅ Duration auto-filled: ${exactMinutes} minutes from video duration`
+        `✅ Duration auto-filled: ${durationInMinutes} minutes (${durationInSeconds} seconds)`
       );
     }
 
-    Alert.alert(
-      "Video Selected! 📹",
-      `Video "${videoFile.name}" selected successfully.\n\n` +
-        `Size: ${
-          videoService.formatFileSize
-            ? videoService.formatFileSize(videoFile.size)
-            : `${(videoFile.size / 1024 / 1024).toFixed(1)} MB`
-        }\n` +
-        `Type: ${videoFile.type}\n` +
-        `Duration: ${
-          asset.duration
-            ? `${Math.round(asset.duration / 60000)} minutes`
-            : "Unknown"
-        }\n` +
-        `${
-          asset.duration ? "⏱️ Duration automatically filled in form!" : ""
-        }\n\n` +
-        "Video will be uploaded to IPFS when you create the course."
-    );
+    const successMessage =
+      `Video "${videoFile.name}" selected successfully! 🎬\n\n` +
+      `📊 Details:\n` +
+      `• Size: ${
+        videoService.formatFileSize
+          ? videoService.formatFileSize(videoFile.size)
+          : `${(videoFile.size / 1024 / 1024).toFixed(1)} MB`
+      }\n` +
+      `• Type: ${videoFile.type}\n` +
+      `${
+        asset.duration
+          ? `• Duration: ${Math.round(asset.duration / 60000)} minutes\n`
+          : ""
+      }` +
+      `${
+        asset.duration ? "\n✨ Duration automatically filled in the form!" : ""
+      }\n\n` +
+      `Video will be uploaded to IPFS when you create the course.`;
+
+    Alert.alert("Video Selected! 🎉", successMessage);
+    setIsAnalyzingVideo(false);
   };
 
-  // ✅ NEW: Comprehensive video validation
   const validateVideoFile = async (videoFile) => {
     const warnings = [];
     let isValid = true;
     let error = "";
 
-    // File size validation
     const maxSize = 100 * 1024 * 1024; // 100MB
     if (videoFile.size > maxSize) {
       isValid = false;
@@ -293,7 +335,6 @@ const AddSectionModal = ({
       return { isValid, error, warnings };
     }
 
-    // File type validation
     const allowedTypes = [
       "video/mp4",
       "video/mov",
@@ -307,11 +348,9 @@ const AddSectionModal = ({
       );
     }
 
-    // Duration validation (if available)
     if (videoFile.duration > 0) {
       const durationMinutes = videoFile.duration / 60000;
       if (durationMinutes > 600) {
-        // 10 hours
         isValid = false;
         error = `Video duration is too long (${Math.round(
           durationMinutes
@@ -320,7 +359,6 @@ const AddSectionModal = ({
       }
 
       if (durationMinutes > 120) {
-        // 2 hours warning
         warnings.push(
           `Video is quite long (${Math.round(
             durationMinutes
@@ -329,9 +367,7 @@ const AddSectionModal = ({
       }
     }
 
-    // Size warnings
     if (videoFile.size > 50 * 1024 * 1024) {
-      // 50MB warning
       warnings.push(
         `Video file is large (${
           videoService.formatFileSize
@@ -341,7 +377,6 @@ const AddSectionModal = ({
       );
     }
 
-    // Check upload capacity if videoService supports it
     try {
       if (videoService.canUploadVideo) {
         const capacityCheck = await videoService.canUploadVideo(videoFile.size);
@@ -359,13 +394,11 @@ const AddSectionModal = ({
       }
     } catch (capacityError) {
       console.warn("Could not check upload capacity:", capacityError);
-      // Continue without capacity check
     }
 
     return { isValid, error, warnings };
   };
 
-  // Remove selected video
   const removeSelectedVideo = () => {
     Alert.alert(
       "Remove Video",
@@ -377,17 +410,20 @@ const AddSectionModal = ({
           style: "destructive",
           onPress: () => {
             setSelectedVideoFile(null);
+            setIsDurationAutoFilled(false);
+            setVideoDurationSeconds(null);
+            if (isDurationAutoFilled) {
+              setFormData((prev) => ({ ...prev, duration: "" }));
+            }
           },
         },
       ]
     );
   };
 
-  // ✅ ENHANCED: Form validation aligned with smart contract limits
   const validateForm = () => {
     const newErrors = {};
 
-    // ✅ Title validation (smart contract: max 200 chars)
     if (!formData.title.trim()) {
       newErrors.title = "Section title is required";
     } else if (formData.title.trim().length < 3) {
@@ -397,7 +433,6 @@ const AddSectionModal = ({
         "Title cannot exceed 200 characters (smart contract limit)";
     }
 
-    // ✅ Duration validation (smart contract: max 86400 seconds = 24 hours)
     if (!formData.duration.trim()) {
       newErrors.duration = "Duration is required";
     } else {
@@ -405,11 +440,8 @@ const AddSectionModal = ({
       if (isNaN(durationMinutes) || durationMinutes <= 0) {
         newErrors.duration = "Duration must be a positive number";
       } else if (durationMinutes > 1440) {
-        // 1440 minutes = 24 hours
-        newErrors.duration =
-          "Duration cannot exceed 1440 minutes (24 hours, smart contract limit)";
+        newErrors.duration = "Duration cannot exceed 1440 minutes (24 hours)";
       } else if (durationMinutes < 0.5) {
-        // 30 seconds minimum
         newErrors.duration =
           "Duration must be at least 0.5 minutes (30 seconds)";
       }
@@ -419,22 +451,19 @@ const AddSectionModal = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  // ✅ FIXED: Handle save with proper data structure for CreateCourseScreen
   const handleSave = () => {
     if (!validateForm()) {
       return;
     }
 
-    // ✅ FIXED: Create section data compatible with smart contract and CreateCourseScreen
-    const durationInSeconds = Math.round(parseFloat(formData.duration) * 60); // Convert minutes to seconds
+    const durationInSeconds = Math.round(parseFloat(formData.duration) * 60);
 
     const sectionData = {
-      title: formData.title.trim(), // Smart contract parameter: string title
-      duration: durationInSeconds, // Smart contract parameter: uint256 duration (in seconds)
-      videoFile: selectedVideoFile, // For upload to IPFS -> contentCID
-      // Additional metadata for UI
-      id: Date.now() + Math.random(), // Temporary ID for UI
-      orderId: 0, // Will be set by parent component
+      title: formData.title.trim(),
+      duration: durationInSeconds,
+      videoFile: selectedVideoFile,
+      id: Date.now() + Math.random(),
+      orderId: 0,
       createdAt: new Date().toISOString(),
       uploadStatus: selectedVideoFile ? "pending" : "no-video",
     };
@@ -447,9 +476,9 @@ const AddSectionModal = ({
       videoFileName: sectionData.videoFile?.name,
       videoSize: sectionData.videoFile?.size,
       uploadStatus: sectionData.uploadStatus,
+      autoFilled: isDurationAutoFilled,
     });
 
-    // Validate final data
     if (sectionData.title.length > 200) {
       Alert.alert(
         "Error",
@@ -487,12 +516,10 @@ const AddSectionModal = ({
       [field]: value,
     }));
 
-    // Reset auto-fill indicator when user manually changes duration
     if (field === "duration") {
       setIsDurationAutoFilled(false);
     }
 
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({
         ...prev,
@@ -500,7 +527,7 @@ const AddSectionModal = ({
       }));
     }
   };
-  // ✅ Helper: Format duration display
+
   const formatDurationDisplay = () => {
     if (!formData.duration) return "";
 
@@ -510,11 +537,15 @@ const AddSectionModal = ({
     if (seconds < 60) {
       return `${seconds} seconds`;
     } else if (seconds < 3600) {
-      return `${Math.floor(seconds / 60)} minutes ${seconds % 60} seconds`;
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins} minutes ${secs > 0 ? `${secs} seconds` : ""}`;
     } else {
       const hours = Math.floor(seconds / 3600);
       const remainingMinutes = Math.floor((seconds % 3600) / 60);
-      return `${hours} hours ${remainingMinutes} minutes`;
+      return `${hours} hours ${
+        remainingMinutes > 0 ? `${remainingMinutes} minutes` : ""
+      }`;
     }
   };
 
@@ -543,7 +574,7 @@ const AddSectionModal = ({
             styles.modalContainer,
             {
               height: modalHeight,
-              transform: [{ translateY: slideValue }],
+              transform: [{ translateY: slideValue }, { scale: scaleValue }],
               opacity: opacityValue,
             },
           ]}
@@ -567,7 +598,7 @@ const AddSectionModal = ({
                     <Ionicons
                       name={isFullScreen ? "contract" : "expand"}
                       size={20}
-                      color={Colors.textSecondary}
+                      color={COLORS.textSecondary}
                     />
                   </TouchableOpacity>
 
@@ -579,15 +610,15 @@ const AddSectionModal = ({
                     <Ionicons
                       name="close"
                       size={24}
-                      color={Colors.textSecondary}
+                      color={COLORS.textSecondary}
                     />
                   </TouchableOpacity>
                 </View>
               </View>
 
               <Text style={styles.gestureHint}>
-                Tap expand button for full screen • All data validated for smart
-                contract
+                All data validated for smart contract • Video duration
+                auto-detected
               </Text>
             </View>
 
@@ -596,105 +627,203 @@ const AddSectionModal = ({
               style={styles.scrollContainer}
               contentContainerStyle={styles.formContainer}
               showsVerticalScrollIndicator={false}
-              bounces={false}
+              bounces={true}
             >
               {/* Section Title Input */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>
-                  Section Title <Text style={styles.required}>*</Text>
-                </Text>
-                <TextInput
-                  style={[styles.input, errors.title && styles.inputError]}
-                  value={formData.title}
-                  onChangeText={(value) => handleInputChange("title", value)}
-                  placeholder="Enter section title (max 200 characters)"
-                  placeholderTextColor={Colors.textMuted}
-                  maxLength={200}
-                  autoCorrect={true}
-                  autoCapitalize="words"
-                />
+                <View style={styles.labelContainer}>
+                  <Text style={styles.label}>
+                    Section Title <Text style={styles.required}>*</Text>
+                  </Text>
+                  <View style={styles.labelIcon}>
+                    <Ionicons
+                      name="text-outline"
+                      size={16}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                </View>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={[styles.input, errors.title && styles.inputError]}
+                    value={formData.title}
+                    onChangeText={(value) => handleInputChange("title", value)}
+                    placeholder="Enter section title (max 200 characters)"
+                    placeholderTextColor={COLORS.textMuted}
+                    maxLength={200}
+                    autoCorrect={true}
+                    autoCapitalize="words"
+                  />
+                  {formData.title.length > 0 && (
+                    <View style={styles.inputCounter}>
+                      <Text style={styles.counterText}>
+                        {formData.title.length}/200
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 {errors.title && (
-                  <Text style={styles.errorText}>{errors.title}</Text>
+                  <Text style={styles.errorText}>
+                    <Ionicons name="alert-circle" size={14} /> {errors.title}
+                  </Text>
                 )}
-                <Text style={styles.helperText}>
-                  {formData.title.length}/200 characters (Smart contract limit:
-                  200)
-                </Text>
               </View>
 
               {/* Duration Input */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>
-                  Duration (minutes) <Text style={styles.required}>*</Text>
-                </Text>
-                <TextInput
-                  style={[styles.input, errors.duration && styles.inputError]}
-                  value={formData.duration}
-                  onChangeText={(value) => handleInputChange("duration", value)}
-                  placeholder="Enter duration in minutes (max 1440 = 24 hours)"
-                  placeholderTextColor={Colors.textMuted}
-                  keyboardType="decimal-pad"
-                  maxLength={10}
-                />
-                {errors.duration && (
-                  <Text style={styles.errorText}>{errors.duration}</Text>
-                )}
-                <Text style={styles.helperText}>
-                  {formData.duration ? (
-                    <>
-                      Duration: {formatDurationDisplay()}
-                      {isDurationAutoFilled && (
-                        <Text style={{ color: Colors.success }}>
-                          {" "}
-                          • Auto-filled from video ✓
-                        </Text>
-                      )}
-                      • Smart contract stores in seconds (max 86400)
-                    </>
-                  ) : (
-                    "Smart contract limit: 1440 minutes (24 hours). Will be converted to seconds."
+                <View style={styles.labelContainer}>
+                  <Text style={styles.label}>
+                    Duration (minutes) <Text style={styles.required}>*</Text>
+                  </Text>
+                  <View style={styles.labelIcon}>
+                    <Ionicons
+                      name="time-outline"
+                      size={16}
+                      color={COLORS.secondary}
+                    />
+                  </View>
+                </View>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      errors.duration && styles.inputError,
+                      isDurationAutoFilled && styles.inputAutoFilled,
+                    ]}
+                    value={formData.duration}
+                    onChangeText={(value) =>
+                      handleInputChange("duration", value)
+                    }
+                    placeholder="Enter duration in minutes (max 1440)"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="decimal-pad"
+                    maxLength={10}
+                  />
+                  {isDurationAutoFilled && (
+                    <View style={styles.autoFilledBadge}>
+                      <Ionicons
+                        name="sparkles"
+                        size={14}
+                        color={COLORS.success}
+                      />
+                      <Text style={styles.autoFilledText}>Auto</Text>
+                    </View>
                   )}
-                </Text>
+                </View>
+                {errors.duration && (
+                  <Text style={styles.errorText}>
+                    <Ionicons name="alert-circle" size={14} /> {errors.duration}
+                  </Text>
+                )}
+                {formData.duration && !errors.duration && (
+                  <View style={styles.durationInfo}>
+                    <Ionicons
+                      name="information-circle"
+                      size={14}
+                      color={COLORS.info}
+                    />
+                    <Text style={styles.durationInfoText}>
+                      {formatDurationDisplay()}
+                      {isDurationAutoFilled && " • Auto-detected from video"}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Video Content Section */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Video Content</Text>
+                <View style={styles.labelContainer}>
+                  <Text style={styles.label}>Video Content</Text>
+                  <View style={styles.labelIcon}>
+                    <Ionicons
+                      name="videocam-outline"
+                      size={16}
+                      color={COLORS.tertiary}
+                    />
+                  </View>
+                </View>
 
                 {/* Video Selection Area */}
                 <TouchableOpacity
                   style={[
                     styles.videoUploadArea,
                     selectedVideoFile && styles.videoSelected,
+                    isAnalyzingVideo && styles.videoAnalyzing,
                   ]}
                   onPress={handleVideoSelection}
-                  disabled={isSelectingVideo}
-                  activeOpacity={0.7}
+                  disabled={isSelectingVideo || isAnalyzingVideo}
+                  activeOpacity={0.8}
                 >
-                  {selectedVideoFile ? (
+                  {isAnalyzingVideo ? (
+                    <View style={styles.videoAnalyzingContent}>
+                      <ActivityIndicator size="large" color={COLORS.primary} />
+                      <Text style={styles.analyzingText}>
+                        Analyzing video...
+                      </Text>
+                      <Text style={styles.analyzingSubtext}>
+                        Extracting duration information
+                      </Text>
+                    </View>
+                  ) : selectedVideoFile ? (
                     <View style={styles.videoPreview}>
-                      <Ionicons
-                        name="videocam"
-                        size={48}
-                        color={Colors.primary}
-                      />
-                      <Text style={styles.videoSelectedText}>
+                      <LinearGradient
+                        colors={[
+                          COLORS.primary + "20",
+                          COLORS.primaryLight + "20",
+                        ]}
+                        style={styles.videoIconGradient}
+                      >
+                        <Ionicons
+                          name="videocam"
+                          size={48}
+                          color={COLORS.primary}
+                        />
+                      </LinearGradient>
+                      <Text style={styles.videoSelectedText} numberOfLines={2}>
                         {selectedVideoFile.name}
                       </Text>
-                      <Text style={styles.videoDetailsText}>
-                        {videoService.formatFileSize
-                          ? videoService.formatFileSize(selectedVideoFile.size)
-                          : `${(selectedVideoFile.size / 1024 / 1024).toFixed(
-                              1
-                            )} MB`}{" "}
-                        • {selectedVideoFile.type}
-                      </Text>
+                      <View style={styles.videoDetails}>
+                        <View style={styles.videoDetailItem}>
+                          <Ionicons
+                            name="folder-outline"
+                            size={14}
+                            color={COLORS.textSecondary}
+                          />
+                          <Text style={styles.videoDetailsText}>
+                            {videoService.formatFileSize
+                              ? videoService.formatFileSize(
+                                  selectedVideoFile.size
+                                )
+                              : `${(
+                                  selectedVideoFile.size /
+                                  1024 /
+                                  1024
+                                ).toFixed(1)} MB`}
+                          </Text>
+                        </View>
+                        <View style={styles.videoDetailItem}>
+                          <Ionicons
+                            name="film-outline"
+                            size={14}
+                            color={COLORS.textSecondary}
+                          />
+                          <Text style={styles.videoDetailsText}>
+                            {selectedVideoFile.type}
+                          </Text>
+                        </View>
+                      </View>
                       {selectedVideoFile.duration > 0 && (
-                        <Text style={styles.videoDetailsText}>
-                          Video duration:{" "}
-                          {Math.round(selectedVideoFile.duration / 60000)}{" "}
-                          minutes
-                        </Text>
+                        <View style={styles.videoDurationBadge}>
+                          <Ionicons
+                            name="time"
+                            size={14}
+                            color={COLORS.success}
+                          />
+                          <Text style={styles.videoDurationText}>
+                            {Math.round(selectedVideoFile.duration / 60000)}{" "}
+                            minutes detected
+                          </Text>
+                        </View>
                       )}
                       <Text style={styles.videoChangeText}>
                         Tap to change video
@@ -706,70 +835,140 @@ const AddSectionModal = ({
                       >
                         <Ionicons
                           name="close-circle"
-                          size={24}
-                          color={Colors.error}
+                          size={28}
+                          color={COLORS.error}
                         />
                       </TouchableOpacity>
                     </View>
                   ) : (
                     <View style={styles.videoPlaceholder}>
-                      <Ionicons
-                        name="videocam-outline"
-                        size={48}
-                        color={Colors.textMuted}
-                      />
+                      <View style={styles.videoPlaceholderIcon}>
+                        <Ionicons
+                          name="cloud-upload-outline"
+                          size={48}
+                          color={COLORS.primary}
+                        />
+                      </View>
                       <Text style={styles.videoPlaceholderText}>
                         {isSelectingVideo
                           ? "Selecting video..."
                           : "Tap to select video"}
                       </Text>
                       <Text style={styles.videoRequirements}>
-                        Max: 100MB, 600 minutes • Recommended: MP4 format
+                        Max: 100MB, 600 minutes • MP4 recommended
                       </Text>
+                      <View style={styles.videoFeatureBadge}>
+                        <Ionicons
+                          name="sparkles"
+                          size={14}
+                          color={COLORS.quaternary}
+                        />
+                        <Text style={styles.videoFeatureText}>
+                          Auto-duration detection
+                        </Text>
+                      </View>
                     </View>
                   )}
                 </TouchableOpacity>
 
                 <Text style={styles.helperText}>
-                  Video will be uploaded to IPFS when you create the course. The
-                  IPFS CID will be stored as contentCID in the smart contract.
+                  <Ionicons name="cloud-outline" size={12} /> Video will be
+                  uploaded to IPFS when course is created
                 </Text>
               </View>
 
               {/* Smart Contract Info Box */}
               <View style={styles.smartContractInfoBox}>
-                <Ionicons
-                  name="shield-checkmark"
-                  size={20}
-                  color={Colors.success}
-                />
-                <Text style={styles.smartContractInfoText}>
-                  <Text style={styles.infoTextBold}>
-                    Smart Contract Integration:
-                  </Text>
-                  {"\n"}• Title: Stored as string (max 200 chars)
-                  {"\n"}• Duration: Stored as uint256 in seconds (max 86400)
-                  {"\n"}• Content: Video → IPFS → CID stored as string
-                  {"\n"}• All validation ensures blockchain compatibility
-                </Text>
+                <LinearGradient
+                  colors={["#f0f9ff", "#e0f2fe"]}
+                  style={styles.infoBoxGradient}
+                >
+                  <View style={styles.infoBoxHeader}>
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={20}
+                      color={COLORS.info}
+                    />
+                    <Text style={styles.infoBoxTitle}>
+                      Smart Contract Integration
+                    </Text>
+                  </View>
+                  <View style={styles.infoBoxContent}>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoBullet}>•</Text>
+                      <Text style={styles.infoText}>
+                        Title: string (max 200 chars)
+                      </Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoBullet}>•</Text>
+                      <Text style={styles.infoText}>
+                        Duration: uint256 in seconds (max 86400)
+                      </Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoBullet}>•</Text>
+                      <Text style={styles.infoText}>
+                        Content: Video → IPFS → CID string
+                      </Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoBullet}>•</Text>
+                      <Text style={styles.infoText}>
+                        All validation ensures blockchain compatibility
+                      </Text>
+                    </View>
+                  </View>
+                </LinearGradient>
               </View>
 
-              {/* Upload Process Info Box */}
-              <View style={styles.infoBox}>
-                <Ionicons
-                  name="information-circle"
-                  size={20}
-                  color={Colors.info}
-                />
-                <Text style={styles.infoText}>
-                  <Text style={styles.infoTextBold}>Upload Process:</Text>
-                  {"\n"}• Video stored temporarily until course creation
-                  {"\n"}• All videos upload to IPFS when you click "Create
-                  Course"
-                  {"\n"}• IPFS CIDs automatically stored on blockchain
-                  {"\n"}• Smart contract function: addCourseSection(courseId,
-                  title, contentCID, duration)
-                </Text>
+              {/* Enhanced Features Box */}
+              <View style={styles.featuresBox}>
+                <LinearGradient
+                  colors={["#fef3c7", "#fde68a"]}
+                  style={styles.featuresGradient}
+                >
+                  <View style={styles.featuresHeader}>
+                    <Ionicons
+                      name="sparkles"
+                      size={20}
+                      color={COLORS.quaternary}
+                    />
+                    <Text style={styles.featuresTitle}>Enhanced Features</Text>
+                  </View>
+                  <View style={styles.featuresList}>
+                    <View style={styles.featureItem}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={16}
+                        color="#f59e0b"
+                      />
+                      <Text style={styles.featureText}>
+                        Auto-detect video duration on selection
+                      </Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={16}
+                        color="#f59e0b"
+                      />
+                      <Text style={styles.featureText}>
+                        Smart contract validation built-in
+                      </Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={16}
+                        color="#f59e0b"
+                      />
+                      <Text style={styles.featureText}>
+                        IPFS upload integration ready
+                      </Text>
+                    </View>
+                  </View>
+                </LinearGradient>
               </View>
 
               <View style={{ height: 20 }} />
@@ -780,7 +979,7 @@ const AddSectionModal = ({
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={onClose}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -788,11 +987,18 @@ const AddSectionModal = ({
               <TouchableOpacity
                 style={styles.saveButton}
                 onPress={handleSave}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                <Text style={styles.saveButtonText}>
-                  {isEditing ? "Update Section" : "Add Section"}
-                </Text>
+                <LinearGradient
+                  colors={[COLORS.primary, COLORS.primaryDark]}
+                  style={styles.saveButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {isEditing ? "Update Section" : "Add Section"}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </SafeAreaView>
@@ -813,33 +1019,35 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: Colors.black,
+    backgroundColor: COLORS.backdrop,
   },
   modalContainer: {
     // Height is dynamic
   },
   modalContent: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     flex: 1,
-    shadowColor: Colors.black,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 20,
   },
+
+  // Header
   header: {
     paddingTop: 8,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: COLORS.border,
   },
   dragHandle: {
     width: 40,
     height: 4,
-    backgroundColor: Colors.lightGray,
+    backgroundColor: COLORS.border,
     borderRadius: 2,
     alignSelf: "center",
     marginBottom: 12,
@@ -851,9 +1059,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: Colors.text,
+    fontSize: 22,
+    fontWeight: "700",
+    color: COLORS.text,
     flex: 1,
   },
   headerButtons: {
@@ -863,20 +1071,22 @@ const styles = StyleSheet.create({
   },
   expandButton: {
     padding: 8,
-    borderRadius: 6,
-    backgroundColor: Colors.background,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
   },
   closeButton: {
     padding: 8,
-    borderRadius: 6,
-    backgroundColor: Colors.background,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
   },
   gestureHint: {
-    fontSize: 12,
-    color: Colors.textMuted,
+    fontSize: 13,
+    color: COLORS.textMuted,
     textAlign: "center",
     fontStyle: "italic",
   },
+
+  // Form
   scrollContainer: {
     flex: 1,
   },
@@ -887,57 +1097,140 @@ const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: 24,
   },
+  labelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
   label: {
     fontSize: 16,
-    fontWeight: "500",
-    color: Colors.text,
-    marginBottom: 8,
+    fontWeight: "600",
+    color: COLORS.text,
+    flex: 1,
+  },
+  labelIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    justifyContent: "center",
+    alignItems: "center",
   },
   required: {
-    color: Colors.error,
+    color: COLORS.error,
+  },
+  inputWrapper: {
+    position: "relative",
   },
   input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: Colors.text,
-    backgroundColor: Colors.surface,
-    minHeight: 50,
+    color: COLORS.text,
+    backgroundColor: COLORS.surface,
+    minHeight: 52,
   },
   inputError: {
-    borderColor: Colors.error,
+    borderColor: COLORS.error,
+    backgroundColor: "#FFF5F5",
+  },
+  inputAutoFilled: {
+    borderColor: COLORS.success,
+    backgroundColor: "#F0FFF4",
+  },
+  inputCounter: {
+    position: "absolute",
+    right: 12,
+    top: "50%",
+    transform: [{ translateY: -10 }],
+  },
+  counterText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  autoFilledBadge: {
+    position: "absolute",
+    right: 12,
+    top: "50%",
+    transform: [{ translateY: -12 }],
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.success + "20",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  autoFilledText: {
+    fontSize: 12,
+    color: COLORS.success,
+    marginLeft: 4,
+    fontWeight: "600",
   },
   errorText: {
     fontSize: 14,
-    color: Colors.error,
+    color: COLORS.error,
     marginTop: 6,
+    marginLeft: 4,
   },
   helperText: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 6,
-    lineHeight: 16,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: 8,
+    marginLeft: 4,
+    lineHeight: 18,
+  },
+  durationInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    marginLeft: 4,
+  },
+  durationInfoText: {
+    fontSize: 13,
+    color: COLORS.info,
+    marginLeft: 6,
   },
 
-  // Video selection styles
+  // Video selection
   videoUploadArea: {
-    backgroundColor: Colors.background,
-    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
     borderWidth: 2,
-    borderColor: Colors.border,
+    borderColor: COLORS.border,
     borderStyle: "dashed",
-    minHeight: 140,
+    minHeight: 180,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
+    overflow: "hidden",
   },
   videoSelected: {
-    borderColor: Colors.primary,
+    borderColor: COLORS.primary,
     borderStyle: "solid",
-    backgroundColor: Colors.surface,
+    backgroundColor: COLORS.primary + "05",
+  },
+  videoAnalyzing: {
+    borderColor: COLORS.primary,
+    borderStyle: "solid",
+    backgroundColor: COLORS.primary + "10",
+  },
+  videoAnalyzingContent: {
+    alignItems: "center",
+    padding: 20,
+  },
+  analyzingText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginTop: 16,
+  },
+  analyzingSubtext: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 4,
   },
   videoPreview: {
     alignItems: "center",
@@ -945,24 +1238,56 @@ const styles = StyleSheet.create({
     position: "relative",
     width: "100%",
   },
+  videoIconGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   videoSelectedText: {
     fontSize: 16,
     fontWeight: "600",
-    color: Colors.text,
-    marginTop: 12,
+    color: COLORS.text,
     textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  videoDetails: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 16,
+  },
+  videoDetailItem: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   videoDetailsText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    textAlign: "center",
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginLeft: 4,
+  },
+  videoDurationBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.success + "20",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 12,
+  },
+  videoDurationText: {
+    fontSize: 13,
+    color: COLORS.success,
+    marginLeft: 6,
+    fontWeight: "600",
   },
   videoChangeText: {
-    fontSize: 12,
-    color: Colors.primary,
-    marginTop: 8,
-    textAlign: "center",
+    fontSize: 13,
+    color: COLORS.primary,
+    marginTop: 12,
+    fontWeight: "500",
   },
   removeVideoButton: {
     position: "absolute",
@@ -974,90 +1299,155 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
+  videoPlaceholderIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primary + "10",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   videoPlaceholderText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: Colors.textSecondary,
-    marginTop: 12,
+    fontSize: 17,
+    fontWeight: "600",
+    color: COLORS.text,
     marginBottom: 8,
   },
   videoRequirements: {
-    fontSize: 12,
-    color: Colors.textMuted,
+    fontSize: 13,
+    color: COLORS.textMuted,
     textAlign: "center",
   },
+  videoFeatureBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.quaternary + "20",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 12,
+  },
+  videoFeatureText: {
+    fontSize: 12,
+    color: "#f59e0b",
+    marginLeft: 4,
+    fontWeight: "600",
+  },
 
-  // ✅ NEW: Smart contract specific info box
+  // Info boxes
   smartContractInfoBox: {
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  infoBoxGradient: {
+    padding: 16,
+  },
+  infoBoxHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  infoBoxTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.info,
+    marginLeft: 8,
+  },
+  infoBoxContent: {
+    marginLeft: 28,
+  },
+  infoItem: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#f0f9ff",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.success,
+    marginBottom: 6,
   },
-  smartContractInfoText: {
+  infoBullet: {
     fontSize: 14,
     color: "#0369a1",
-    marginLeft: 8,
-    flex: 1,
-    lineHeight: 20,
-  },
-
-  infoBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: Colors.background,
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 8,
+    marginRight: 8,
+    fontWeight: "600",
   },
   infoText: {
     fontSize: 14,
-    color: Colors.textSecondary,
-    marginLeft: 8,
+    color: "#0369a1",
     flex: 1,
     lineHeight: 20,
   },
-  infoTextBold: {
-    fontWeight: "600",
-    color: Colors.text,
+
+  // Features box
+  featuresBox: {
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: "hidden",
   },
+  featuresGradient: {
+    padding: 16,
+  },
+  featuresHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  featuresTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#f59e0b",
+    marginLeft: 8,
+  },
+  featuresList: {
+    marginLeft: 28,
+  },
+  featureItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  featureText: {
+    fontSize: 14,
+    color: "#92400e",
+    marginLeft: 8,
+    flex: 1,
+  },
+
+  // Action buttons
   actionButtons: {
     flexDirection: "row",
     padding: 20,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: COLORS.border,
     gap: 12,
-    backgroundColor: Colors.surface,
+    backgroundColor: COLORS.background,
   },
   cancelButton: {
     flex: 1,
     paddingVertical: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.border,
     alignItems: "center",
+    backgroundColor: COLORS.surface,
   },
   cancelButtonText: {
     fontSize: 16,
-    fontWeight: "500",
-    color: Colors.textSecondary,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
   },
   saveButton: {
     flex: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  saveButtonGradient: {
     paddingVertical: 16,
-    borderRadius: 8,
-    backgroundColor: Colors.primary,
     alignItems: "center",
   },
   saveButtonText: {
     fontSize: 16,
-    fontWeight: "600",
-    color: Colors.white,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });
 

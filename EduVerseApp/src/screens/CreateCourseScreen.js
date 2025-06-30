@@ -1,4 +1,4 @@
-// src/screens/CreateCourseScreen.js - Updated for Direct ETH Pricing
+// src/screens/CreateCourseScreen.js - Fixed Layout Version
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
@@ -12,32 +12,62 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Image,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useAccount, useChainId } from "wagmi";
 import { mantaPacificTestnet } from "../constants/blockchain";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 import { pinataService } from "../services/PinataService";
 import { videoService } from "../services/VideoService";
 import { useWeb3 } from "../contexts/Web3Context";
 import AddSectionModal from "../components/AddSectionModal";
 
-// Constants for Manta Pacific Sepolia
-const TRANSACTION_DELAY_MS = 3000; // 3 seconds between section additions
-const MAX_RETRIES_SECTIONS = 2; // Max retries for failed sections
+// Constants
+const TRANSACTION_DELAY_MS = 3000;
+const MAX_RETRIES_SECTIONS = 2;
+const { width: screenWidth } = Dimensions.get("window");
+
+// Enhanced color palette
+const COLORS = {
+  primary: "#9747FF",
+  primaryLight: "#B47FFF",
+  primaryDark: "#7A37CC",
+  secondary: "#FF6B6B",
+  tertiary: "#4ECDC4",
+  quaternary: "#FFD93D",
+  success: "#4CAF50",
+  error: "#FF5252",
+  warning: "#FF9800",
+  info: "#2196F3",
+  background: "#FFFFFF",
+  surface: "#F8F9FA",
+  border: "#E0E0E0",
+  text: "#333333",
+  textSecondary: "#666666",
+  textMuted: "#999999",
+  gradientStart: "#667eea",
+  gradientEnd: "#764ba2",
+};
 
 export default function CreateCourseScreen({ navigation }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-
-  // ✅ Using updated Web3Context
   const {
     isInitialized,
     modalPreventionActive,
     createCourse,
     addCourseSection,
-    getMaxPriceETH, // Using direct ETH constant
+    getMaxPriceETH,
   } = useWeb3();
+
+  // Animation values
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(50))[0];
 
   // Course data state
   const [courseData, setCourseData] = useState({
@@ -70,7 +100,24 @@ export default function CreateCourseScreen({ navigation }) {
 
   const isOnMantaNetwork = chainId === mantaPacificTestnet.id;
 
-  // ✅ Fetch max price from contract
+  // Entrance animation
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        speed: 12,
+        bounciness: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Fetch max price from contract
   useEffect(() => {
     const fetchMaxPrice = async () => {
       if (isInitialized && getMaxPriceETH) {
@@ -80,12 +127,10 @@ export default function CreateCourseScreen({ navigation }) {
           console.log("📊 Maximum price allowed:", maxPrice, "ETH");
         } catch (error) {
           console.error("Failed to get max price:", error);
-          // Fallback to hardcoded value from contract
           setCurrentMaxPrice(0.002);
         }
       }
     };
-
     fetchMaxPrice();
   }, [isInitialized, getMaxPriceETH]);
 
@@ -190,7 +235,6 @@ export default function CreateCourseScreen({ navigation }) {
 
   // Validation
   const validateCourseData = () => {
-    // Title validation
     if (!courseData.title.trim()) {
       Alert.alert("Error", "Course title is required");
       return false;
@@ -199,8 +243,6 @@ export default function CreateCourseScreen({ navigation }) {
       Alert.alert("Error", "Title cannot exceed 200 characters");
       return false;
     }
-
-    // Description validation
     if (!courseData.description.trim()) {
       Alert.alert("Error", "Course description is required");
       return false;
@@ -209,14 +251,10 @@ export default function CreateCourseScreen({ navigation }) {
       Alert.alert("Error", "Description cannot exceed 1000 characters");
       return false;
     }
-
-    // Thumbnail validation
     if (!courseData.thumbnailFile) {
       Alert.alert("Error", "Please select a thumbnail image");
       return false;
     }
-
-    // Price validation
     if (courseData.isPaid) {
       if (!courseData.price.trim()) {
         Alert.alert("Error", "Please enter a price for paid course");
@@ -235,13 +273,10 @@ export default function CreateCourseScreen({ navigation }) {
         return false;
       }
     }
-
-    // Sections validation
     if (sections.length === 0) {
       Alert.alert("Error", "Please add at least one section");
       return false;
     }
-
     return true;
   };
 
@@ -252,7 +287,6 @@ export default function CreateCourseScreen({ navigation }) {
 
     const filesToUpload = [];
 
-    // Add thumbnail
     if (courseData.thumbnailFile) {
       filesToUpload.push({
         type: "thumbnail",
@@ -261,7 +295,6 @@ export default function CreateCourseScreen({ navigation }) {
       });
     }
 
-    // Add videos
     sections.forEach((section) => {
       if (section.videoFile) {
         filesToUpload.push({
@@ -289,7 +322,6 @@ export default function CreateCourseScreen({ navigation }) {
 
     let completedFiles = 0;
 
-    // Upload with retry logic
     for (const fileItem of filesToUpload) {
       let retries = 0;
       const maxRetries = 2;
@@ -362,15 +394,12 @@ export default function CreateCourseScreen({ navigation }) {
           }));
 
           setCreateProgress(Math.round((completedFiles / totalFiles) * 40));
-
-          // Small delay between uploads
           await new Promise((resolve) => setTimeout(resolve, 1000));
         } catch (error) {
           console.error(
             `❌ Upload attempt ${retries + 1} failed for ${fileItem.type}:`,
             error
           );
-
           retries++;
           if (retries > maxRetries) {
             throw new Error(
@@ -379,8 +408,6 @@ export default function CreateCourseScreen({ navigation }) {
               } attempts: ${error.message}`
             );
           }
-
-          // Wait before retry
           await new Promise((resolve) => setTimeout(resolve, 2000));
         }
       }
@@ -390,7 +417,7 @@ export default function CreateCourseScreen({ navigation }) {
     return results;
   };
 
-  // ✅ Enhanced section addition with retry logic
+  // Add sections with retry logic
   const addSectionsWithRetry = async (
     courseId,
     sectionsToAdd,
@@ -434,7 +461,6 @@ export default function CreateCourseScreen({ navigation }) {
             throw new Error(sectionResult.error || "Failed to add section");
           }
 
-          // Update progress
           const sectionProgress = 70 + ((i + 1) / sectionsToAdd.length) * 30;
           setCreateProgress(Math.round(sectionProgress));
 
@@ -443,7 +469,6 @@ export default function CreateCourseScreen({ navigation }) {
             message: `Added section ${totalAdded} of ${sectionsToAdd.length}...`,
           }));
 
-          // ✅ CRITICAL: Delay between transactions for Manta Pacific Sepolia
           if (i < sectionsToAdd.length - 1) {
             console.log(
               `⏳ Waiting ${TRANSACTION_DELAY_MS}ms before next section...`
@@ -455,7 +480,6 @@ export default function CreateCourseScreen({ navigation }) {
         } catch (error) {
           console.error(`❌ Section attempt ${retries + 1} failed:`, error);
 
-          // Don't retry on user rejection
           if (
             error.message?.includes("cancelled by user") ||
             error.message?.includes("user rejected")
@@ -479,7 +503,6 @@ export default function CreateCourseScreen({ navigation }) {
               } attempts`
             );
           } else {
-            // Wait longer before retry
             console.log(`⏳ Waiting 5s before retry...`);
             await new Promise((resolve) => setTimeout(resolve, 5000));
           }
@@ -494,7 +517,7 @@ export default function CreateCourseScreen({ navigation }) {
     };
   };
 
-  // ✅ Main course creation with enhanced error handling
+  // Main course creation
   const handleCreateCourse = async () => {
     if (!validateCourseData()) return;
 
@@ -516,7 +539,6 @@ export default function CreateCourseScreen({ navigation }) {
       return;
     }
 
-    // Check wallet connection status
     if (!isConnected) {
       Alert.alert(
         "Wallet Disconnected",
@@ -525,7 +547,6 @@ export default function CreateCourseScreen({ navigation }) {
       return;
     }
 
-    // Double-check current chain
     if (!isOnMantaNetwork) {
       Alert.alert(
         "Wrong Network",
@@ -611,7 +632,6 @@ export default function CreateCourseScreen({ navigation }) {
       console.log("✅ Course created with ID:", courseId);
       setCreateProgress(70);
 
-      // Check if we have a valid courseId before proceeding
       if (courseId === "unknown") {
         console.warn(
           "⚠️ CourseId could not be determined from transaction. Sections may need to be added manually."
@@ -629,7 +649,7 @@ export default function CreateCourseScreen({ navigation }) {
         return;
       }
 
-      // Phase 3: Add sections to blockchain with retry logic
+      // Phase 3: Add sections to blockchain
       setUploadProgress((prev) => ({
         ...prev,
         phase: 3,
@@ -646,7 +666,6 @@ export default function CreateCourseScreen({ navigation }) {
       setCreateProgress(100);
       setCurrentStep("Complete!");
 
-      // Enhanced success message
       let successMessage =
         `Course created successfully! 🎉\n\n` +
         `Course ID: ${courseId}\n` +
@@ -680,7 +699,6 @@ export default function CreateCourseScreen({ navigation }) {
       let errorMessage = "Failed to create course.";
       let errorTitle = "Error";
 
-      // Enhanced error handling for Web3 errors
       if (
         error.message?.includes("rejected by user") ||
         error.message?.includes("cancelled by user") ||
@@ -788,7 +806,12 @@ export default function CreateCourseScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centeredContent}>
-          <Ionicons name="wallet-outline" size={64} color="#ccc" />
+          <LinearGradient
+            colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+            style={styles.iconGradient}
+          >
+            <Ionicons name="wallet-outline" size={64} color="#fff" />
+          </LinearGradient>
           <Text style={styles.notConnectedTitle}>Wallet Not Connected</Text>
           <Text style={styles.notConnectedSubtitle}>
             Connect your wallet to create courses
@@ -802,7 +825,9 @@ export default function CreateCourseScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centeredContent}>
-          <Ionicons name="warning-outline" size={64} color="#ff9500" />
+          <View style={styles.warningIcon}>
+            <Ionicons name="warning-outline" size={64} color={COLORS.warning} />
+          </View>
           <Text style={styles.warningTitle}>Wrong Network</Text>
           <Text style={styles.warningSubtitle}>
             Please switch to Manta Pacific Testnet
@@ -817,287 +842,459 @@ export default function CreateCourseScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Create New Course</Text>
-          <Text style={styles.subtitle}>
-            Share your knowledge on blockchain
-          </Text>
-        </View>
-
-        <View style={styles.form}>
-          {/* Basic Course Information */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📚 Course Information</Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Course Title *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter course title (max 200 chars)"
-                value={courseData.title}
-                onChangeText={(text) => handleInputChange("title", text)}
-                placeholderTextColor="#999"
-                maxLength={200}
-              />
-              <Text style={styles.helperText}>
-                {courseData.title.length}/200 characters
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            }}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Create New Course</Text>
+              <Text style={styles.subtitle}>
+                Share your knowledge on blockchain
               </Text>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Description *</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Describe what students will learn (max 1000 chars)"
-                value={courseData.description}
-                onChangeText={(text) => handleInputChange("description", text)}
-                multiline={true}
-                numberOfLines={4}
-                textAlignVertical="top"
-                placeholderTextColor="#999"
-                maxLength={1000}
-              />
-              <Text style={styles.helperText}>
-                {courseData.description.length}/1000 characters
-              </Text>
-            </View>
+            <View style={styles.form}>
+              {/* Basic Course Information */}
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionIcon}>
+                    <Ionicons name="book" size={20} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.sectionTitle}>Course Information</Text>
+                </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Thumbnail Image *</Text>
-              <TouchableOpacity
-                style={[
-                  styles.thumbnailUploadArea,
-                  courseData.thumbnailFile && styles.thumbnailSelected,
-                ]}
-                onPress={handleThumbnailSelect}
-                disabled={isCreatingCourse}
-              >
-                {courseData.thumbnailFile ? (
-                  <View style={styles.thumbnailPreview}>
-                    <Image
-                      source={{ uri: courseData.thumbnailUrl }}
-                      style={styles.thumbnailImage}
-                      resizeMode="cover"
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Course Title *</Text>
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter course title (max 200 chars)"
+                      value={courseData.title}
+                      onChangeText={(text) => handleInputChange("title", text)}
+                      placeholderTextColor={COLORS.textMuted}
+                      maxLength={200}
                     />
-                    <View style={styles.thumbnailOverlay}>
+                    <View style={styles.inputIcon}>
                       <Ionicons
-                        name="checkmark-circle"
-                        size={32}
-                        color="#4caf50"
+                        name="create-outline"
+                        size={20}
+                        color={COLORS.textMuted}
                       />
-                      <Text style={styles.thumbnailSelectedText}>
-                        Ready for Upload
-                      </Text>
-                      <Text style={styles.thumbnailChangeText}>
-                        Tap to change
-                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.helperText}>
+                    {courseData.title.length}/200 characters
+                  </Text>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Description *</Text>
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      placeholder="Describe what students will learn (max 1000 chars)"
+                      value={courseData.description}
+                      onChangeText={(text) =>
+                        handleInputChange("description", text)
+                      }
+                      multiline={true}
+                      numberOfLines={4}
+                      textAlignVertical="top"
+                      placeholderTextColor={COLORS.textMuted}
+                      maxLength={1000}
+                    />
+                  </View>
+                  <Text style={styles.helperText}>
+                    {courseData.description.length}/1000 characters
+                  </Text>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Thumbnail Image *</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.thumbnailUploadArea,
+                      courseData.thumbnailFile && styles.thumbnailSelected,
+                    ]}
+                    onPress={handleThumbnailSelect}
+                    disabled={isCreatingCourse}
+                    activeOpacity={0.8}
+                  >
+                    {courseData.thumbnailFile ? (
+                      <View style={styles.thumbnailPreview}>
+                        <Image
+                          source={{ uri: courseData.thumbnailUrl }}
+                          style={styles.thumbnailImage}
+                          resizeMode="cover"
+                        />
+                        <LinearGradient
+                          colors={["rgba(0,0,0,0.5)", "rgba(0,0,0,0.8)"]}
+                          style={styles.thumbnailOverlay}
+                        >
+                          <View style={styles.thumbnailCheckmark}>
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={40}
+                              color={COLORS.success}
+                            />
+                          </View>
+                          <Text style={styles.thumbnailSelectedText}>
+                            Ready for Upload
+                          </Text>
+                          <Text style={styles.thumbnailChangeText}>
+                            Tap to change
+                          </Text>
+                        </LinearGradient>
+                      </View>
+                    ) : (
+                      <View style={styles.thumbnailPlaceholder}>
+                        <View style={styles.thumbnailIconWrapper}>
+                          <Ionicons
+                            name="image-outline"
+                            size={48}
+                            color={COLORS.primary}
+                          />
+                        </View>
+                        <Text style={styles.thumbnailPlaceholderText}>
+                          Tap to select thumbnail
+                        </Text>
+                        <Text style={styles.thumbnailRequirements}>
+                          16:9 aspect ratio, max 5MB
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Pricing */}
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionIcon}>
+                    <Ionicons name="cash" size={20} color={COLORS.secondary} />
+                  </View>
+                  <Text style={styles.sectionTitle}>Pricing</Text>
+                </View>
+
+                <View style={styles.switchGroup}>
+                  <View style={styles.switchInfo}>
+                    <Text style={styles.label}>Paid Course</Text>
+                    <Text style={styles.switchSubtext}>
+                      Enable to charge for this course
+                    </Text>
+                  </View>
+                  <Switch
+                    value={courseData.isPaid}
+                    onValueChange={(value) =>
+                      handleInputChange("isPaid", value)
+                    }
+                    trackColor={{
+                      false: COLORS.border,
+                      true: COLORS.primaryLight,
+                    }}
+                    thumbColor={courseData.isPaid ? COLORS.primary : "#f4f3f4"}
+                    ios_backgroundColor={COLORS.border}
+                  />
+                </View>
+
+                {courseData.isPaid && (
+                  <Animated.View
+                    style={{
+                      opacity: courseData.isPaid ? 1 : 0,
+                      transform: [
+                        {
+                          translateY: courseData.isPaid ? 0 : -20,
+                        },
+                      ],
+                    }}
+                  >
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>Price per Month (ETH)</Text>
+                      <View style={styles.inputWrapper}>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            priceValidationError && styles.inputError,
+                          ]}
+                          placeholder={
+                            currentMaxPrice
+                              ? `Max: ${currentMaxPrice.toFixed(6)} ETH`
+                              : "0.001"
+                          }
+                          value={courseData.price}
+                          onChangeText={(text) =>
+                            handleInputChange("price", text)
+                          }
+                          keyboardType="decimal-pad"
+                          placeholderTextColor={COLORS.textMuted}
+                        />
+                        <View style={styles.inputIcon}>
+                          <Text style={styles.ethSymbol}>ETH</Text>
+                        </View>
+                      </View>
+                      {priceValidationError ? (
+                        <Text style={styles.errorText}>
+                          {priceValidationError}
+                        </Text>
+                      ) : currentMaxPrice ? (
+                        <Text style={styles.helpText}>
+                          Maximum: {currentMaxPrice.toFixed(6)} ETH (contract
+                          limit)
+                        </Text>
+                      ) : null}
+                    </View>
+                  </Animated.View>
+                )}
+              </View>
+
+              {/* Course Sections */}
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionIcon}>
+                    <Ionicons name="list" size={20} color={COLORS.tertiary} />
+                  </View>
+                  <Text style={styles.sectionTitle}>Course Sections</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.addSectionButton}
+                  onPress={() => setShowAddSectionModal(true)}
+                  disabled={isCreatingCourse}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={[COLORS.primary, COLORS.primaryDark]}
+                    style={styles.addSectionGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Ionicons name="add" size={20} color="#fff" />
+                    <Text style={styles.addSectionText}>Add New Section</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {sections.length > 0 ? (
+                  <View style={styles.sectionsContainer}>
+                    {sections.map((section, index) => (
+                      <SectionItem
+                        key={section.id}
+                        section={section}
+                        index={index}
+                        onRemove={removeSection}
+                        disabled={isCreatingCourse}
+                      />
+                    ))}
+                    <View style={styles.sectionsSummary}>
+                      <View style={styles.summaryRow}>
+                        <View style={styles.summaryItem}>
+                          <Ionicons
+                            name="documents"
+                            size={16}
+                            color={COLORS.primary}
+                          />
+                          <Text style={styles.summaryText}>
+                            {sections.length} section
+                            {sections.length !== 1 ? "s" : ""}
+                          </Text>
+                        </View>
+                        {videosToUpload > 0 && (
+                          <View style={styles.summaryItem}>
+                            <Ionicons
+                              name="videocam"
+                              size={16}
+                              color={COLORS.secondary}
+                            />
+                            <Text style={styles.summaryText}>
+                              {videosToUpload} video
+                              {videosToUpload !== 1 ? "s" : ""}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
                   </View>
                 ) : (
-                  <View style={styles.thumbnailPlaceholder}>
-                    <Ionicons name="image-outline" size={48} color="#9e9e9e" />
-                    <Text style={styles.thumbnailPlaceholderText}>
-                      Tap to select thumbnail
-                    </Text>
-                    <Text style={styles.thumbnailRequirements}>
-                      16:9 aspect ratio, max 5MB
+                  <View style={styles.emptySections}>
+                    <View style={styles.emptySectionsIcon}>
+                      <Ionicons
+                        name="document-outline"
+                        size={48}
+                        color={COLORS.textMuted}
+                      />
+                    </View>
+                    <Text style={styles.emptySectionsText}>
+                      No sections added yet. Add your first section to get
+                      started.
                     </Text>
                   </View>
                 )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Pricing */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>💰 Pricing</Text>
-
-            <View style={styles.switchGroup}>
-              <View style={styles.switchInfo}>
-                <Text style={styles.label}>Paid Course</Text>
-                <Text style={styles.switchSubtext}>
-                  Enable to charge for this course
-                </Text>
               </View>
-              <Switch
-                value={courseData.isPaid}
-                onValueChange={(value) => handleInputChange("isPaid", value)}
-                trackColor={{ false: "#767577", true: "#9747FF" }}
-                thumbColor={courseData.isPaid ? "#fff" : "#f4f3f4"}
-              />
-            </View>
 
-            {courseData.isPaid && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Price per Month (ETH)</Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    priceValidationError && styles.inputError,
-                  ]}
-                  placeholder={
-                    currentMaxPrice
-                      ? `Max: ${currentMaxPrice.toFixed(6)} ETH`
-                      : "0.001"
-                  }
-                  value={courseData.price}
-                  onChangeText={(text) => handleInputChange("price", text)}
-                  keyboardType="decimal-pad"
-                  placeholderTextColor="#999"
-                />
-                {priceValidationError ? (
-                  <Text style={styles.errorText}>{priceValidationError}</Text>
-                ) : currentMaxPrice ? (
-                  <Text style={styles.helpText}>
-                    Maximum: {currentMaxPrice.toFixed(6)} ETH (contract limit)
-                  </Text>
-                ) : null}
-              </View>
-            )}
-          </View>
-
-          {/* Course Sections */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>📖 Course Sections</Text>
-              <TouchableOpacity
-                style={styles.addSectionButton}
-                onPress={() => setShowAddSectionModal(true)}
-                disabled={isCreatingCourse}
-              >
-                <Ionicons name="add" size={20} color="#9747FF" />
-                <Text style={styles.addSectionText}>Add Section</Text>
-              </TouchableOpacity>
-            </View>
-
-            {sections.length > 0 ? (
-              <View style={styles.sectionsContainer}>
-                {sections.map((section, index) => (
-                  <SectionItem
-                    key={section.id}
-                    section={section}
-                    index={index}
-                    onRemove={removeSection}
-                    disabled={isCreatingCourse}
+              {/* Network Info */}
+              <View style={styles.networkInfo}>
+                <LinearGradient
+                  colors={["#f3f0ff", "#f8f6ff"]}
+                  style={styles.networkInfoGradient}
+                >
+                  <Ionicons
+                    name="information-circle"
+                    size={20}
+                    color={COLORS.primary}
                   />
-                ))}
-                <View style={styles.sectionsSummary}>
-                  <Text style={styles.sectionsCount}>
-                    {sections.length} section{sections.length !== 1 ? "s" : ""}{" "}
-                    added
+                  <Text style={styles.networkInfoText}>
+                    Creating on Manta Pacific Sepolia. Each section requires a
+                    separate transaction with 3s delay for network stability.
                   </Text>
-                  {videosToUpload > 0 && (
-                    <Text style={styles.videosSummary}>
-                      📹 {videosToUpload} video{videosToUpload !== 1 ? "s" : ""}{" "}
-                      ready
+                </LinearGradient>
+              </View>
+
+              {/* Create Button */}
+              <TouchableOpacity
+                style={[
+                  styles.createButton,
+                  (sections.length === 0 ||
+                    isCreatingCourse ||
+                    !courseData.thumbnailFile ||
+                    !isInitialized ||
+                    modalPreventionActive ||
+                    priceValidationError) &&
+                    styles.disabledButton,
+                ]}
+                onPress={handleCreateCourse}
+                disabled={
+                  sections.length === 0 ||
+                  isCreatingCourse ||
+                  !courseData.thumbnailFile ||
+                  !isInitialized ||
+                  modalPreventionActive ||
+                  !!priceValidationError
+                }
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={
+                    sections.length === 0 ||
+                    isCreatingCourse ||
+                    !courseData.thumbnailFile ||
+                    !isInitialized ||
+                    modalPreventionActive ||
+                    priceValidationError
+                      ? [COLORS.border, COLORS.textMuted]
+                      : [COLORS.primary, COLORS.primaryDark]
+                  }
+                  style={styles.createButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isCreatingCourse ? (
+                    <View style={styles.creatingContent}>
+                      <ActivityIndicator size="small" color="white" />
+                      <Text style={styles.createButtonText}>
+                        {currentStep ||
+                          uploadProgress.message ||
+                          "Creating Course..."}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.createContent}>
+                      <Ionicons name="rocket-outline" size={24} color="white" />
+                      <Text style={styles.createButtonText}>
+                        Create Course{" "}
+                        {totalFiles > 0 && `(${totalFiles} files)`}
+                      </Text>
+                    </View>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Progress Display */}
+              {isCreatingCourse && uploadProgress.phase > 0 && (
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressHeader}>
+                    <Text style={styles.progressTitle}>
+                      Creating Your Course
+                    </Text>
+                    <Text style={styles.progressPercentage}>
+                      {createProgress}%
+                    </Text>
+                  </View>
+                  <View style={styles.progressBar}>
+                    <Animated.View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${createProgress}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {uploadProgress.message}
+                  </Text>
+                  <View style={styles.progressStats}>
+                    {uploadProgress.phase === 1 && (
+                      <View style={styles.progressStatItem}>
+                        <Ionicons
+                          name="cloud-upload"
+                          size={16}
+                          color={COLORS.primary}
+                        />
+                        <Text style={styles.progressStat}>
+                          Files: {uploadProgress.completedFiles}/
+                          {uploadProgress.totalFiles}
+                        </Text>
+                      </View>
+                    )}
+                    {uploadProgress.phase === 2 && (
+                      <View style={styles.progressStatItem}>
+                        <Ionicons
+                          name="cube"
+                          size={16}
+                          color={COLORS.primary}
+                        />
+                        <Text style={styles.progressStat}>
+                          Creating on blockchain...
+                        </Text>
+                      </View>
+                    )}
+                    {uploadProgress.phase === 3 && (
+                      <View style={styles.progressStatItem}>
+                        <Ionicons
+                          name="layers"
+                          size={16}
+                          color={COLORS.primary}
+                        />
+                        <Text style={styles.progressStat}>
+                          Adding sections...
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {currentStep && (
+                    <Text style={styles.currentStepText}>
+                      Current step: {currentStep}
                     </Text>
                   )}
                 </View>
-              </View>
-            ) : (
-              <View style={styles.emptySections}>
-                <Ionicons name="document-outline" size={48} color="#ccc" />
-                <Text style={styles.emptySectionsText}>
-                  No sections added yet. Add your first section to get started.
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Network Info */}
-          <View style={styles.networkInfo}>
-            <Ionicons name="information-circle" size={20} color="#9747FF" />
-            <Text style={styles.networkInfoText}>
-              Creating on Manta Pacific Sepolia. Each section requires a
-              separate transaction with 3s delay for network stability.
-            </Text>
-          </View>
-
-          {/* Create Button */}
-          <TouchableOpacity
-            style={[
-              styles.createButton,
-              (sections.length === 0 ||
-                isCreatingCourse ||
-                !courseData.thumbnailFile ||
-                !isInitialized ||
-                modalPreventionActive ||
-                priceValidationError) &&
-                styles.disabledButton,
-            ]}
-            onPress={handleCreateCourse}
-            disabled={
-              sections.length === 0 ||
-              isCreatingCourse ||
-              !courseData.thumbnailFile ||
-              !isInitialized ||
-              modalPreventionActive ||
-              !!priceValidationError
-            }
-          >
-            {isCreatingCourse ? (
-              <View style={styles.creatingContent}>
-                <ActivityIndicator size="small" color="white" />
-                <Text style={styles.createButtonText}>
-                  {currentStep ||
-                    uploadProgress.message ||
-                    "Creating Course..."}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.createContent}>
-                <Ionicons name="rocket-outline" size={20} color="white" />
-                <Text style={styles.createButtonText}>
-                  Create Course {totalFiles > 0 && `(${totalFiles} files)`}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          {/* Progress Display */}
-          {isCreatingCourse && uploadProgress.phase > 0 && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View
-                  style={[styles.progressFill, { width: `${createProgress}%` }]}
-                />
-              </View>
-              <Text style={styles.progressText}>{uploadProgress.message}</Text>
-              <View style={styles.progressStats}>
-                <Text style={styles.progressStat}>
-                  Progress: {createProgress}%
-                </Text>
-                {uploadProgress.phase === 1 && (
-                  <Text style={styles.progressStat}>
-                    Files: {uploadProgress.completedFiles}/
-                    {uploadProgress.totalFiles}
-                  </Text>
-                )}
-                {uploadProgress.phase === 2 && (
-                  <Text style={styles.progressStat}>
-                    Creating course on blockchain...
-                  </Text>
-                )}
-                {uploadProgress.phase === 3 && (
-                  <Text style={styles.progressStat}>
-                    Adding sections to course...
-                  </Text>
-                )}
-              </View>
-              {currentStep && (
-                <Text style={styles.currentStepText}>
-                  Current step: {currentStep}
-                </Text>
               )}
-            </View>
-          )}
 
-          {/* Safety padding */}
-          <View style={styles.safeBottomPadding} />
-        </View>
-      </ScrollView>
+              {/* Safety padding */}
+              <View style={styles.safeBottomPadding} />
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Add Section Modal */}
       <AddSectionModal
@@ -1110,47 +1307,78 @@ export default function CreateCourseScreen({ navigation }) {
   );
 }
 
-// Section Item Component
-const SectionItem = React.memo(({ section, index, onRemove, disabled }) => (
-  <View style={styles.sectionItem}>
-    <View style={styles.sectionInfo}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
-          {index + 1}. {section.title}
-        </Text>
-        {section.videoFile && (
-          <View style={styles.videoStatusBadge}>
-            <Ionicons name="videocam" size={16} color="#2e7d32" />
-            <Text style={styles.videoStatusText}>Video Ready</Text>
-          </View>
-        )}
-      </View>
-      <Text style={styles.sectionDuration}>
-        {Math.round(section.duration / 60)} minutes ({section.duration} seconds)
-      </Text>
-      {section.videoFile && (
-        <Text style={styles.sectionVideoFile}>📹 {section.videoFile.name}</Text>
-      )}
-    </View>
-    <TouchableOpacity
-      style={[styles.removeButton, disabled && styles.disabledRemoveButton]}
-      onPress={() => onRemove(section.id)}
-      disabled={disabled}
-      activeOpacity={0.7}
+// Enhanced Section Item Component
+const SectionItem = React.memo(({ section, index, onRemove, disabled }) => {
+  const scaleAnim = useState(new Animated.Value(0))[0];
+
+  React.useEffect(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      tension: 100,
+      friction: 10,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.sectionItem,
+        {
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
     >
-      <Ionicons
-        name="trash-outline"
-        size={20}
-        color={disabled ? "#ccc" : "#ff4444"}
-      />
-    </TouchableOpacity>
-  </View>
-));
+      <View style={styles.sectionNumber}>
+        <Text style={styles.sectionNumberText}>{index + 1}</Text>
+      </View>
+
+      <View style={styles.sectionContent}>
+        <View style={styles.sectionMainInfo}>
+          <Text style={styles.sectionItemTitle} numberOfLines={2}>
+            {section.title}
+          </Text>
+          <View style={styles.sectionMetaRow}>
+            <View style={styles.sectionMetaItem}>
+              <Ionicons
+                name="time-outline"
+                size={14}
+                color={COLORS.textSecondary}
+              />
+              <Text style={styles.sectionDuration}>
+                {Math.round(section.duration / 60)} min
+              </Text>
+            </View>
+            {section.videoFile && (
+              <View style={styles.sectionMetaItem}>
+                <Ionicons name="videocam" size={14} color={COLORS.success} />
+                <Text style={styles.videoStatusText}>Video ready</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.removeButton, disabled && styles.disabledRemoveButton]}
+          onPress={() => onRemove(section.id)}
+          disabled={disabled}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name="trash-outline"
+            size={20}
+            color={disabled ? COLORS.textMuted : COLORS.error}
+          />
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: COLORS.background,
   },
   scrollContainer: {
     flexGrow: 1,
@@ -1162,159 +1390,216 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
+  iconGradient: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  warningIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#FFF3E0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+  },
   notConnectedTitle: {
     fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-    marginTop: 20,
+    fontWeight: "700",
+    color: COLORS.text,
     marginBottom: 8,
   },
   notConnectedSubtitle: {
     fontSize: 16,
-    color: "#666",
+    color: COLORS.textSecondary,
     textAlign: "center",
   },
   warningTitle: {
     fontSize: 24,
-    fontWeight: "bold",
-    color: "#ff9500",
-    marginTop: 20,
+    fontWeight: "700",
+    color: COLORS.warning,
     marginBottom: 8,
   },
   warningSubtitle: {
     fontSize: 16,
-    color: "#666",
+    color: COLORS.textSecondary,
     textAlign: "center",
   },
+
+  // Header - Fixed: removed gradient
   header: {
     padding: 20,
     paddingBottom: 10,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 32,
+    fontWeight: "800",
+    color: COLORS.text,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: COLORS.textSecondary,
   },
+
+  // Form
   form: {
     padding: 20,
     paddingTop: 10,
   },
   section: {
-    marginBottom: 30,
-    backgroundColor: "white",
-    borderRadius: 12,
+    marginBottom: 32,
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
     padding: 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 16,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   sectionHeader: {
     flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  sectionHeaderWithButton: {
+    flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
+  sectionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  sectionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+
+  // Inputs
   inputGroup: {
     marginBottom: 20,
   },
   label: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
+    color: COLORS.text,
     marginBottom: 8,
   },
+  inputWrapper: {
+    position: "relative",
+  },
   input: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    padding: 14,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingRight: 50,
     fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    color: "#333",
+    borderWidth: 2,
+    borderColor: "transparent",
+    color: COLORS.text,
+  },
+  inputIcon: {
+    position: "absolute",
+    right: 16,
+    top: "50%",
+    transform: [{ translateY: -10 }],
+  },
+  ethSymbol: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.primary,
   },
   inputError: {
-    borderColor: "#ff4444",
-    borderWidth: 2,
-  },
-  errorText: {
-    fontSize: 12,
-    color: "#ff4444",
-    marginTop: 4,
-  },
-  helpText: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 4,
-  },
-  helperText: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 4,
+    borderColor: COLORS.error,
   },
   textArea: {
     height: 120,
-    paddingTop: 12,
+    paddingTop: 14,
     textAlignVertical: "top",
+    paddingRight: 16,
   },
+  errorText: {
+    fontSize: 14,
+    color: COLORS.error,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  helpText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  helperText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+
+  // Switch
   switchGroup: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
+    backgroundColor: COLORS.surface,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
   },
   switchInfo: {
     flex: 1,
   },
   switchSubtext: {
     fontSize: 14,
-    color: "#666",
+    color: COLORS.textSecondary,
     marginTop: 2,
   },
 
-  // Thumbnail styles
+  // Thumbnail
   thumbnailUploadArea: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
     borderWidth: 2,
-    borderColor: "#e0e0e0",
+    borderColor: COLORS.border,
     borderStyle: "dashed",
-    minHeight: 200,
+    minHeight: 220,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
   },
   thumbnailSelected: {
-    borderColor: "#9747FF",
+    borderColor: COLORS.primary,
     borderStyle: "solid",
-    backgroundColor: "white",
   },
   thumbnailPreview: {
     width: "100%",
-    height: 200,
+    height: 220,
     position: "relative",
   },
   thumbnailImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 8,
+    borderRadius: 14,
   },
   thumbnailOverlay: {
     position: "absolute",
@@ -1322,178 +1607,238 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: 14,
+  },
+  thumbnailCheckmark: {
+    marginBottom: 8,
   },
   thumbnailSelectedText: {
     color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 8,
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 4,
   },
   thumbnailChangeText: {
     color: "white",
-    fontSize: 12,
-    opacity: 0.8,
-    marginTop: 4,
+    fontSize: 14,
+    opacity: 0.9,
   },
   thumbnailPlaceholder: {
     alignItems: "center",
     padding: 20,
   },
+  thumbnailIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.surface,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   thumbnailPlaceholderText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#666",
-    marginTop: 12,
+    fontSize: 17,
+    fontWeight: "600",
+    color: COLORS.text,
     marginBottom: 8,
   },
   thumbnailRequirements: {
-    fontSize: 12,
-    color: "#9e9e9e",
+    fontSize: 14,
+    color: COLORS.textMuted,
     textAlign: "center",
   },
 
-  // Section styles
+  // Sections
   addSectionButton: {
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  addSectionGradient: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f8f9fa",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#9747FF",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
   },
   addSectionText: {
-    color: "#9747FF",
-    fontSize: 14,
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
-    marginLeft: 4,
+    marginLeft: 8,
   },
   sectionsContainer: {
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 4,
   },
   sectionItem: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    marginBottom: 8,
+    padding: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  sectionInfo: {
+  sectionNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary + "15",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  sectionNumberText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  sectionContent: {
     flex: 1,
-    paddingRight: 10,
-  },
-  videoStatusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#e8f5e9",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 8,
+  },
+  sectionMainInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  sectionItemTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  sectionMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  sectionMetaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sectionDuration: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginLeft: 4,
   },
   videoStatusText: {
-    fontSize: 12,
-    color: "#2e7d32",
+    fontSize: 13,
+    color: COLORS.success,
     marginLeft: 4,
     fontWeight: "500",
   },
-  sectionDuration: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 4,
-  },
-  sectionVideoFile: {
-    fontSize: 12,
-    color: "#9747FF",
-    marginTop: 2,
-  },
   removeButton: {
-    padding: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: COLORS.error + "10",
+    justifyContent: "center",
+    alignItems: "center",
     marginLeft: 8,
   },
   disabledRemoveButton: {
-    opacity: 0.5,
+    backgroundColor: COLORS.border,
   },
   sectionsSummary: {
-    alignItems: "center",
-    marginTop: 12,
     paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    paddingHorizontal: 8,
   },
-  sectionsCount: {
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  summaryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 12,
+  },
+  summaryText: {
     fontSize: 14,
-    color: "#666",
-    fontStyle: "italic",
-  },
-  videosSummary: {
-    fontSize: 12,
-    color: "#9747FF",
-    marginTop: 4,
+    color: COLORS.textSecondary,
+    marginLeft: 6,
     fontWeight: "500",
   },
   emptySections: {
     alignItems: "center",
-    paddingVertical: 40,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    paddingVertical: 48,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.border,
     borderStyle: "dashed",
   },
+  emptySectionsIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   emptySectionsText: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 15,
+    color: COLORS.textSecondary,
     textAlign: "center",
-    marginTop: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 40,
+    lineHeight: 22,
   },
 
   // Network info
   networkInfo: {
+    marginBottom: 24,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  networkInfoGradient: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#f3f0ff",
     padding: 16,
-    borderRadius: 8,
-    marginBottom: 20,
   },
   networkInfoText: {
     fontSize: 14,
-    color: "#6b46c1",
-    marginLeft: 8,
+    color: COLORS.primary,
+    marginLeft: 12,
     flex: 1,
     lineHeight: 20,
   },
 
-  // Button styles
+  // Create button
   createButton: {
-    backgroundColor: "#9747FF",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginTop: 20,
-    marginBottom: 10,
-    shadowColor: "#9747FF",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    borderRadius: 16,
+    overflow: "hidden",
+    marginTop: 8,
+    marginBottom: 16,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
   },
   disabledButton: {
-    backgroundColor: "#ccc",
     shadowOpacity: 0.1,
+  },
+  createButtonGradient: {
+    paddingVertical: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
   createContent: {
     flexDirection: "row",
@@ -1506,65 +1851,80 @@ const styles = StyleSheet.create({
   createButtonText: {
     color: "white",
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
     marginLeft: 8,
   },
 
-  // Progress styles
+  // Progress
   progressContainer: {
     marginBottom: 20,
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    backgroundColor: COLORS.background,
+    padding: 20,
+    borderRadius: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  progressBar: {
-    height: 10,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 5,
-    overflow: "hidden",
-    marginBottom: 12,
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#9747FF",
-    borderRadius: 5,
-  },
-  progressText: {
-    fontSize: 14,
-    color: "#333",
-    textAlign: "center",
-    marginBottom: 8,
-    fontWeight: "500",
-  },
-  progressStats: {
+  progressHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 8,
+    marginBottom: 12,
+  },
+  progressTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  progressPercentage: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: 4,
+    overflow: "hidden",
+    marginBottom: 16,
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 15,
+    color: COLORS.text,
+    marginBottom: 12,
+    fontWeight: "500",
+  },
+  progressStats: {
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    borderTopColor: COLORS.border,
+  },
+  progressStatItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
   },
   progressStat: {
-    fontSize: 13,
-    color: "#9747FF",
-    fontWeight: "600",
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginLeft: 8,
+    fontWeight: "500",
   },
   currentStepText: {
-    fontSize: 12,
-    color: "#666",
+    fontSize: 13,
+    color: COLORS.textMuted,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 12,
     fontStyle: "italic",
   },
 
-  // Safety padding at bottom
   safeBottomPadding: {
     height: 40,
   },
