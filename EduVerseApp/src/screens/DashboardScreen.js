@@ -1,4 +1,3 @@
-// src/screens/DashboardScreen.js - Enhanced for Indonesian Users
 import React, {
   useState,
   useEffect,

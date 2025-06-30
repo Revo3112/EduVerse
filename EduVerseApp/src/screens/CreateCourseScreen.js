@@ -1,4 +1,3 @@
-// src/screens/CreateCourseScreen.js - Fixed Layout Version
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
