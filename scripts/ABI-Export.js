@@ -25,8 +25,6 @@ async function main() {
     "ProgressTracker",
     "CertificateManager",
     // "PlatformFactory", // Not used in actual deployment, skipped for cleaner exports
-    "PlatformRegistry",
-    "MockV3Aggregator",
   ];
 
   console.log(`🔄 Exporting ${contracts.length} contracts...`);
@@ -73,8 +71,6 @@ async function main() {
         progressTracker: addresses.progressTracker,
         certificateManager: addresses.certificateManager,
         // platformFactory: addresses.platformFactory || null, // Not used in actual deployment
-        platformRegistry: addresses.platformRegistry,
-        mockV3Aggregator: addresses.mockPriceFeed, // Map mockPriceFeed to mockV3Aggregator for consistency
       },
     };
 
@@ -107,8 +103,6 @@ EXPO_PUBLIC_COURSE_FACTORY_ADDRESS=${addresses.courseFactory}
 EXPO_PUBLIC_COURSE_LICENSE_ADDRESS=${addresses.courseLicense}
 EXPO_PUBLIC_PROGRESS_TRACKER_ADDRESS=${addresses.progressTracker}
 EXPO_PUBLIC_CERTIFICATE_MANAGER_ADDRESS=${addresses.certificateManager}
-EXPO_PUBLIC_PLATFORM_REGISTRY_ADDRESS=${addresses.platformRegistry}
-EXPO_PUBLIC_MOCK_V3_AGGREGATOR_ADDRESS=${addresses.mockPriceFeed}
 
 # Network Configuration
 EXPO_PUBLIC_CHAIN_ID=${addresses.chainId}

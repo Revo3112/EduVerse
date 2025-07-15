@@ -33,8 +33,8 @@ async function updateMobileEnv() {
       EXPO_PUBLIC_COURSE_LICENSE_ADDRESS: addresses.courseLicense,
       EXPO_PUBLIC_PROGRESS_TRACKER_ADDRESS: addresses.progressTracker,
       EXPO_PUBLIC_CERTIFICATE_MANAGER_ADDRESS: addresses.certificateManager,
-      EXPO_PUBLIC_PLATFORM_REGISTRY_ADDRESS: addresses.platformRegistry,
-      EXPO_PUBLIC_MOCK_V3_AGGREGATOR_ADDRESS: addresses.mockPriceFeed, // Map mockPriceFeed to MOCK_V3_AGGREGATOR for consistency
+      
+      
       EXPO_PUBLIC_CHAIN_ID: addresses.chainId.toString(),
       EXPO_PUBLIC_NETWORK_NAME: addresses.network,
     };

@@ -9,8 +9,8 @@ import {
   CourseLicenseABI,
   ProgressTrackerABI,
   CertificateManagerABI,
-  PlatformRegistryABI,
-  MockV3AggregatorABI,
+
+  
   CONTRACT_NAMES,
   CONTRACT_ABIS,
 } from "./index.js";
@@ -22,8 +22,8 @@ export const getContractAddress = (contractNameKey) => {
     [CONTRACT_NAMES.COURSE_LICENSE]: "courseLicense",
     [CONTRACT_NAMES.PROGRESS_TRACKER]: "progressTracker",
     [CONTRACT_NAMES.CERTIFICATE_MANAGER]: "certificateManager",
-    [CONTRACT_NAMES.PLATFORM_REGISTRY]: "platformRegistry",
-    [CONTRACT_NAMES.MOCK_V3_AGGREGATOR]: "mockV3Aggregator",
+    
+    
   };
 
   const contractKey = contractKeyMapping[contractNameKey];
@@ -54,8 +54,8 @@ export const validateContractSetup = () => {
     "courseLicense",
     "progressTracker",
     "certificateManager",
-    "platformRegistry",
-    "mockV3Aggregator",
+    
+    
   ];
 
   const missingContracts = requiredContracts.filter(
@@ -81,7 +81,7 @@ export {
   CourseLicenseABI,
   ProgressTrackerABI,
   CertificateManagerABI,
-  PlatformRegistryABI,
-  MockV3AggregatorABI,
+
+  
   ContractAddresses,
 };

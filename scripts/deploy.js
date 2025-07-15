@@ -10,20 +10,12 @@ async function main() {
   console.log(`💰 Account balance: ${ethers.utils.formatEther(await deployer.getBalance())} ETH`);
 
   try {
-    // 1. Deploy MockV3Aggregator untuk ETH/USD price feed
-    console.log("\n1️⃣ Deploying MockV3Aggregator...");
-    const MockV3Aggregator = await ethers.getContractFactory("MockV3Aggregator");
-    const mockPriceFeed = await MockV3Aggregator.deploy(
-      8,                // 8 decimals
-      200000000000      // $2000 per ETH (8 decimals)
-    );
-    await mockPriceFeed.deployed();
-    console.log(`✅ MockV3Aggregator deployed to: ${mockPriceFeed.address}`);
+    
 
     // 2. Deploy CourseFactory
     console.log("\n2️⃣ Deploying CourseFactory...");
     const CourseFactory = await ethers.getContractFactory("CourseFactory");
-    const courseFactory = await CourseFactory.deploy(mockPriceFeed.address);
+    const courseFactory = await CourseFactory.deploy();
     await courseFactory.deployed();
     console.log(`✅ CourseFactory deployed to: ${courseFactory.address}`);
 
@@ -33,7 +25,7 @@ async function main() {
     const courseLicense = await CourseLicense.deploy(
       courseFactory.address,
       deployer.address,  // Platform wallet
-      mockPriceFeed.address
+      
     );
     await courseLicense.deployed();
     console.log(`✅ CourseLicense deployed to: ${courseLicense.address}`);
@@ -59,35 +51,21 @@ async function main() {
     await certificateManager.deployed();
     console.log(`✅ CertificateManager deployed to: ${certificateManager.address}`);
 
-    // 6. Deploy PlatformRegistry - kontrak ringan untuk registrasi
-    console.log("\n6️⃣ Deploying PlatformRegistry...");
-    const PlatformRegistry = await ethers.getContractFactory("PlatformRegistry");
-    const platformRegistry = await PlatformRegistry.deploy();
-    await platformRegistry.deployed();
-    console.log(`✅ PlatformRegistry deployed to: ${platformRegistry.address}`);
+    
 
-    // 7. Register semua komponen di Registry
-    console.log("\n7️⃣ Registering platform components...");
-    const registerTx = await platformRegistry.registerPlatform(
-      courseFactory.address,
-      courseLicense.address,
-      progressTracker.address,
-      certificateManager.address
-    );
-    await registerTx.wait();
-    console.log("✅ All components registered in PlatformRegistry");
+    
 
     // Simpan alamat kontrak di file JSON
     const addresses = {
       network: network.name,
       chainId: network.config.chainId,
       deployer: deployer.address,
-      mockPriceFeed: mockPriceFeed.address,
+      
       courseFactory: courseFactory.address,
       courseLicense: courseLicense.address,
       progressTracker: progressTracker.address,
       certificateManager: certificateManager.address,
-      platformRegistry: platformRegistry.address,
+      
       deployDate: new Date().toISOString()
     };
 

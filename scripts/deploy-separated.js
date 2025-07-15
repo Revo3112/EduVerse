@@ -43,20 +43,19 @@ async function main() {
       deployer.address
     );
 
-    // Skip PlatformRegistry karena optional
-    console.log("\n⚠️  Skipping PlatformRegistry deployment (optional)");
+    
 
     // Save contract addresses to JSON file
     const addresses = {
       network: network.name,
       chainId: network.config.chainId,
       deployer: deployer.address,
-      mockPriceFeed: "NOT_USED", // Tidak digunakan di versi baru
+      
       courseFactory: deployedCourseFactory,
       courseLicense: deployedCourseLicense,
       progressTracker: progressTracker.target,
       certificateManager: certificateManager.target,
-      platformRegistry: "NOT_DEPLOYED", // Optional, skip
+      
       deployDate: new Date().toISOString(),
     };
 

@@ -2,11 +2,9 @@
   "network": "mantaPacificTestnet",
   "chainId": 3441006,
   "deployer": "0xb5075eB5734bc8A6a9bbC1Ca299Fd8C0bd4Cff58",
-  "mockPriceFeed": "NOT_USED",
   "courseFactory": "0x58052b96b05fFbE5ED31C376E7762b0F6051e15A",
   "courseLicense": "0x32b235fDabbcF4575aF259179e30a228b1aC72a9",
   "progressTracker": "0x6e3B6FbE90Ae4fca8Ff5eB207A61193ef204FA18",
   "certificateManager": "0x857e484cd949888736d71C0EfC7D981897Df3e61",
-  "platformRegistry": "NOT_DEPLOYED",
   "deployDate": "2025-06-29T09:45:36.812Z"
 }
