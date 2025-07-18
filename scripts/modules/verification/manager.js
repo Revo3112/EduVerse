@@ -45,7 +45,7 @@ class VerificationManager {
 
     try {
       await executeCommand(
-        'npx hardhat run scripts/verify.js --network mantaPacificTestnet',
+        'npx hardhat run scripts/verify-comprehensive.js --network mantaPacificTestnet',
         'Verifying contracts on blockchain'
       );
 
@@ -85,7 +85,7 @@ class VerificationManager {
 
     try {
       const result = await executeCommand(
-        'node scripts/verify-abi-usage.js',
+        'npx hardhat run scripts/verify-comprehensive.js --network mantaPacificTestnet',
         'Checking ABI consistency',
         { silent: true }
       );

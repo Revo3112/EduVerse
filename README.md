@@ -46,7 +46,7 @@ npm run setup:mobile  # Setup mobile environment
 ```
 scripts/
 ├── portal.js              # 🚀 Main Portal Entry Point
-├── quick.js               # ⚡ Enhanced Quick Actions
+├── portal.js              # 🎪 Main Interface - All operations
 ├── core/
 │   └── system.js          # 🔧 Core utilities & enhanced logging
 ├── modules/
@@ -219,7 +219,7 @@ npm run setup:mobile
 ├── contracts/         # Smart Contract source code (Solidity)
 ├── scripts/           # Development portal & deployment scripts
 │   ├── portal.js      # 🚀 Main Portal Interface
-│   ├── quick.js       # ⚡ Quick Actions
+│   ├── portal.js       # 🎪 Main Interface
 │   ├── core/          # 🔧 Core utilities
 │   └── modules/       # 📦 Modular managers
 ├── test/              # Smart Contract tests

@@ -12,16 +12,11 @@
 
     "deploy": "npx hardhat run scripts/deploy.js --network mantaPacificTestnet",
     "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
-    "deploy:separated": "npx hardhat run scripts/deploy-separated.js --network mantaPacificTestnet",
 
-    "verify": "npx hardhat run scripts/verify.js --network mantaPacificTestnet",
     "verify:comprehensive": "npx hardhat run scripts/verify-comprehensive.js --network mantaPacificTestnet",
-    "verify:abi": "node scripts/verify-abi-usage.js",
 
     "portal": "node scripts/portal.js",
     "dev": "node scripts/portal.js",
-    "cli": "node scripts/eduverse-cli.js",
-    "quick": "node scripts/quick.js",
     "network": "node scripts/network-helper.js",
 
     "test:interact": "npx hardhat run scripts/testnet-interact.js --network mantaPacificTestnet",
@@ -29,9 +24,11 @@
     "test:licenses": "npx hardhat run scripts/testing-my-licenses.js --network mantaPacificTestnet",
     "test:update": "npx hardhat run scripts/update_course.js --network mantaPacificTestnet",
 
-    "export:abi": "node scripts/ABI-Export.js",
-    "update:env": "node scripts/update-mobile-env.js",
-    "setup:mobile": "npm run export:abi && npm run update:env"
+    "export:abi": "node scripts/export-system.js --target=all --skip-env",
+    "export:mobile": "node scripts/export-system.js --target=mobile --skip-env",
+    "export:frontend": "node scripts/export-system.js --target=frontend",
+    "update:env": "node scripts/export-system.js --env-only",
+    "setup:mobile": "node scripts/export-system.js --target=mobile"
   },
   "keywords": [
     "web3",

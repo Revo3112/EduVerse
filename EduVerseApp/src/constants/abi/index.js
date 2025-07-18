@@ -1,5 +1,5 @@
 // Auto-generated ABI exports
-// Generated on: 2025-07-18T12:22:31.697Z
+// Generated on: 2025-07-18T14:27:42.919Z
 
 export { default as CourseFactoryABI } from './CourseFactory.json';
 export { default as CourseLicenseABI } from './CourseLicense.json';

@@ -4,12 +4,14 @@
  */
 
 const { Logger, executeCommand, getNetworkInfo, ensureDirectory } = require('../../core/system');
+const { ExportSystem } = require('../../export-system');
 const fs = require('fs');
 const path = require('path');
 
 class DeploymentManager {
   constructor() {
     this.deploymentHistory = [];
+    this.exportSystem = new ExportSystem();
   }
 
   /**
@@ -71,7 +73,7 @@ class DeploymentManager {
     try {
       await this.compile();
       await executeCommand(
-        'npx hardhat run scripts/deploy-separated.js --network mantaPacificTestnet',
+        'npx hardhat run scripts/deploy.js --network mantaPacificTestnet',
         'Deploying with separated approach'
       );
 
@@ -108,7 +110,7 @@ class DeploymentManager {
    */
   async exportABIs() {
     Logger.step(3, 4, "Exporting ABI files");
-    await executeCommand('node scripts/ABI-Export.js', 'Exporting ABI files');
+    await this.exportSystem.export({ target: "all", skipEnv: true });
   }
 
   /**
@@ -116,7 +118,7 @@ class DeploymentManager {
    */
   async updateMobileEnvironment() {
     Logger.step(4, 4, "Updating mobile environment");
-    await executeCommand('node scripts/update-mobile-env.js', 'Updating mobile environment');
+    await this.exportSystem.export({ envOnly: true });
   }
 
   /**

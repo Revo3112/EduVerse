@@ -186,12 +186,13 @@ class EduVersePortal {
   async utilitiesMenu() {
     const menu = {
       '1': { name: 'Complete Mobile Setup', handler: () => this.utilities.setupMobileComplete() },
-      '2': { name: 'Export ABI Files', handler: () => this.utilities.exportABIs() },
-      '3': { name: 'Update Mobile Environment', handler: () => this.utilities.updateMobileEnvironment() },
-      '4': { name: 'Manual ABI Export', handler: () => this.utilities.exportABIsManual() },
-      '5': { name: 'Get Network Information', handler: () => this.utilities.getNetworkInfo() },
-      '6': { name: 'Show Utilities Status', handler: () => this.utilities.displayStatus() },
-      '7': { name: 'Clean Utility Files', handler: () => this.utilities.clean() },
+      '2': { name: 'Export ABI Files (All Targets)', handler: () => this.utilities.exportABIs() },
+      '3': { name: 'Export ABI to Mobile Only', handler: () => this.utilities.exportMobileOnly() },
+      '4': { name: 'Export ABI to Frontend Only', handler: () => this.utilities.exportFrontendOnly() },
+      '5': { name: 'Update Mobile Environment', handler: () => this.utilities.updateMobileEnvironment() },
+      '6': { name: 'Get Network Information', handler: () => this.utilities.getNetworkInfo() },
+      '7': { name: 'Show Utilities Status', handler: () => this.utilities.displayStatus() },
+      '8': { name: 'Clean Utility Files', handler: () => this.utilities.clean() },
       '0': { name: '← Back to Main Menu', handler: () => true }
     };
 

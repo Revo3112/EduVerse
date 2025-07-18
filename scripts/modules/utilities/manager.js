@@ -4,11 +4,14 @@
  */
 
 const { Logger, executeCommand, getNetworkInfo, colors, ensureDirectory, fileExists } = require('../../core/system');
+const { ExportSystem } = require('../../export-system');
 const fs = require('fs');
 const path = require('path');
 
 class UtilitiesManager {
   constructor() {
+    this.exportSystem = new ExportSystem();
+    // Keep abiPaths for backward compatibility with existing functions
     this.abiPaths = {
       mobile: 'EduVerseApp/src/constants/abi',
       frontend: 'frontend_website/eduverse/abis',
@@ -23,11 +26,8 @@ class UtilitiesManager {
     Logger.header("Complete Mobile App Setup");
 
     try {
-      // Step 1: Export ABI files
-      await this.exportABIs();
-
-      // Step 2: Update mobile environment
-      await this.updateMobileEnvironment();
+      // Use unified export system for complete mobile setup
+      await this.exportSystem.export({ target: "mobile" });
 
       Logger.success("Complete mobile setup finished!");
       return true;
@@ -45,7 +45,7 @@ class UtilitiesManager {
     Logger.header("ABI Export Process");
 
     try {
-      await executeCommand('node scripts/ABI-Export.js', 'Exporting ABI files');
+      await this.exportSystem.export({ target: "all", skipEnv: true });
       return true;
 
     } catch (error) {
@@ -61,7 +61,7 @@ class UtilitiesManager {
     Logger.header("Mobile Environment Update");
 
     try {
-      await executeCommand('node scripts/update-mobile-env.js', 'Updating mobile environment');
+      await this.exportSystem.export({ envOnly: true });
       return true;
 
     } catch (error) {
@@ -77,31 +77,46 @@ class UtilitiesManager {
     Logger.header("Manual ABI Export");
 
     try {
-      // Ensure directories exist
-      ensureDirectory(this.abiPaths.mobile);
-      ensureDirectory(this.abiPaths.frontend);
-
-      // Contract list
-      const contracts = ['CourseFactory', 'CourseLicense', 'ProgressTracker', 'CertificateManager'];
-
-      Logger.info(`Exporting ${contracts.length} contracts...`);
-
-      // Export each contract
-      for (const contract of contracts) {
-        await this.exportSingleContract(contract);
-      }
-
-      // Export contract addresses
-      await this.exportContractAddresses();
-
-      // Create index file for mobile
-      await this.createMobileIndexFile(contracts);
-
+      await this.exportSystem.export({ target: "all", skipEnv: true });
       Logger.success("Manual ABI export completed!");
       return true;
 
     } catch (error) {
       Logger.error(`Manual ABI export failed: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Export ABI files to mobile only
+   */
+  async exportMobileOnly() {
+    Logger.header("Mobile ABI Export");
+
+    try {
+      await this.exportSystem.export({ target: "mobile", skipEnv: true });
+      Logger.success("Mobile ABI export completed!");
+      return true;
+
+    } catch (error) {
+      Logger.error(`Mobile ABI export failed: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Export ABI files to frontend only
+   */
+  async exportFrontendOnly() {
+    Logger.header("Frontend ABI Export");
+
+    try {
+      await this.exportSystem.export({ target: "frontend" });
+      Logger.success("Frontend ABI export completed!");
+      return true;
+
+    } catch (error) {
+      Logger.error(`Frontend ABI export failed: ${error.message}`);
       return false;
     }
   }
