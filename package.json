@@ -8,21 +8,30 @@
     "clean": "hardhat clean",
     "test": "hardhat test",
     "node": "hardhat node",
-    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
-    "deploy:separated:local": "hardhat run scripts/deploy-separated.js --network localhost",
-    "deploy:manta": "hardhat run scripts/deploy.js --network mantaPacificTestnet",
-    "deploy:separated:manta": "hardhat run scripts/deploy-separated.js --network mantaPacificTestnet",
-    "verify:manta": "hardhat run scripts/verify-separated.js --network mantaPacificTestnet",
     "console": "hardhat console",
-    "interact:testnet": "hardhat run scripts/testnet-interact.js --network mantaPacificTestnet",
-    "interact:update": "hardhat run scripts/update_course.js --network mantaPacificTestnet",
-    "explore-courses": "hardhat run scripts/testing-explore-courses.js --network mantaPacificTestnet",
-    "my-licenses": "hardhat run scripts/testing-my-licenses.js --network mantaPacificTestnet",
-    "export-abis": "hardhat compile && node scripts/ABI-Export.js",
-    "update-mobile-env": "node scripts/update-mobile-env.js",
-    "setup-mobile": "npm run export-abis && npm run update-mobile-env",
-    "android": "expo run:android",
-    "ios": "expo run:ios"
+
+    "deploy": "npx hardhat run scripts/deploy.js --network mantaPacificTestnet",
+    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
+    "deploy:separated": "npx hardhat run scripts/deploy-separated.js --network mantaPacificTestnet",
+
+    "verify": "npx hardhat run scripts/verify.js --network mantaPacificTestnet",
+    "verify:comprehensive": "npx hardhat run scripts/verify-comprehensive.js --network mantaPacificTestnet",
+    "verify:abi": "node scripts/verify-abi-usage.js",
+
+    "portal": "node scripts/portal.js",
+    "dev": "node scripts/portal.js",
+    "cli": "node scripts/eduverse-cli.js",
+    "quick": "node scripts/quick.js",
+    "network": "node scripts/network-helper.js",
+
+    "test:interact": "npx hardhat run scripts/testnet-interact.js --network mantaPacificTestnet",
+    "test:courses": "npx hardhat run scripts/testing-explore-courses.js --network mantaPacificTestnet",
+    "test:licenses": "npx hardhat run scripts/testing-my-licenses.js --network mantaPacificTestnet",
+    "test:update": "npx hardhat run scripts/update_course.js --network mantaPacificTestnet",
+
+    "export:abi": "node scripts/ABI-Export.js",
+    "update:env": "node scripts/update-mobile-env.js",
+    "setup:mobile": "npm run export:abi && npm run update:env"
   },
   "keywords": [
     "web3",
@@ -58,7 +67,7 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "dotenv": "^16.4.7",
-    "hardhat": "^2.22.19",
+    "hardhat": "^2.26.0",
     "solhint": "^4.1.1"
   }
 }

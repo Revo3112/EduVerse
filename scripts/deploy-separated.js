@@ -22,40 +22,65 @@ async function main() {
   );
 
   try {
-    // Contract yang sudah di-deploy
-    const deployedCourseFactory = "0x58052b96b05fFbE5ED31C376E7762b0F6051e15A";
-    const deployedCourseLicense = "0x32b235fDabbcF4575aF259179e30a228b1aC72a9";
+    // Load existing deployed contracts if available
+    let existingContracts = {};
+    const deployedContractsFile = "deployed-contracts.json";
 
-    console.log("\n📋 Using existing contracts:");
-    console.log(`   CourseFactory: ${deployedCourseFactory}`);
-    console.log(`   CourseLicense: ${deployedCourseLicense}`);
+    if (fs.existsSync(deployedContractsFile)) {
+      existingContracts = JSON.parse(fs.readFileSync(deployedContractsFile, "utf8"));
+      console.log("\n📋 Found existing contracts:");
+      if (existingContracts.courseFactory) console.log(`   CourseFactory: ${existingContracts.courseFactory}`);
+      if (existingContracts.courseLicense) console.log(`   CourseLicense: ${existingContracts.courseLicense}`);
+    } else {
+      console.log("\n⚠️ No existing contracts found. Will deploy all contracts.");
+    }
 
-    // Deploy contracts yang belum
+    // Deploy or use existing CourseFactory
+    let courseFactoryAddress;
+    if (existingContracts.courseFactory) {
+      courseFactoryAddress = existingContracts.courseFactory;
+      console.log(`\n✅ Using existing CourseFactory: ${courseFactoryAddress}`);
+    } else {
+      const courseFactory = await deployContract("CourseFactory");
+      courseFactoryAddress = courseFactory.target;
+    }
+
+    // Deploy or use existing CourseLicense
+    let courseLicenseAddress;
+    if (existingContracts.courseLicense) {
+      courseLicenseAddress = existingContracts.courseLicense;
+      console.log(`\n✅ Using existing CourseLicense: ${courseLicenseAddress}`);
+    } else {
+      const courseLicense = await deployContract("CourseLicense", courseFactoryAddress, deployer.address);
+      courseLicenseAddress = courseLicense.target;
+    }
+
+    // Deploy remaining contracts
     const progressTracker = await deployContract(
       "ProgressTracker",
-      deployedCourseFactory,
-      deployedCourseLicense
+      courseFactoryAddress,
+      courseLicenseAddress
     );
     const certificateManager = await deployContract(
       "CertificateManager",
-      deployedCourseFactory,
+      courseFactoryAddress,
       progressTracker.target,
       deployer.address
     );
 
-    
+
 
     // Save contract addresses to JSON file
     const addresses = {
       network: network.name,
       chainId: network.config.chainId,
       deployer: deployer.address,
-      
-      courseFactory: deployedCourseFactory,
-      courseLicense: deployedCourseLicense,
+
+      courseFactory: courseFactoryAddress,
+      courseLicense: courseLicenseAddress,
       progressTracker: progressTracker.target,
       certificateManager: certificateManager.target,
-      
+
       deployDate: new Date().toISOString(),
     };
 

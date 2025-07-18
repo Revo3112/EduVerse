@@ -1,64 +1,259 @@
-# Eduverse: Platform Edukasi Terdesentralisasi di Jaringan Manta
+# 🎓 EduVerse - Web3 Educational Platform
 
-**Eduverse** adalah platform edukasi Web3 inovatif yang dibangun di atas jaringan Manta Pacific. Platform ini memberdayakan para kreator untuk membuat, mengelola, dan memonetisasi kursus mereka, sementara siswa dapat belajar, melacak kemajuan, dan mendapatkan sertifikat kelulusan dalam bentuk NFT (Non-Fungible Token) yang dapat diverifikasi.
+## 🚀 Professional Development Environment
 
-## ✨ Fitur Utama
+EduVerse adalah platform edukasi berbasis blockchain yang dibangun dengan **arsitektur modular profesional** untuk development experience yang optimal.
 
-- **Pembuatan Kursus Terdesentralisasi:** Kreator dapat dengan mudah membuat dan mengelola kursus mereka, dengan konten yang disimpan di IPFS.
-- **Lisensi Kursus Fleksibel:** Siswa dapat membeli lisensi untuk mengakses kursus, dengan model pembayaran per bulan.
-- **Pelacakan Kemajuan On-Chain:** Kemajuan belajar siswa dicatat secara transparan di blockchain.
-- **Sertifikat NFT (ERC-1155):** Setelah menyelesaikan kursus, siswa akan menerima sertifikat NFT sebagai bukti kelulusan yang tidak dapat diubah dan dapat diverifikasi.
-- **Aplikasi Mobile (React Native & Expo):** Pengalaman belajar yang mulus di perangkat seluler dengan dompet Web3 terintegrasi.
-- **Situs Web (Next.js):** Antarmuka web untuk interaksi dengan platform.
-- **Dibangun di Jaringan Manta:** Memanfaatkan skalabilitas dan biaya rendah dari Manta Pacific.
+---
 
-## 🚀 Tumpukan Teknologi
+## ⭐ **Quick Start**
 
-- **Backend (Smart Contracts):**
-  - **Bahasa:** Solidity
-  - **Framework:** Hardhat
-  - **Library:** OpenZeppelin Contracts, Ethers.js
-- **Aplikasi Mobile:**
-  - **Framework:** React Native & Expo
-  - **Manajemen State & Koneksi Web3:** Wagmi, @tanstack/react-query
-  - **Dompet:** @reown/appkit-wagmi-react-native, WalletConnect
-- **Frontend (Situs Web):**
-  - **Framework:** Next.js
-  - **Styling:** Tailwind CSS
-- **Penyimpanan Terdesentralisasi:**
-  - IPFS (untuk konten kursus seperti thumbnail dan video)
-- **Blockchain:**
-  - Manta Pacific Testnet
+### 🎯 **Main Portal (RECOMMENDED)**
+```bash
+npm run portal
+```
+*Single entry point untuk semua operasi development*
 
-## 🏛️ Arsitektur Proyek
+### ⚡ **Quick Actions**
+```bash
+npm run quick <action>
+
+# Examples:
+npm run quick full-deploy    # Deploy everything
+npm run quick status-check   # Check project status
+npm run quick sync-abis      # Sync ABI files
+```
+
+### 📋 **Available Commands**
+```bash
+npm run portal          # 🚀 Professional portal interface
+npm run dev            # 🚀 Alias untuk portal
+npm run quick <action> # ⚡ Quick actions
+npm run cli           # 📋 Legacy CLI interface
+
+# Individual operations
+npm run deploy        # Deploy contracts
+npm run verify:comprehensive  # Verify contracts
+npm run export:abi    # Export ABI files
+npm run setup:mobile  # Setup mobile environment
+```
+
+---
+
+## 🏗️ **Architecture Overview**
+
+### **🎯 Professional Modular Design**
+```
+scripts/
+├── portal.js              # 🚀 Main Portal Entry Point
+├── quick.js               # ⚡ Enhanced Quick Actions
+├── core/
+│   └── system.js          # 🔧 Core utilities & enhanced logging
+├── modules/
+│   ├── deployment/        # 🚀 Deployment operations
+│   ├── verification/      # 🔍 Verification operations
+│   ├── testing/          # 🧪 Testing operations
+│   ├── utilities/        # 🛠️ ABI export & utilities
+│   └── development/      # ⚙️ Development operations
+└── [individual scripts]   # 📋 Legacy scripts for CI/CD
+```
+
+### **✅ Key Features**
+- **🎯 Single Portal Interface** - One command untuk semua operasi
+- **🔧 Enhanced Logging** - Professional color-coded output
+- **📊 Real-time Status** - Project health monitoring
+- **🚨 Error Management** - Comprehensive error handling
+- **🔄 Backward Compatible** - Legacy scripts tetap functional
+- **📱 Mobile Ready** - Automatic ABI sync untuk React Native
+- **🌐 Frontend Ready** - ABI export untuk Next.js frontend
+
+---
+
+## 🎯 **Usage Examples**
+
+### **Complete Development Workflow**
+```bash
+# 1. Start with project status
+npm run portal
+# Select: 6 → Project Status
+
+# 2. Deploy complete system
+npm run portal
+# Select: 1 → Deployment Operations → 1 → Deploy Complete System
+
+# 3. Quick verification
+npm run quick status-check
+```
+
+### **Development Daily Usage**
+```bash
+# Quick status check
+npm run quick status-check
+
+# Deploy and setup everything
+npm run quick full-deploy
+
+# Sync ABI files to mobile/frontend
+npm run quick sync-abis
+```
+
+---
+
+## 🔧 **Technical Details**
+
+### **Smart Contracts**
+- **CertificateManager** - NFT certificates untuk course completion
+- **CourseFactory** - Factory pattern untuk course creation
+- **CourseLicense** - Licensing system untuk course access
+- **ProgressTracker** - Student progress tracking
+
+### **Network Configuration**
+- **Main Network:** Manta Pacific Sepolia Testnet
+- **Chain ID:** 3441006
+- **Explorer:** https://pacific-explorer.sepolia-testnet.manta.network
+
+### **Development Stack**
+- **Hardhat** - Smart contract development framework
+- **React Native** - Mobile application
+- **Next.js** - Frontend website
+- **IPFS/Pinata** - Decentralized file storage
+- **Livepeer** - Video streaming
+
+---
+
+## 📱 **Mobile & Frontend Integration**
+
+### **Automatic ABI Synchronization**
+Portal system automatically syncs contract ABIs to:
+- `EduVerseApp/src/constants/abi/` - React Native app
+- `frontend_website/eduverse/abis/` - Next.js frontend
+
+### **Environment Management**
+```bash
+npm run setup:mobile    # Complete mobile environment setup
+npm run update:env      # Update environment variables
+```
+
+---
+
+## 🧪 **Testing**
+
+### **Interactive Testing**
+```bash
+npm run portal
+# Select: 3 → Testing Operations
+```
+
+### **Individual Test Scripts**
+```bash
+npm run test:interact   # Interactive contract testing
+npm run test:courses    # Course exploration testing
+npm run test:licenses   # License system testing
+npm run test:update     # Course update testing
+```
+
+---
+
+## 🚀 **Deployment**
+
+### **Production Deployment**
+```bash
+npm run portal
+# Select: 1 → Deployment Operations → 1 → Deploy Complete System
+```
+
+### **CI/CD Integration**
+```bash
+# Individual commands for automation
+npm run compile
+npm run deploy
+npm run verify:comprehensive
+npm run setup:mobile
+```
+
+---
+
+## 📊 **Development Features**
+
+### **✅ Professional Development Environment**
+- **Enhanced User Experience** - Color-coded, interactive interface
+- **Real-time Monitoring** - Project status dan health checking
+- **Error Management** - Comprehensive error handling dan recovery
+- **Development Efficiency** - One-command workflows
+- **Consistency Checking** - ABI dan network compatibility validation
+
+### **✅ Quality Assurance**
+- **Syntax Validation** - All files error-free
+- **Integration Testing** - Cross-module compatibility
+- **Documentation Consistency** - Accurate dan up-to-date
+- **Performance Optimized** - Fast startup dan responsive interface
+
+---
+
+## � **EduVerse Platform Features**
+
+### **For Educators**
+- **Course Creation** - Deploy courses as smart contracts
+- **Content Management** - IPFS-based content storage
+- **Student Tracking** - Blockchain-based progress monitoring
+- **Certificate Issuance** - NFT certificates untuk completion
+
+### **For Students**
+- **Course Access** - License-based course enrollment
+- **Progress Tracking** - Transparent progress monitoring
+- **Certificate Collection** - NFT certificate ownership
+- **Mobile Learning** - React Native mobile app
+
+### **For Developers**
+- **Professional Tools** - Complete development environment
+- **Modular Architecture** - Clean, maintainable codebase
+- **Automated Workflows** - One-command deployment dan testing
+- **Documentation** - Comprehensive guides dan examples
+
+---
+
+## 🏛️ **Project Architecture**
 
 ```
 /
-├── contracts/         # Kode sumber Smart Contract (Solidity)
-├── scripts/           # Skrip untuk deployment dan interaksi dengan contract
-├── test/              # Tes untuk Smart Contract
-├── EduVerseApp/       # Kode sumber aplikasi mobile React Native (Expo)
-│   ├── src/
-│   └── package.json
-├── frontend_website/  # Kode sumber situs web Next.js
-│   └── eduverse/
-│       ├── app/
-│       └── package.json
-├── hardhat.config.js  # Konfigurasi Hardhat
-└── package.json       # Dependensi dan skrip utama
+├── contracts/         # Smart Contract source code (Solidity)
+├── scripts/           # Development portal & deployment scripts
+│   ├── portal.js      # 🚀 Main Portal Interface
+│   ├── quick.js       # ⚡ Quick Actions
+│   ├── core/          # 🔧 Core utilities
+│   └── modules/       # 📦 Modular managers
+├── test/              # Smart Contract tests
+├── EduVerseApp/       # React Native mobile app
+├── frontend_website/  # Next.js frontend
+└── hardhat.config.js  # Hardhat configuration
 ```
 
-## 🏁 Panduan Pengaturan Detail (Step-by-Step)
+---
 
-Ikuti langkah-langkah berikut dengan saksama untuk menjalankan proyek Eduverse secara lokal.
+## 🔗 **Links & Resources**
 
-### Langkah 1: Instalasi Dependensi
+- **Smart Contracts:** [/contracts](./contracts)
+- **Mobile App:** [/EduVerseApp](./EduVerseApp)
+- **Frontend:** [/frontend_website/eduverse](./frontend_website/eduverse)
+- **Development Scripts:** [/scripts](./scripts)
 
-Pertama, kloning repositori dan instal semua dependensi yang diperlukan untuk setiap bagian dari proyek (backend, aplikasi mobile, dan situs web).
+---
 
-1.  **Kloning Repositori:**
-    ```bash
-    git clone <URL_REPOSITORI_ANDA>
+## 📝 **Development Status**
+
+**✅ Production Ready**
+- Smart contracts deployed dan verified
+- Mobile app integrated dengan blockchain
+- Frontend website functional
+- Professional development environment
+- Comprehensive testing suite
+- Complete documentation
+
+---
+
+*🏗️ Built with professional modular architecture*
+*🎯 Optimized for developer experience*
+*🚀 Ready for production deployment*
     cd eduverse
     ```
 
@@ -89,7 +284,7 @@ Anda perlu menyediakan kunci rahasia agar skrip dapat berinteraksi dengan jaring
 1.  **Konfigurasi Backend (Hardhat):**
     - Buat file baru bernama `.env` di direktori **root** proyek.
     - Tambahkan *private key* dari dompet Ethereum Anda. Kunci ini **wajib** ada untuk mendeploy kontrak ke testnet atau mainnet.
-    
+
     ```env
     # File: ./ .env
     PRIVATE_KEY=0x_KUNCI_PRIVAT_DOMPET_ANDA
@@ -99,7 +294,76 @@ Anda perlu menyediakan kunci rahasia agar skrip dapat berinteraksi dengan jaring
     - Pindah ke direktori `EduVerseApp`.
     - Buat file baru bernama `.env` di dalam direktori `EduVerseApp`.
     - Tambahkan Project ID yang Anda dapatkan dari [WalletConnect Cloud](https://cloud.walletconnect.com/). Ini **wajib** ada agar fungsionalitas dompet di aplikasi mobile berjalan.
-    
+
+    ```env
+    # File: ./EduVerseApp/.env
+    ENV_PROJECT_ID=ID_PROYEK_WALLETCONNECT_ANDA
+    ```
+
+## 🛠️ EduVerse Development CLI
+
+**EduVerse hadir dengan sistem CLI terpadu untuk mempermudah development workflow.**
+
+### 🎯 Quick Start dengan CLI
+
+```bash
+# Interactive CLI (RECOMMENDED untuk pemula)
+npm run cli
+
+# Quick Actions (RECOMMENDED untuk developer berpengalaman)
+npm run quick full-deploy    # Deploy + verify + setup lengkap
+npm run quick status-check   # Check status project
+
+# Help
+npm run quick help           # Lihat semua quick actions
+```
+
+### 🚀 Common Workflows
+
+**1. Deploy Everything (First Time)**
+```bash
+npm run quick full-deploy
+```
+
+**2. Verification Only**
+```bash
+npm run quick quick-verify
+```
+
+**3. Setup Mobile App**
+```bash
+npm run quick sync-abis
+```
+
+**4. Interactive Menu**
+```bash
+npm run cli
+# Navigate through:
+# 1. 🚀 Deployment Operations
+# 2. 🔍 Verification Operations
+# 3. 🧪 Testing Operations
+# 4. 🛠️ Utility Operations
+# 5. ⚙️ Development Operations
+# 6. 📊 Project Status
+```
+
+📖 **Dokumentasi Lengkap CLI:** [CLI-DOCUMENTATION.md](./CLI-DOCUMENTATION.md)
+
+### Langkah 2.1: Test CLI (Optional)
+
+Sebelum melanjutkan, Anda bisa test CLI untuk memastikan semua berjalan dengan baik:
+
+```bash
+# Check project status
+npm run quick status-check
+
+# Atau menggunakan interactive CLI
+npm run cli
+# Pilih: 6 (Project Status)
+```
+    - Buat file baru bernama `.env` di dalam direktori `EduVerseApp`.
+    - Tambahkan Project ID yang Anda dapatkan dari [WalletConnect Cloud](https://cloud.walletconnect.com/). Ini **wajib** ada agar fungsionalitas dompet di aplikasi mobile berjalan.
+
     ```env
     # File: ./EduVerseApp/.env
     ENV_PROJECT_ID=ID_PROYEK_WALLETCONNECT_ANDA
@@ -109,31 +373,51 @@ Anda perlu menyediakan kunci rahasia agar skrip dapat berinteraksi dengan jaring
 
 Setelah konfigurasi selesai, deploy smart contract ke jaringan Manta Pacific Testnet.
 
+**🚀 Menggunakan CLI (RECOMMENDED):**
+```bash
+# Option 1: Full deployment dengan CLI
+npm run quick full-deploy
+
+# Option 2: Interactive deployment
+npm run cli
+# Pilih: 1 (Deployment) → 1 (Deploy Complete System)
+```
+
+**📋 Manual (Advanced):**
 1.  **Kompilasi Kontrak:**
-    Pastikan tidak ada error pada kode Solidity Anda.
     ```bash
     npm run compile
     ```
 
 2.  **Deploy ke Manta Testnet:**
-    Skrip ini akan mendeploy semua kontrak yang diperlukan (`CourseFactory`, `CourseLicense`, dll.) dan menyimpan alamatnya di `deployed-contracts.json`.
     ```bash
-    npm run deploy:manta
+    npm run deploy
     ```
-    *Catatan: Pastikan dompet yang terhubung dengan `PRIVATE_KEY` Anda memiliki cukup dana (ETH di Manta Sepolia Testnet) untuk membayar gas fee.*
 
-### Langkah 4: Sinkronisasi Frontend dengan Kontrak
+3.  **Verifikasi Contracts:**
+    ```bash
+    npm run verify:comprehensive
+    ```
 
-Setelah kontrak berhasil di-deploy, Anda perlu memberikan informasi (ABI dan alamat kontrak) kepada aplikasi mobile agar dapat berkomunikasi dengan blockchain.
+*Catatan: Pastikan dompet yang terhubung dengan `PRIVATE_KEY` Anda memiliki cukup dana (ETH di Manta Sepolia Testnet) untuk membayar gas fee.*
 
-- **Jalankan Skrip Setup Mobile:**
-  Skrip ini akan melakukan dua hal secara otomatis:
-  1.  `export-abis`: Menyalin ABI (Application Binary Interface) dari direktori `artifacts` ke `EduVerseApp/src/constants/abi`.
-  2.  `update-mobile-env`: Membaca `deployed-contracts.json` dan memperbarui file konfigurasi alamat kontrak untuk aplikasi mobile.
-  
-  ```bash
-  npm run setup-mobile
-  ```
+### Langkah 4: Setup Aplikasi Mobile
+
+**🚀 Menggunakan CLI (RECOMMENDED):**
+```bash
+# Option 1: Quick action
+npm run quick sync-abis
+
+# Option 2: Interactive
+npm run cli
+# Pilih: 4 (Utilities) → 3 (Complete Mobile Setup)
+```
+
+**📋 Manual (Advanced):**
+```bash
+npm run export:abi    # Export ABI files
+npm run update:env    # Update environment variables
+```
 
 ### Langkah 5: Jalankan Aplikasi
 
@@ -143,7 +427,7 @@ Sekarang semua sudah siap. Anda dapat menjalankan aplikasi mobile dan situs web.
     - Pindah ke direktori aplikasi mobile.
     - Jalankan perintah `start` untuk membuka Metro Bundler.
     - Pindai QR code menggunakan aplikasi Expo Go di ponsel Anda.
-    
+
     ```bash
     cd EduVerseApp
     npm start
@@ -152,7 +436,7 @@ Sekarang semua sudah siap. Anda dapat menjalankan aplikasi mobile dan situs web.
 2.  **Menjalankan Situs Web:**
     - Pindah ke direktori situs web.
     - Jalankan server pengembangan Next.js.
-    
+
     ```bash
     cd frontend_website/eduverse
     npm run dev

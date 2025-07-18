@@ -1,12 +1,10 @@
 // Auto-generated ABI exports
-// Generated on: 2025-06-29T10:11:29.621Z
+// Generated on: 2025-07-18T12:22:31.697Z
 
 export { default as CourseFactoryABI } from './CourseFactory.json';
 export { default as CourseLicenseABI } from './CourseLicense.json';
 export { default as ProgressTrackerABI } from './ProgressTracker.json';
 export { default as CertificateManagerABI } from './CertificateManager.json';
-
-
 
 export { default as ContractAddresses } from './contract-addresses.json';
 
@@ -16,8 +14,6 @@ export const CONTRACT_NAMES = {
   COURSELICENSE: 'CourseLicense',
   PROGRESSTRACKER: 'ProgressTracker',
   CERTIFICATEMANAGER: 'CertificateManager',
-  
-  
 };
 
 // ABI mapping for dynamic access
@@ -26,6 +22,4 @@ export const CONTRACT_ABIS = {
   [CONTRACT_NAMES.COURSELICENSE]: CourseLicenseABI,
   [CONTRACT_NAMES.PROGRESSTRACKER]: ProgressTrackerABI,
   [CONTRACT_NAMES.CERTIFICATEMANAGER]: CertificateManagerABI,
-  
-  
 };

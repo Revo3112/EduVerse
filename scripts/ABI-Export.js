@@ -55,7 +55,7 @@ async function main() {
     }
   }
 
-  // Export contract addresses and configuration
+    // Export contract addresses and configuration
   try {
     const addresses = JSON.parse(
       fs.readFileSync("deployed-contracts.json", "utf8")
@@ -70,7 +70,6 @@ async function main() {
         courseLicense: addresses.courseLicense,
         progressTracker: addresses.progressTracker,
         certificateManager: addresses.certificateManager,
-        // platformFactory: addresses.platformFactory || null, // Not used in actual deployment
       },
     };
 
