@@ -162,7 +162,7 @@ class VerificationManager {
       hasDeployedContracts: fileExists('deployed-contracts.json'),
       hasArtifacts: fileExists('artifacts'),
       hasMobileABIs: fileExists('EduVerseApp/src/constants/abi/contract-addresses.json'),
-      hasFrontendABIs: fileExists('frontend_website/eduverse/abis/contract-addresses.json'),
+      hasFrontendABIs: fileExists('eduweb/abis/contract-addresses.json'),
       networkCompatible: this.checkNetworkCompatibility()
     };
 
@@ -186,7 +186,7 @@ class VerificationManager {
   checkABIFileConsistency() {
     try {
       const mobileAddresses = readJsonFile('EduVerseApp/src/constants/abi/contract-addresses.json');
-      const frontendAddresses = readJsonFile('frontend_website/eduverse/abis/contract-addresses.json');
+      const frontendAddresses = readJsonFile('eduweb/abis/contract-addresses.json');
 
       if (!mobileAddresses || !frontendAddresses) {
         return false;

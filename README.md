@@ -126,7 +126,7 @@ npm run quick sync-abis
 ### **Automatic ABI Synchronization**
 Portal system automatically syncs contract ABIs to:
 - `EduVerseApp/src/constants/abi/` - React Native app
-- `frontend_website/eduverse/abis/` - Next.js frontend
+- `eduweb/abis/` - Next.js frontend (primary)
 
 ### **Environment Management**
 ```bash
@@ -224,7 +224,7 @@ npm run setup:mobile
 │   └── modules/       # 📦 Modular managers
 ├── test/              # Smart Contract tests
 ├── EduVerseApp/       # React Native mobile app
-├── frontend_website/  # Next.js frontend
+├── eduweb/            # Next.js frontend (primary)
 └── hardhat.config.js  # Hardhat configuration
 ```
 
@@ -234,7 +234,7 @@ npm run setup:mobile
 
 - **Smart Contracts:** [/contracts](./contracts)
 - **Mobile App:** [/EduVerseApp](./EduVerseApp)
-- **Frontend:** [/frontend_website/eduverse](./frontend_website/eduverse)
+- **Frontend:** [/eduweb](./eduweb)
 - **Development Scripts:** [/scripts](./scripts)
 
 ---
@@ -272,9 +272,9 @@ npm run setup:mobile
 
 4.  **Instal Dependensi Situs Web:**
     ```bash
-    cd frontend_website/eduverse
+    cd eduweb
     npm install
-    cd ../..
+    cd ..
     ```
 
 ### Langkah 2: Konfigurasi Variabel Lingkungan
@@ -438,7 +438,7 @@ Sekarang semua sudah siap. Anda dapat menjalankan aplikasi mobile dan situs web.
     - Jalankan server pengembangan Next.js.
 
     ```bash
-    cd frontend_website/eduverse
+    cd eduweb
     npm run dev
     ```
     Buka [http://localhost:3000](http://localhost:3000) di browser Anda.
@@ -447,7 +447,7 @@ Sekarang semua sudah siap. Anda dapat menjalankan aplikasi mobile dan situs web.
 
 - `npm run test`: Menjalankan rangkaian tes untuk smart contract.
 - `npm run deploy:local`: Mendeploy kontrak ke jaringan lokal Hardhat untuk pengujian cepat.
-- `npm run lint` (di `frontend_website/eduverse`): Menjalankan ESLint untuk memeriksa kualitas kode frontend.
+- `npm run lint` (di `eduweb`): Menjalankan ESLint untuk memeriksa kualitas kode frontend.
 
 ## 🤝 Berkontribusi
 

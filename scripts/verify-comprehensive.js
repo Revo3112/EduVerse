@@ -159,8 +159,8 @@ async function verifyBlockchainContracts() {
     }
 
     // Verify frontend
-    const frontendAbiPath = 'frontend_website/eduverse/abis/';
-    const frontendAddresses = JSON.parse(fs.readFileSync('frontend_website/eduverse/abis/contract-addresses.json', 'utf8'));
+    const frontendAbiPath = 'eduweb/abis/';
+    const frontendAddresses = JSON.parse(fs.readFileSync('eduweb/abis/contract-addresses.json', 'utf8'));
 
     for (const [key, contract] of Object.entries(CONTRACTS)) {
       const abiPath = path.join(frontendAbiPath, `${contract.name}.json`);

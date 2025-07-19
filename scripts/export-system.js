@@ -28,7 +28,8 @@ class ExportSystem {
           envContracts: path.join(__dirname, "../EduVerseApp/.env.contracts"),
         },
         frontend: {
-          abi: path.join(__dirname, "../frontend_website/eduverse/abis"),
+          abi: path.join(__dirname, "../eduweb/abis"),
+          env: path.join(__dirname, "../eduweb/.env.local"),
         },
         artifacts: path.join(__dirname, "../artifacts/contracts"),
         deployedContracts: path.join(__dirname, "../deployed-contracts.json"),
@@ -52,6 +53,10 @@ class ExportSystem {
 
       if (!skipEnv && (target === "all" || target === "mobile")) {
         await this.updateMobileEnvironment();
+      }
+
+      if (!skipEnv && (target === "all" || target === "frontend")) {
+        await this.updateFrontendEnvironment();
       }
 
       console.log("\n🎉 Export process completed successfully!");
@@ -298,6 +303,70 @@ EXPO_PUBLIC_NETWORK_NAME=${addresses.network}
     );
     fs.writeFileSync(backupPath, envContent);
     console.log(`💾 Backup created: ${backupPath}`);
+  }
+
+  /**
+   * Update frontend environment variables
+   */
+  async updateFrontendEnvironment() {
+    console.log("\n🌐 Updating frontend environment variables...");
+
+    try {
+      const deployedContracts = JSON.parse(
+        fs.readFileSync(this.config.paths.deployedContracts, "utf8")
+      );
+
+      const addresses = {
+        courseFactory: deployedContracts.courseFactory,
+        courseLicense: deployedContracts.courseLicense,
+        progressTracker: deployedContracts.progressTracker,
+        certificateManager: deployedContracts.certificateManager,
+        chainId: deployedContracts.chainId,
+        network: deployedContracts.network,
+      };
+
+      // Read existing .env.local content or create new
+      let envContent = "";
+      if (fs.existsSync(this.config.paths.frontend.env)) {
+        envContent = fs.readFileSync(this.config.paths.frontend.env, "utf8");
+      }
+
+      // Update or add environment variables
+      const envVars = {
+        "NEXT_PUBLIC_CHAIN_ID": addresses.chainId.toString(),
+        "NEXT_PUBLIC_RPC_URL": "https://pacific-rpc.sepolia-testnet.manta.network/http",
+        "NEXT_PUBLIC_COURSE_FACTORY": addresses.courseFactory,
+        "NEXT_PUBLIC_COURSE_LICENSE": addresses.courseLicense,
+        "NEXT_PUBLIC_PROGRESS_TRACKER": addresses.progressTracker,
+        "NEXT_PUBLIC_CERTIFICATE_MANAGER": addresses.certificateManager,
+      };
+
+      // Update environment content
+      Object.entries(envVars).forEach(([key, value]) => {
+        const regex = new RegExp(`^${key}=.*$`, "m");
+        if (envContent.match(regex)) {
+          envContent = envContent.replace(regex, `${key}=${value}`);
+        } else {
+          envContent += `\n${key}=${value}`;
+        }
+      });
+
+      // Ensure directory exists
+      const envDir = path.dirname(this.config.paths.frontend.env);
+      if (!fs.existsSync(envDir)) {
+        fs.mkdirSync(envDir, { recursive: true });
+      }
+
+      // Write updated content
+      fs.writeFileSync(this.config.paths.frontend.env, envContent.trim());
+
+      console.log(`✅ Frontend environment updated: ${this.config.paths.frontend.env}`);
+      console.log("📝 Updated variables:", Object.keys(envVars).join(", "));
+
+    } catch (error) {
+      console.error("❌ Error updating frontend env:", error.message);
+      throw error;
+    }
   }
 
   /**

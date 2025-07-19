@@ -220,7 +220,7 @@ function getProjectStatus() {
   const status = {
     deployedContracts: fileExists('deployed-contracts.json'),
     mobileAbiFiles: fileExists('EduVerseApp/src/constants/abi/contract-addresses.json'),
-    frontendAbiFiles: fileExists('frontend_website/eduverse/abis/contract-addresses.json'),
+    frontendAbiFiles: fileExists('eduweb/abis/contract-addresses.json'),
     mobileEnvFile: fileExists('EduVerseApp/.env'),
     compiledContracts: fileExists('artifacts/contracts'),
     networkInfo: getNetworkInfo()

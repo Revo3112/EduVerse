@@ -164,7 +164,7 @@ class DeploymentManager {
       hasDeployedContracts: fs.existsSync('deployed-contracts.json'),
       hasCompiledArtifacts: fs.existsSync('artifacts'),
       hasMobileABIs: fs.existsSync('EduVerseApp/src/constants/abi'),
-      hasFrontendABIs: fs.existsSync('frontend_website/eduverse/abis'),
+      hasFrontendABIs: fs.existsSync('eduweb/abis'),
       networkInfo: getNetworkInfo()
     };
 

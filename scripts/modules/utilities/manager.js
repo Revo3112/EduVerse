@@ -14,7 +14,7 @@ class UtilitiesManager {
     // Keep abiPaths for backward compatibility with existing functions
     this.abiPaths = {
       mobile: 'EduVerseApp/src/constants/abi',
-      frontend: 'frontend_website/eduverse/abis',
+      frontend: 'eduweb/abis',
       artifacts: 'artifacts/contracts'
     };
   }
