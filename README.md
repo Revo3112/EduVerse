@@ -1,4 +1,23 @@
+<div align="center">
+  <img src="./EduVerseApp/assets/Eduverse_logo.png" alt="EduVerse Logo" width="200" height="200" />
+</div>
+
 # 🎓 EduVerse - Web3 Educational Platform
+
+<div align="center">
+  <strong>Platform Edukasi Blockchain Multi-Platform dengan Arsitektur Modular Profesional</strong>
+</div>
+
+<div align="center">
+
+  ![Manta Pacific](https://img.shields.io/badge/Network-Manta%20Pacific%20Testnet-blue?style=for-the-badge)
+  ![React Native](https://img.shields.io/badge/Mobile-React%20Native-61DAFB?style=for-the-badge&logo=react)
+  ![Next.js](https://img.shields.io/badge/Frontend-Next.js%2015-000000?style=for-the-badge&logo=nextdotjs)
+  ![Hardhat](https://img.shields.io/badge/Contracts-Hardhat-F7DF1E?style=for-the-badge)
+
+</div>
+
+---
 
 ## 🚀 Professional Development Environment
 
