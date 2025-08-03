@@ -47,6 +47,7 @@
     "wagmi": "^2.15.6",
     "react-native-webview": "13.8.6",
     "expo-screen-orientation": "~7.0.5",
-    "expo-linear-gradient": "~13.0.2"
+    "expo-linear-gradient": "~13.0.2",
+    "expo-dev-client": "~4.0.29"
   }
 }
