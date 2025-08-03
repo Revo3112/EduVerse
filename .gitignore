@@ -46,3 +46,8 @@ out/
 MIGRATION-GUIDE.md
 CLEANUP-AUDIT.md
 **/README-temp.md
+
+# AI/Copilot instructions (keep local only)
+.github/copilot-instructions.md
+.github/ai-prompt-engineering-safety-best-practices.instructions.md
+.github/performance-optimization.instructions.md

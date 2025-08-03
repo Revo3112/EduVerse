@@ -115,10 +115,12 @@ export const CONTRACT_NAMES = {
 
 export const CONTRACT_ABIS = {
   [CONTRACT_NAMES.COURSEFACTORY]: CourseFactoryABI,
-  // ... other mappings
+  [CONTRACT_NAMES.COURSELICENSE]: CourseLicenseABI,
+  [CONTRACT_NAMES.PROGRESSTRACKER]: ProgressTrackerABI,
+  [CONTRACT_NAMES.CERTIFICATEMANAGER]: CertificateManagerABI
 };
 
-// Helper functions
+// Helper functions (in contracts.js)
 export { getContractAddress, getContractABI, validateContractSetup }
 ```
 
@@ -240,17 +242,17 @@ prerequisitesMet: all above conditions true
 
 ### **React Native (Expo)**
 - **Wagmi + Viem**: `useBalance`, `useChainId` hooks
-- **AppKit**: Wallet connections
-- **Custom Dev Build**: Required for Web3 features
+- **AppKit/WalletConnect**: `@reown/appkit-wagmi-react-native` for wallet connections
+- **Expo 51**: React Native 0.74.5 with custom dev build
 - **Setup**: `npm run portal → 4 → 1`
-- **Environment**: Auto-managed `.env` + `.env.contracts`
+- **Environment**: Auto-managed `.env` + contract addresses
 - **ABI Structure**: Auto-generated `index.js` with `CONTRACT_NAMES`, `CONTRACT_ABIS`
 - **Helper Functions**: `getContractAddress()`, `getContractABI()`, `validateContractSetup()`
 
 ### **Next.js Frontend**
-- **App Router** (Next.js 15) + TypeScript
-- **Tailwind CSS v4** with CSS variables
-- **Livepeer**: Video streaming (API key required)
+- **Next.js 15**: App Router + React 19 + TypeScript
+- **Tailwind CSS v4**: CSS variables with PostCSS
+- **Turbopack**: Development with `--turbopack` flag
 - **Start**: `cd eduweb && npm run dev` (after portal setup)
 - **Environment**: Auto-managed `.env.local`
 
@@ -288,7 +290,6 @@ EXPO_PUBLIC_CHAIN_ID=3441006
 EXPO_PUBLIC_NETWORK_NAME=mantaPacificTestnet
 
 # eduweb/.env.local (auto-managed)
-NEXT_PUBLIC_LIVEPEER_API_KEY=your_key
 NEXT_PUBLIC_CHAIN_ID=3441006
 NEXT_PUBLIC_COURSE_FACTORY_ADDRESS=0x...
 NEXT_PUBLIC_COURSE_LICENSE_ADDRESS=0x...
@@ -418,7 +419,35 @@ Contract helper functions
 7. Status Confirmation (→ 6 → 1)
 ```
 
-## 🔍 Troubleshooting Guide
+## � Security & Safety Guidelines
+
+### **Smart Contract Security**
+- **Audit Contract Changes**: Always use `→ 2 → 1` for comprehensive verification after modifications
+- **IPFS Security**: Validate IPFS content hashes and implement gateway timeouts (5s)
+- **Access Control**: Verify owner-only functions and role-based permissions
+- **Reentrancy Protection**: Check for reentrancy guards in payable functions
+- **Input Validation**: Ensure proper validation of course data and user inputs
+
+### **Web3 Integration Safety**
+- **Private Key Management**: Never log or expose private keys in any environment
+- **Network Validation**: Always validate Manta Pacific connection before operations
+- **Contract Address Verification**: Use `deployed-contracts.json` as single source of truth
+- **Transaction Safety**: Implement proper error handling for failed transactions
+- **Wallet Security**: Validate wallet connections and handle disconnections gracefully
+
+### **Environment Security**
+- **Auto-Generated Files**: Never manually edit ABI files or contract addresses
+- **Environment Variables**: Let portal manage all `.env` files automatically
+- **API Keys**: Secure Expo and third-party API keys in proper environment variables
+- **Network Configuration**: Use only official Manta Pacific RPC endpoints
+
+### **AI Prompt Safety**
+- **Context Boundaries**: Keep EduVerse-specific context separate from external data
+- **Code Injection Prevention**: Validate all generated code against project patterns
+- **Permission Verification**: Ensure suggestions respect portal-only access patterns
+- **Bias Prevention**: Consider all user types (students, instructors, developers)
+
+## �🔍 Troubleshooting Guide
 
 ### **Common Portal Issues**
 | Issue | Symptoms | Solution |
@@ -446,6 +475,78 @@ Portal monitors these critical files:
 
 ## 🚀 Advanced AI Agent Strategies
 
+### **AI Safety & Prompt Engineering Best Practices**
+When working with EduVerse codebase, apply these AI safety principles:
+
+**Clarity & Context:**
+- Always state tasks explicitly with sufficient context about EduVerse's Web3 architecture
+- Specify target platform (Smart Contracts, React Native, Next.js) when requesting code
+- Include portal navigation context when suggesting workflows
+- Reference specific files/directories with absolute paths
+
+**Role-Based Prompting:**
+```javascript
+// Example: Web3 Smart Contract Review
+"As a blockchain security expert, review this EduVerse smart contract for vulnerabilities.
+Focus on ERC1155 licensing logic, IPFS integration security, and Manta Pacific compatibility."
+
+// Example: React Native Development
+"As a React Native developer familiar with Wagmi/Viem, optimize this EduVerse mobile component
+for Web3 wallet integration. Consider Expo 51 constraints and ABI auto-sync patterns."
+```
+
+**Chain-of-Thought for Complex Tasks:**
+- Break down multi-step operations (Deploy → Verify → Test → Export)
+- Show reasoning when troubleshooting portal issues
+- Explain dependency chains between contracts
+- Document portal navigation decisions
+
+**Bias Mitigation:**
+- Avoid assumptions about user's technical level
+- Consider both developer and end-user perspectives
+- Test suggestions across all platforms (mobile, web, contracts)
+- Validate against actual EduVerse file structure
+
+### **Performance Optimization Principles**
+
+**Frontend Performance (Next.js):**
+- **Bundle Optimization**: Use Next.js 15 + Turbopack efficiently
+- **Tailwind CSS v4**: Leverage CSS variables for theming
+- **Web3 Components**: Optimize wallet connection renders with React.memo
+- **ABI Loading**: Lazy load contract ABIs when needed
+- **Image Assets**: Compress Eduverse logos and course images
+
+**Mobile Performance (React Native/Expo):**
+- **Wagmi Hooks**: Use selective imports to reduce bundle size
+- **ABI Caching**: Cache contract ABIs in AsyncStorage
+- **Navigation**: Optimize React Navigation with lazy screens
+- **Web3 Calls**: Batch blockchain queries where possible
+- **Memory Management**: Clean up wallet connection listeners
+
+**Smart Contract Performance:**
+- **Gas Optimization**: Follow Solidity best practices for Manta Pacific
+- **Batch Operations**: Group related transactions in single calls
+- **Storage Efficiency**: Use packed structs and minimize storage writes
+- **IPFS Integration**: Implement failover across multiple gateways
+
+**Portal System Performance:**
+- **Status Caching**: Manager status is cached to reduce redundant checks
+- **Sequential Operations**: Portal prevents conflicts with sequential execution
+- **File Watching**: ExportSystem uses efficient file watching for ABI updates
+- **Network Validation**: Early validation prevents failed operations
+
+### **Code Review Checklist for EduVerse**
+- [ ] Does code follow portal-first approach?
+- [ ] Are ABI files never manually edited?
+- [ ] Is network compatibility (Manta Pacific) validated?
+- [ ] Are environment variables auto-managed by portal?
+- [ ] Is proper error handling using Logger system implemented?
+- [ ] Are contract dependency chains respected?
+- [ ] Is cross-platform compatibility maintained?
+- [ ] Are performance implications of Web3 operations considered?
+- [ ] Is security reviewed for smart contract changes?
+- [ ] Are mobile-specific constraints (Expo, React Native) addressed?
+
 ### **Efficient Workflow Patterns**
 ```javascript
 // Pattern: Always validate before acting
@@ -471,5 +572,112 @@ if (!status.ready) {
 3. **Follow Dependencies**: Respect the deployment → verification → testing chain
 4. **Monitor Logs**: Portal Logger provides detailed operation tracking
 5. **Validate Results**: Always confirm successful completion
+
+## 📝 EduVerse-Specific Prompt Engineering
+
+### **Effective Task Specification for EduVerse**
+When requesting AI assistance, structure prompts to include EduVerse context:
+
+**Template for Contract Development:**
+```
+As a Solidity developer working on EduVerse's educational platform:
+- Target: [Contract Name] on Manta Pacific Testnet (chainId: 3441006)
+- Dependencies: [List dependent contracts from the 4-contract ecosystem]
+- Requirements: [Specific functionality needed]
+- Constraints: [Gas optimization, IPFS integration, ERC1155 compliance]
+- Testing: [Specify portal testing workflow needed]
+```
+
+**Template for Mobile Development:**
+```
+As a React Native developer for EduVerse mobile app:
+- Platform: Expo 51 + React Native 0.74.5
+- Web3 Stack: Wagmi/Viem + @reown/appkit-wagmi-react-native
+- Context: [Screen/component being developed]
+- Requirements: [Functionality with wallet integration]
+- Constraints: [Performance, ABI auto-sync, cross-platform compatibility]
+```
+
+**Template for Frontend Development:**
+```
+As a Next.js developer for EduVerse web platform:
+- Framework: Next.js 15 + React 19 + TypeScript
+- Styling: Tailwind CSS v4 with CSS variables
+- Context: [Page/component being developed]
+- Requirements: [Functionality with Web3 integration]
+- Constraints: [Performance, SEO, accessibility]
+```
+
+### **Portal-Aware Workflow Requests**
+Always specify portal workflows in requests:
+
+**Good Example:**
+```
+"I need to update the CourseFactory contract to add a new pricing tier.
+After making changes, walk me through the complete workflow:
+1. Portal navigation for deployment
+2. Verification steps
+3. ABI sync process
+4. Testing requirements
+Include specific portal menu paths (→ X → Y) for each step."
+```
+
+**Poor Example:**
+```
+"Help me deploy a smart contract."
+```
+
+### **Cross-Platform Consistency Prompts**
+When working across platforms, always mention synchronization:
+
+```
+"I'm adding a new smart contract function. Ensure the solution includes:
+1. Solidity implementation with proper events
+2. ABI export implications for mobile/frontend
+3. React Native hook integration patterns
+4. Next.js component usage examples
+5. Portal workflow to sync everything"
+```
+
+### **Performance-Aware Development Prompts**
+Include performance considerations in requests:
+
+```
+"Optimize this EduVerse component for:
+- Mobile: Expo bundle size and AsyncStorage caching
+- Web: Next.js SSR and Tailwind CSS efficiency
+- Blockchain: Gas optimization for Manta Pacific
+- UX: Loading states and error handling"
+```
+
+### **Common EduVerse Prompt Patterns**
+
+**Status-First Pattern:**
+```
+"Before implementing [feature], help me check:
+1. Current project status via portal
+2. Prerequisites for [specific manager]
+3. Dependencies between contracts
+4. Platform-specific considerations"
+```
+
+**Chain-of-Thought Pattern:**
+```
+"Walk me through solving [problem] step by step:
+1. Identify which EduVerse components are affected
+2. Determine portal workflow needed
+3. Consider cross-platform implications
+4. Plan testing and validation steps
+5. Execute with proper error handling"
+```
+
+**Role-Specific Pattern:**
+```
+"As an [expert type] familiar with EduVerse's architecture:
+- Review [specific code/design]
+- Consider [platform constraints]
+- Suggest improvements following [project patterns]
+- Provide [portal workflow] to implement changes"
+```
 
 This comprehensive guide ensures AI agents understand both the technical architecture and operational patterns that make EduVerse development efficient and reliable.
