@@ -19,7 +19,7 @@ EduVerse adalah **ekosistem pendidikan Web3 multi-platform** dengan arsitektur p
 ### **MANDATORY AI AGENT REQUIREMENTS**
 
 #### **🧠 MEMORY FIRST APPROACH**
-- **ALWAYS** check MCP memory storage before any action using `mcp_memory_read_graph`
+- **ALWAYS** check MCP memory storage with relevant topic about the prompt before any action.
 - **MANDATORY** search existing knowledge with `mcp_memory_search_nodes` before creating new entities
 - **REQUIRED** store all important findings, solutions, and patterns using MCP memory tools
 - **ESSENTIAL** create relationships between related concepts for knowledge graph integrity
