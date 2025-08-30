@@ -2,275 +2,479 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./CourseFactory.sol";
 import "./ProgressTracker.sol";
 
 /**
  * @title CertificateManager
- * @dev Issues and manages course completion certificates as NFTs
+ * @dev Digital certificate management using ERC-1155 with ZKP support for Manta Pacific
+ * @notice Compliant with OpenZeppelin Contracts 5.0 and 2025 best practices
  */
-contract CertificateManager is ERC1155, Ownable, ReentrancyGuard {
-    // Membuat agar kita bisa mengkonversi dari int ke string
+contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable {
     using Strings for uint256;
 
-    constructor(address _courseFactory, address _progressTracker, address _platformWallet)
-        ERC1155("ipfs://")
-        Ownable(msg.sender)
-    {
+    // ==================== ROLES ====================
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant UPDATER_ROLE = keccak256("UPDATER_ROLE");
+
+    // ==================== CUSTOM ERRORS ====================
+    error InvalidPaymentReceiptHash();
+    error CertificateAlreadyIssued();
+    error CourseNotCompleted();
+    error InsufficientPayment();
+    error InvalidStringLength(string param, uint256 maxLength);
+    error InvalidAddress(address addr);
+    error CertificateNotFound(uint256 tokenId);
+    error PaymentHashAlreadyUsed();
+    error InvalidCIDFormat();
+    error ZeroAmount();
+
+    // ==================== STATE VARIABLES ====================
+    CourseFactory public immutable courseFactory;
+    ProgressTracker public immutable progressTracker;
+
+    uint256 private _nextTokenId = 1;
+    uint256 public certificateFee = 0.001 ether;
+    address public platformWallet;
+
+    // ==================== STRUCTS ====================
+    struct Certificate {
+        uint256 tokenId;
+        string platformName;
+        string recipientName;
+        address recipientAddress;
+        string ipfsCID;              // Main certificate image CID
+        string baseRoute;            // For QR code generation (not hardcoded)
+        uint256 issuedAt;
+        bool lifetimeFlag;           // true = lifetime, false = has expiry
+        bytes32 paymentReceiptHash;  // Payment verification
+        uint256 courseId;            // Associated course
+        bool isValid;                // For revocation
+    }
+
+    // ==================== MAPPINGS ====================
+    mapping(uint256 => Certificate) public certificates;
+    mapping(address => mapping(uint256 => uint256)) public userCertificates; // user => courseId => tokenId
+    mapping(bytes32 => bool) public usedPaymentHashes; // Replay protection
+    mapping(uint256 => string) private _tokenURIs; // Custom token URIs
+
+    // ==================== EVENTS ====================
+    event CertificateMinted(
+        address indexed owner,
+        uint256 indexed tokenId,
+        string ipfsCID,
+        bytes32 paymentReceiptHash
+    );
+
+    event CertificateUpdated(
+        address indexed owner,
+        uint256 indexed tokenId,
+        string newIpfsCID,
+        bytes32 paymentReceiptHash
+    );
+
+    event CertificatePaymentRecorded(
+        address indexed payer,
+        address indexed owner,
+        uint256 indexed tokenId,
+        bytes32 paymentReceiptHash
+    );
+
+    event CertificateRevoked(uint256 indexed tokenId, string reason);
+    event BaseRouteUpdated(uint256 indexed tokenId, string newBaseRoute);
+
+    // ==================== CONSTRUCTOR ====================
+    constructor(
+        address _courseFactory,
+        address _progressTracker,
+        address _platformWallet,
+        string memory _initialURI,
+        string memory _platformName
+    ) ERC1155(_initialURI) {
+        if (_courseFactory == address(0)) revert InvalidAddress(_courseFactory);
+        if (_progressTracker == address(0)) revert InvalidAddress(_progressTracker);
+        if (_platformWallet == address(0)) revert InvalidAddress(_platformWallet);
+
         courseFactory = CourseFactory(_courseFactory);
         progressTracker = ProgressTracker(_progressTracker);
         platformWallet = _platformWallet;
+
+        // Setup roles
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(MINTER_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, msg.sender);
+        _grantRole(UPDATER_ROLE, msg.sender);
     }
 
-    // Deklarasi courseFactory dari file solidity Course Factory
-    CourseFactory public courseFactory;
-
-    // Deklarasi ProgressTacker
-    ProgressTracker public progressTracker;
-
-    // Certificate metadata
-    struct Certificate {
-        uint256 courseId;
-        address student;
-        string studentName;
-        uint256 issuedAt;
-        uint256 certificateId;
-        bool isValid;
+    // ==================== MODIFIERS ====================
+    modifier validStringLength(string memory str, uint256 maxLength, string memory paramName) {
+        if (bytes(str).length == 0 || bytes(str).length > maxLength) {
+            revert InvalidStringLength(paramName, maxLength);
+        }
+        _;
     }
 
-    uint256 public _nextCertificateId = 1;
+    modifier validCID(string memory cid) {
+        if (bytes(cid).length < 46 || bytes(cid).length > 62) {
+            revert InvalidCIDFormat();
+        }
+        _;
+    }
 
-    // Certificate pricing
-    uint256 public certificateFee = 0.001 ether; // Fee to mint a certificate
-
-    // Platform fee percentage (in basis points: 200 = 2%)
-    uint256 public platformFeePercentage = 200; // 2%
-    address public platformWallet;
-
-    // Mappings
-    mapping(uint256 => Certificate) public certificates; // certificateId => Certificate
-    mapping(address => mapping(uint256 => uint256)) public studentCertificates; // student => courseId => certificateId
-
-    // Events
-    event CertificateIssued(
-        uint256 indexed certificateId,
-        uint256 indexed courseId,
-        address indexed student,
-        uint256 issuedAt
-    );
-
-    event CertificateRevoked(uint256 indexed certificateId);
+    // ==================== MAIN FUNCTIONS ====================
 
     /**
-     * @dev Issues a certificate for completing a course
-     * @param courseId ID of the completed course
-     * @param studentName Name of the student to appear on certificate
+     * @dev Mints certificate after course completion and payment verification
+     * @param courseId Course ID that was completed
+     * @param recipientName Name to appear on certificate
+     * @param ipfsCID IPFS CID of the certificate image
+     * @param paymentReceiptHash Hash of payment receipt for verification
+     * @param lifetimeFlag Whether certificate is lifetime valid
+     * @param baseRoute Optional base route for QR code (can be empty)
      */
-    function issueCertificate(uint256 courseId, string memory studentName) external payable nonReentrant {
-        // Validate input
-        require(bytes(studentName).length > 0, "Student name cannot be empty");
-        require(bytes(studentName).length <= 100, "Student name too long");
-        
-        // Check if course is completed
-        require(progressTracker.isCourseCompleted(msg.sender, courseId), "Course not completed");
+    function mintCertificate(
+        uint256 courseId,
+        string calldata recipientName,
+        string calldata ipfsCID,
+        bytes32 paymentReceiptHash,
+        bool lifetimeFlag,
+        string calldata baseRoute
+    )
+        external
+        payable
+        nonReentrant
+        whenNotPaused
+        onlyRole(MINTER_ROLE)
+        validStringLength(recipientName, 100, "recipientName")
+        validCID(ipfsCID)
+    {
+        // Validate payment receipt hash
+        if (paymentReceiptHash == bytes32(0)) revert InvalidPaymentReceiptHash();
+        if (usedPaymentHashes[paymentReceiptHash]) revert PaymentHashAlreadyUsed();
 
-        // Check if certificate already exists
-        require(studentCertificates[msg.sender][courseId] == 0, "Certificate already issued");
-
-        // Check payment
-        require(msg.value >= certificateFee, "Insufficient fee");
-
-        // Create new certificate ID atomically
-        uint256 certificateId = _nextCertificateId;
-        unchecked {
-            _nextCertificateId++;
+        // Check course completion
+        if (!progressTracker.isCourseCompleted(msg.sender, courseId)) {
+            revert CourseNotCompleted();
         }
 
+        // Check if certificate already exists
+        if (userCertificates[msg.sender][courseId] != 0) {
+            revert CertificateAlreadyIssued();
+        }
+
+        // Validate payment
+        if (msg.value < certificateFee) revert InsufficientPayment();
+
+        // Get platform name from course
+        CourseFactory.Course memory course = courseFactory.getCourse(courseId);
+
+        uint256 tokenId = _nextTokenId++;
+
+        // Mark payment hash as used
+        usedPaymentHashes[paymentReceiptHash] = true;
+
         // Create certificate
-        certificates[certificateId] = Certificate({
-            courseId: courseId,
-            student: msg.sender,
-            studentName: studentName,
+        certificates[tokenId] = Certificate({
+            tokenId: tokenId,
+            platformName: "Manta Education Platform", // Default platform name
+            recipientName: recipientName,
+            recipientAddress: msg.sender,
+            ipfsCID: ipfsCID,
+            baseRoute: baseRoute,
             issuedAt: block.timestamp,
-            certificateId: certificateId,
+            lifetimeFlag: lifetimeFlag,
+            paymentReceiptHash: paymentReceiptHash,
+            courseId: courseId,
             isValid: true
         });
 
-        // Associate certificate with student
-        studentCertificates[msg.sender][courseId] = certificateId;
+        // Map user to certificate
+        userCertificates[msg.sender][courseId] = tokenId;
 
-        // Mint certificate NFT
-        _mint(msg.sender, certificateId, 1, "");
+        // Mint NFT (non-transferable/soulbound by default)
+        _mint(msg.sender, tokenId, 1, "");
 
         // Process payment
-        CourseFactory.Course memory course = courseFactory.getCourse(courseId);
         _processPayment(course.creator);
 
-        emit CertificateIssued(certificateId, courseId, msg.sender, block.timestamp);
+        emit CertificateMinted(msg.sender, tokenId, ipfsCID, paymentReceiptHash);
+        emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
     }
 
     /**
-     * @dev Internal function to handle certificate payment processing
+     * @dev Updates certificate IPFS CID after payment verification
+     * @param tokenId Certificate token ID to update
+     * @param newIpfsCID New IPFS CID
+     * @param paymentReceiptHash Payment verification hash
      */
-    function _processPayment(address creator) internal {
-        // Calculate fees with overflow protection
-        uint256 platformFee;
-        unchecked {
-            platformFee = (certificateFee * platformFeePercentage) / 10000;
+    function updateCertificate(
+        uint256 tokenId,
+        string calldata newIpfsCID,
+        bytes32 paymentReceiptHash
+    )
+        external
+        payable
+        nonReentrant
+        whenNotPaused
+        onlyRole(UPDATER_ROLE)
+        validCID(newIpfsCID)
+    {
+        if (paymentReceiptHash == bytes32(0)) revert InvalidPaymentReceiptHash();
+        if (usedPaymentHashes[paymentReceiptHash]) revert PaymentHashAlreadyUsed();
+        if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
+        if (msg.value < certificateFee) revert InsufficientPayment();
+
+        Certificate storage cert = certificates[tokenId];
+        if (!cert.isValid) revert CertificateNotFound(tokenId);
+
+        // Mark payment hash as used
+        usedPaymentHashes[paymentReceiptHash] = true;
+
+        // Update IPFS CID
+        cert.ipfsCID = newIpfsCID;
+        cert.paymentReceiptHash = paymentReceiptHash;
+
+        // Process payment
+        CourseFactory.Course memory course = courseFactory.getCourse(cert.courseId);
+        _processPayment(course.creator);
+
+        emit CertificateUpdated(cert.recipientAddress, tokenId, newIpfsCID, paymentReceiptHash);
+        emit CertificatePaymentRecorded(msg.sender, cert.recipientAddress, tokenId, paymentReceiptHash);
+    }
+
+    /**
+     * @dev Updates base route for QR code generation
+     * @param tokenId Certificate token ID
+     * @param newBaseRoute New base route
+     */
+    function updateBaseRoute(
+        uint256 tokenId,
+        string calldata newBaseRoute
+    )
+        external
+        onlyRole(UPDATER_ROLE)
+        validStringLength(newBaseRoute, 200, "baseRoute")
+    {
+        if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
+
+        certificates[tokenId].baseRoute = newBaseRoute;
+        emit BaseRouteUpdated(tokenId, newBaseRoute);
+    }
+
+    /**
+     * @dev Revokes a certificate
+     * @param tokenId Certificate to revoke
+     * @param reason Reason for revocation
+     */
+    function revokeCertificate(
+        uint256 tokenId,
+        string calldata reason
+    )
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
+
+        certificates[tokenId].isValid = false;
+        emit CertificateRevoked(tokenId, reason);
+    }
+
+    // ==================== VIEW FUNCTIONS ====================
+
+    /**
+     * @dev Gets complete certificate details
+     * @param tokenId Certificate token ID
+     * @return Certificate struct
+     */
+    function getCertificate(uint256 tokenId) external view returns (Certificate memory) {
+        if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
+        return certificates[tokenId];
+    }
+
+    /**
+     * @dev Generates QR code data for certificate verification
+     * @param tokenId Certificate token ID
+     * @return QR code data string with address parameter
+     */
+    function generateQRData(uint256 tokenId) external view returns (string memory) {
+        if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
+
+        Certificate memory cert = certificates[tokenId];
+
+        // If no baseRoute set, return empty string
+        if (bytes(cert.baseRoute).length == 0) {
+            return "";
         }
-        uint256 creatorFee;
-        unchecked {
-            creatorFee = certificateFee - platformFee;
+
+        // Generate: baseRoute + ?address=<recipientAddress>
+        return string(abi.encodePacked(
+            cert.baseRoute,
+            "?address=",
+            Strings.toHexString(uint160(cert.recipientAddress), 20),
+            "&tokenId=",
+            tokenId.toString()
+        ));
+    }
+
+    /**
+     * @dev Verifies if certificate is valid and exists
+     * @param tokenId Certificate token ID
+     * @return Boolean indicating validity
+     */
+    function verifyCertificate(uint256 tokenId) external view returns (bool) {
+        return _exists(tokenId) && certificates[tokenId].isValid;
+    }
+
+    /**
+     * @dev Gets user's certificate for a specific course
+     * @param user User address
+     * @param courseId Course ID
+     * @return tokenId (0 if not found)
+     */
+    function getUserCertificate(address user, uint256 courseId) external view returns (uint256) {
+        return userCertificates[user][courseId];
+    }
+
+    /**
+     * @dev Custom URI function for metadata
+     * @param tokenId Token ID
+     * @return Token URI
+     */
+    function uri(uint256 tokenId) public view override returns (string memory) {
+        if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
+
+        // Return custom URI if set, otherwise default
+        if (bytes(_tokenURIs[tokenId]).length > 0) {
+            return _tokenURIs[tokenId];
         }
 
-        // Distribute payments
-        if (platformFee > 0) {
-            (bool platformSuccess, ) = platformWallet.call{value: platformFee}("");
-            require(platformSuccess, "Platform fee transfer failed");
-        }
-
-        if (creatorFee > 0) {
-            (bool creatorSuccess, ) = creator.call{value: creatorFee}("");
-            require(creatorSuccess, "Creator payment failed");
-        }
-
-        // Refund excess payment if any
-        if (msg.value > certificateFee) {
-            uint256 refundAmount;
-            unchecked {
-                refundAmount = msg.value - certificateFee;
-            }
-            (bool refundSuccess, ) = msg.sender.call{value: refundAmount}("");
-            require(refundSuccess, "Refund failed");
-        }
+        return string(abi.encodePacked(super.uri(tokenId), tokenId.toString(), ".json"));
     }
 
-    /**
-     * @dev Admin function to revoke a certificate (e.g., in case of fraud)
-     * @param certificateId ID of the certificate to revoke
-     */
-    function revokeCertificate(uint256 certificateId) external onlyOwner {
-        require(certificates[certificateId].isValid, "Certificate not valid or doesn't exist");
-
-        certificates[certificateId].isValid = false;
-
-        emit CertificateRevoked(certificateId);
-    }
+    // ==================== ADMIN FUNCTIONS ====================
 
     /**
-     * @dev Verifies if a certificate is valid
-     * @param certificateId ID of the certificate to verify
-     * @return bool indicating if certificate is valid
+     * @dev Sets certificate fee (admin only)
+     * @param newFee New fee amount
      */
-    function verifyCertificate(uint256 certificateId) external view returns (bool) {
-        return certificates[certificateId].isValid;
-    }
-
-    /**
-     * @dev Gets certificate details
-     * @param certificateId ID of the certificate
-     * @return Certificate details
-     */
-    function getCertificate(uint256 certificateId) external view returns (Certificate memory) {
-        return certificates[certificateId];
-    }
-
-    /**
-     * @dev Gets a student's certificate for a course
-     * @param student Address of the student
-     * @param courseId ID of the course
-     * @return certificateId ID of the certificate (0 if none)
-     */
-    function getStudentCertificate(address student, uint256 courseId) external view returns (uint256) {
-        return studentCertificates[student][courseId];
-    }
-
-    /**
-     * @dev Sets the certificate fee
-     * @param newFee New certificate fee
-     */
-    function setCertificateFee(uint256 newFee) external onlyOwner {
+    function setCertificateFee(uint256 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newFee == 0) revert ZeroAmount();
         certificateFee = newFee;
     }
 
     /**
-     * @dev Sets the platform fee percentage
-     * @param newFeePercentage New fee percentage in basis points
+     * @dev Sets platform wallet (admin only)
+     * @param newWallet New wallet address
      */
-    function setPlatformFee(uint256 newFeePercentage) external onlyOwner {
-        require(newFeePercentage <= 5000, "Fee too high"); // Max 50%
-        platformFeePercentage = newFeePercentage;
-    }
-
-    /**
-     * @dev Sets the platform wallet address
-     * @param newWallet New platform wallet address
-     */
-    function setPlatformWallet(address newWallet) external onlyOwner {
-        require(newWallet != address(0), "Invalid address");
+    function setPlatformWallet(address newWallet) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newWallet == address(0)) revert InvalidAddress(newWallet);
         platformWallet = newWallet;
     }
 
     /**
-     * @dev Gets token URI for a given token ID
-     * @param tokenId ID of the token
-     * @return URI for the token metadata
+     * @dev Sets custom token URI
+     * @param tokenId Token ID
+     * @param tokenURI Custom URI
      */
-    function uri(uint256 tokenId) public view override returns (string memory) {
-        return string(abi.encodePacked(super.uri(tokenId), tokenId.toString(), ".json"));
+    function setTokenURI(
+        uint256 tokenId,
+        string calldata tokenURI
+    )
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
+        _tokenURIs[tokenId] = tokenURI;
     }
 
     /**
-     * @dev Sets the base URI for all token metadata
-     * @param newuri New base URI
+     * @dev Pauses contract operations
      */
-    function setURI(string memory newuri) external onlyOwner {
-        _setURI(newuri);
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
     }
 
     /**
-     * @dev Generates certificate metadata for use in frontend display
-     * @param certificateId ID of the certificate
-     * @return JSON metadata for the certificate
+     * @dev Unpauses contract operations
      */
-    function getCertificateMetadata(uint256 certificateId) external view returns (string memory) {
-        Certificate memory cert = certificates[certificateId];
-        require(cert.isValid, "Certificate not valid");
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
 
-        CourseFactory.Course memory course = courseFactory.getCourse(cert.courseId);
+    // ==================== INTERNAL FUNCTIONS ====================
 
-        // Return a formatted metadata structure that can be used by frontends
-        return string(
-            abi.encodePacked(
-                '{"certificateId":"', certificateId.toString(),
-                '","courseId":"', cert.courseId.toString(),
-                '","courseName":"', course.title,
-                '","studentName":"', cert.studentName,
-                '","studentAddress":"', Strings.toHexString(uint160(cert.student), 20),
-                '","issueDate":"', cert.issuedAt.toString(),
-                '","issuer":"Manta Network Education Platform",',
-                '"valid":', cert.isValid ? "true" : "false",
-                '}'
-            )
-        );
+    /**
+     * @dev Processes certificate payment
+     * @param creator Course creator address
+     */
+    function _processPayment(address creator) internal {
+        // Calculate platform fee (2%)
+        uint256 platformFee = (certificateFee * 200) / 10000;
+        uint256 creatorFee = certificateFee - platformFee;
+
+        // Send platform fee
+        if (platformFee > 0) {
+            (bool success, ) = platformWallet.call{value: platformFee}("");
+            require(success, "Platform fee transfer failed");
+        }
+
+        // Send creator fee
+        if (creatorFee > 0) {
+            (bool success, ) = creator.call{value: creatorFee}("");
+            require(success, "Creator payment failed");
+        }
+
+        // Refund excess payment
+        if (msg.value > certificateFee) {
+            uint256 refund = msg.value - certificateFee;
+            (bool success, ) = msg.sender.call{value: refund}("");
+            require(success, "Refund failed");
+        }
     }
 
     /**
-     * @dev Generates a verification URL or QR code data for the certificate
-     * @param certificateId ID of the certificate
-     * @return Verification data string that can be used in QR codes
+     * @dev Checks if token exists
+     * @param tokenId Token ID to check
+     * @return Boolean indicating existence
      */
-    function getVerificationData(uint256 certificateId) external pure returns (string memory) {
-        // This would typically be a URL to your verification page with the certificate ID
-        return string(
-            abi.encodePacked(
-                "https://your-platform-domain.com/verify/",
-                certificateId.toString()
-            )
-        );
+    function _exists(uint256 tokenId) internal view returns (bool) {
+        return tokenId > 0 && tokenId < _nextTokenId;
     }
 
+    /**
+     * @dev Override for soulbound behavior (non-transferable)
+     * @dev Remove this function to enable transfers
+     */
+    function _update(
+        address from,
+        address to,
+        uint256[] memory ids,
+        uint256[] memory values
+    ) internal override {
+        // Allow minting (from == address(0)) and burning (to == address(0))
+        // Block transfers between users (soulbound behavior)
+        if (from != address(0) && to != address(0)) {
+            revert("Certificates are soulbound");
+        }
+        super._update(from, to, ids, values);
+    }
+
+    // ==================== INTERFACE OVERRIDES ====================
+
+    /**
+     * @dev Interface support check
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC1155, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
 }

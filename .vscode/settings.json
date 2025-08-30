@@ -1,3 +1,42 @@
 {
-    "java.configuration.updateBuildConfiguration": "disabled"
+    "java.configuration.updateBuildConfiguration": "disabled",
+    "mcp.enabled": true,
+    "mcp": {
+        "servers": {
+            "memory": {
+                "command": "npx",
+                "args": [
+                    "-y",
+                    "@modelcontextprotocol/server-memory"
+                ],
+                "env": {
+                    "MEMORY_FILE_PATH": "c:\\Work\\Documents\\Project\\Web3\\Eduverse\\mcp-memory\\memory.json"
+                }
+            },
+            "shadcn-ui": {
+                "command": "npx",
+                "args": [
+                    "@jpisnice/shadcn-ui-mcp-server"
+                ],
+                "env": {
+                    "FRAMEWORK": "react"
+                }
+            }
+        }
+    },
+    "github.copilot.enable": {
+        "*": true,
+        "yaml": true,
+        "plaintext": true,
+        "markdown": true,
+        "json": true,
+        "jsonc": true,
+        "javascript": true,
+        "typescript": true,
+        "javascriptreact": true,
+        "typescriptreact": true
+    },
+    "github.copilot.advanced": {},
+    "continue.telemetryEnabled": false,
+    "continue.enableTabAutocomplete": true
 }

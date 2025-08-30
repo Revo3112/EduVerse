@@ -15,10 +15,62 @@
         "internalType": "address",
         "name": "_platformWallet",
         "type": "address"
+      },
+      {
+        "internalType": "string",
+        "name": "_initialURI",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_platformName",
+        "type": "string"
       }
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "AccessControlBadConfirmation",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "neededRole",
+        "type": "bytes32"
+      }
+    ],
+    "name": "AccessControlUnauthorizedAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CertificateAlreadyIssued",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "CertificateNotFound",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CourseNotCompleted",
+    "type": "error"
   },
   {
     "inputs": [
@@ -123,25 +175,60 @@
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      }
-    ],
-    "name": "OwnableInvalidOwner",
+    "inputs": [],
+    "name": "EnforcedPause",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExpectedPause",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientPayment",
     "type": "error"
   },
   {
     "inputs": [
       {
         "internalType": "address",
-        "name": "account",
+        "name": "addr",
         "type": "address"
       }
     ],
-    "name": "OwnableUnauthorizedAccount",
+    "name": "InvalidAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidCIDFormat",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidPaymentReceiptHash",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "param",
+        "type": "string"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxLength",
+        "type": "uint256"
+      }
+    ],
+    "name": "InvalidStringLength",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "PaymentHashAlreadyUsed",
     "type": "error"
   },
   {
@@ -163,6 +250,11 @@
       }
     ],
     "name": "StringsInsufficientHexLength",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZeroAmount",
     "type": "error"
   },
   {
@@ -196,29 +288,79 @@
       {
         "indexed": true,
         "internalType": "uint256",
-        "name": "certificateId",
+        "name": "tokenId",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "newBaseRoute",
+        "type": "string"
+      }
+    ],
+    "name": "BaseRouteUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
       },
       {
         "indexed": true,
         "internalType": "uint256",
-        "name": "courseId",
+        "name": "tokenId",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "ipfsCID",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "paymentReceiptHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "CertificateMinted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "payer",
+        "type": "address"
       },
       {
         "indexed": true,
         "internalType": "address",
-        "name": "student",
+        "name": "owner",
         "type": "address"
       },
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
-        "name": "issuedAt",
+        "name": "tokenId",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "paymentReceiptHash",
+        "type": "bytes32"
       }
     ],
-    "name": "CertificateIssued",
+    "name": "CertificatePaymentRecorded",
     "type": "event"
   },
   {
@@ -227,8 +369,14 @@
       {
         "indexed": true,
         "internalType": "uint256",
-        "name": "certificateId",
+        "name": "tokenId",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
       }
     ],
     "name": "CertificateRevoked",
@@ -240,17 +388,117 @@
       {
         "indexed": true,
         "internalType": "address",
-        "name": "previousOwner",
+        "name": "owner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "newIpfsCID",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "paymentReceiptHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "CertificateUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "Paused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "previousAdminRole",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "newAdminRole",
+        "type": "bytes32"
+      }
+    ],
+    "name": "RoleAdminChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
         "type": "address"
       },
       {
         "indexed": true,
         "internalType": "address",
-        "name": "newOwner",
+        "name": "sender",
         "type": "address"
       }
     ],
-    "name": "OwnershipTransferred",
+    "name": "RoleGranted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "RoleRevoked",
     "type": "event"
   },
   {
@@ -347,13 +595,65 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "Unpaused",
+    "type": "event"
+  },
+  {
     "inputs": [],
-    "name": "_nextCertificateId",
+    "name": "DEFAULT_ADMIN_ROLE",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "bytes32",
         "name": "",
-        "type": "uint256"
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MINTER_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PAUSER_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "UPDATER_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -432,17 +732,32 @@
     "outputs": [
       {
         "internalType": "uint256",
-        "name": "courseId",
+        "name": "tokenId",
         "type": "uint256"
       },
       {
+        "internalType": "string",
+        "name": "platformName",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "recipientName",
+        "type": "string"
+      },
+      {
         "internalType": "address",
-        "name": "student",
+        "name": "recipientAddress",
         "type": "address"
       },
       {
         "internalType": "string",
-        "name": "studentName",
+        "name": "ipfsCID",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "baseRoute",
         "type": "string"
       },
       {
@@ -451,8 +766,18 @@
         "type": "uint256"
       },
       {
+        "internalType": "bool",
+        "name": "lifetimeFlag",
+        "type": "bool"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "paymentReceiptHash",
+        "type": "bytes32"
+      },
+      {
         "internalType": "uint256",
-        "name": "certificateId",
+        "name": "courseId",
         "type": "uint256"
       },
       {
@@ -481,7 +806,26 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "certificateId",
+        "name": "tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "generateQRData",
+    "outputs": [
+      {
+        "internalType": "string",
+        "name": "",
+        "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
         "type": "uint256"
       }
     ],
@@ -491,17 +835,32 @@
         "components": [
           {
             "internalType": "uint256",
-            "name": "courseId",
+            "name": "tokenId",
             "type": "uint256"
           },
           {
+            "internalType": "string",
+            "name": "platformName",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "recipientName",
+            "type": "string"
+          },
+          {
             "internalType": "address",
-            "name": "student",
+            "name": "recipientAddress",
             "type": "address"
           },
           {
             "internalType": "string",
-            "name": "studentName",
+            "name": "ipfsCID",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "baseRoute",
             "type": "string"
           },
           {
@@ -510,8 +869,18 @@
             "type": "uint256"
           },
           {
+            "internalType": "bool",
+            "name": "lifetimeFlag",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "paymentReceiptHash",
+            "type": "bytes32"
+          },
+          {
             "internalType": "uint256",
-            "name": "certificateId",
+            "name": "courseId",
             "type": "uint256"
           },
           {
@@ -531,17 +900,17 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "certificateId",
-        "type": "uint256"
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
       }
     ],
-    "name": "getCertificateMetadata",
+    "name": "getRoleAdmin",
     "outputs": [
       {
-        "internalType": "string",
+        "internalType": "bytes32",
         "name": "",
-        "type": "string"
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -551,7 +920,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "student",
+        "name": "user",
         "type": "address"
       },
       {
@@ -560,7 +929,7 @@
         "type": "uint256"
       }
     ],
-    "name": "getStudentCertificate",
+    "name": "getUserCertificate",
     "outputs": [
       {
         "internalType": "uint256",
@@ -574,20 +943,43 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "certificateId",
-        "type": "uint256"
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
       }
     ],
-    "name": "getVerificationData",
+    "name": "grantRole",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "hasRole",
     "outputs": [
       {
-        "internalType": "string",
+        "internalType": "bool",
         "name": "",
-        "type": "string"
+        "type": "bool"
       }
     ],
-    "stateMutability": "pure",
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -623,36 +1015,50 @@
       },
       {
         "internalType": "string",
-        "name": "studentName",
+        "name": "recipientName",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "ipfsCID",
+        "type": "string"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "paymentReceiptHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "lifetimeFlag",
+        "type": "bool"
+      },
+      {
+        "internalType": "string",
+        "name": "baseRoute",
         "type": "string"
       }
     ],
-    "name": "issueCertificate",
+    "name": "mintCertificate",
     "outputs": [],
     "stateMutability": "payable",
     "type": "function"
   },
   {
     "inputs": [],
-    "name": "owner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
+    "name": "pause",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
     "inputs": [],
-    "name": "platformFeePercentage",
+    "name": "paused",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "bool",
         "name": "",
-        "type": "uint256"
+        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -685,8 +1091,19 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "renounceOwnership",
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "callerConfirmation",
+        "type": "address"
+      }
+    ],
+    "name": "renounceRole",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -695,11 +1112,34 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "certificateId",
+        "name": "tokenId",
         "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
       }
     ],
     "name": "revokeCertificate",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "role",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "revokeRole",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -804,19 +1244,6 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "newFeePercentage",
-        "type": "uint256"
-      }
-    ],
-    "name": "setPlatformFee",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "address",
         "name": "newWallet",
         "type": "address"
@@ -830,38 +1257,19 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
         "internalType": "string",
-        "name": "newuri",
+        "name": "tokenURI",
         "type": "string"
       }
     ],
-    "name": "setURI",
+    "name": "setTokenURI",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "studentCertificates",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -884,16 +1292,51 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "transferOwnership",
+    "inputs": [],
+    "name": "unpause",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "newBaseRoute",
+        "type": "string"
+      }
+    ],
+    "name": "updateBaseRoute",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "string",
+        "name": "newIpfsCID",
+        "type": "string"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "paymentReceiptHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "updateCertificate",
+    "outputs": [],
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -918,8 +1361,51 @@
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "usedPaymentHashes",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      },
+      {
         "internalType": "uint256",
-        "name": "certificateId",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "userCertificates",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenId",
         "type": "uint256"
       }
     ],

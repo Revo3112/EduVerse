@@ -8,12 +8,12 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./CourseFactory.sol";
 
 /**
- * @title CourseLicense
+ * @title CourseLicense         
  * @dev Course license NFT contract - Simplified for Manta Pacific
  */
 contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     using Strings for uint256;
-    
+
     CourseFactory public courseFactory;
     address public platformWallet;
 
@@ -30,7 +30,7 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     // Mappings
     mapping(uint256 => mapping(address => License)) public licenses;
     mapping(address => mapping(uint256 => uint256)) public studentTokenIds;
-    
+
     // Simple counter for generating unique token IDs
     uint256 private _tokenIds;
 
@@ -82,7 +82,7 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
 
         uint256 tokenId;
         License storage existingLicense = licenses[courseId][msg.sender];
-        
+
         if (studentTokenIds[msg.sender][courseId] == 0) {
             unchecked {
                 _tokenIds++;
@@ -99,7 +99,7 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
             durationInSeconds = durationMonths * SECONDS_PER_MONTH;
         }
         require(durationInSeconds >= durationMonths, "Duration overflow");
-        
+
         uint256 expiryTimestamp;
         unchecked {
             expiryTimestamp = block.timestamp + durationInSeconds;
@@ -251,7 +251,7 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         unchecked {
             platformFee = (totalPrice * platformFeePercentage) / 10000;
         }
-        
+
         uint256 creatorPayment;
         unchecked {
             creatorPayment = totalPrice - platformFee;

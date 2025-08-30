@@ -7,7 +7,54 @@ EduVerse adalah **ekosistem pendidikan Web3 multi-platform** dengan arsitektur p
 - **Next.js Frontend** (TypeScript + Tailwind CSS v4)
 - **Development Portal** (`npm run portal`) - **SINGLE ENTRY POINT FOR ALL OPERATIONS**
 
-## 🚀 Essential Workflow (ALWAYS START HERE)
+## � Development Environment & AI Requirements
+
+### **CRITICAL ENVIRONMENT SPECIFICATIONS**
+- **Operating System**: Windows 11
+- **IDE**: Visual Studio Code with GitHub Copilot
+- **Terminal**: PowerShell (Windows PowerShell v5.1) - **MANDATORY**
+- **Node.js**: Latest LTS version
+- **Git**: Git for Windows with PowerShell integration
+
+### **MANDATORY AI AGENT REQUIREMENTS**
+
+#### **🧠 MEMORY FIRST APPROACH**
+- **ALWAYS** check MCP memory storage before any action using `mcp_memory_read_graph`
+- **MANDATORY** search existing knowledge with `mcp_memory_search_nodes` before creating new entities
+- **REQUIRED** store all important findings, solutions, and patterns using MCP memory tools
+- **ESSENTIAL** create relationships between related concepts for knowledge graph integrity
+
+#### **💡 PowerShell Command Requirements**
+- **ALL** terminal commands must be PowerShell-compatible
+- **NEVER** use bash/Linux syntax - always Windows PowerShell
+- Use `;` for command chaining: `cd eduweb; npm run dev`
+- Use `Get-ChildItem` instead of `ls`, `Remove-Item` instead of `rm`
+- Use Windows path separators: `\` not `/`
+- Example: `Get-Process node; Stop-Process -Name node -Force`
+
+#### **🔍 VS Code Integration**
+- Leverage GitHub Copilot for code suggestions
+- Use VS Code extensions for EduVerse development
+- Configure workspace settings for optimal AI assistance
+- Enable MCP servers in VS Code for enhanced functionality
+
+### **DEVELOPMENT STANDARDS INTEGRATION**
+
+#### **📱 Next.js + Tailwind CSS Standards**
+- **Architecture**: App Router with server and client components
+- **TypeScript**: Strict mode with proper type definitions and Zod validation
+- **Styling**: Tailwind CSS v4 with consistent color palette and dark mode support
+- **Performance**: SSR optimization, bundle splitting, image optimization with next/image
+- **Security**: Input validation, authentication checks, CSRF protection
+
+#### **⚡ Performance Optimization Requirements**
+- **Measure First**: Always profile and measure before optimizing
+- **Frontend**: Minimize DOM manipulations, use CSS animations, implement lazy loading
+- **Backend**: Use asynchronous I/O, implement proper caching, optimize database queries
+- **Code Review**: Check for O(n^2) algorithms, memory leaks, unnecessary computations
+- **Monitoring**: Set up performance budgets and automated testing
+
+## �🚀 Essential Workflow (ALWAYS START HERE)
 
 ### **CRITICAL RULE: Use Portal Only**
 ```bash
@@ -137,6 +184,21 @@ export { getContractAddress, getContractABI, validateContractSetup }
 3. ABIs sync automatically via ExportSystem
 4. `npm run portal → 3 → 2` (Interactive contract test)
 
+### **Quick Actions System (IMPORTANT CORRECTION)**
+❌ **INCORRECT (from README.md)**: `npm run quick <action>` commands do NOT exist in package.json
+✅ **CORRECT**: Quick Actions accessed via portal navigation:
+```bash
+npm run portal → 7 → [Quick Actions Menu]
+
+# Available Quick Actions (Portal Menu 7):
+→ 7 → 1    # 🚀 Full Deploy & Setup (complete workflow)
+→ 7 → 2    # 🔍 Complete Verification (comprehensive check)
+→ 7 → 3    # 📱 Sync Mobile App (ABI + environment)
+→ 7 → 4    # 🧪 Run All Tests (sequential execution)
+→ 7 → 5    # ⚙️ Development Setup (compile + setup)
+→ 7 → 6    # 📊 Quick Status Check (health monitoring)
+```
+
 ### **ExportSystem Class Integration**
 Portal menggunakan unified ExportSystem untuk semua operasi ABI:
 ```javascript
@@ -230,6 +292,93 @@ networkCompatible: connected to mantaPacificTestnet
 prerequisitesMet: all above conditions true
 ```
 
+## 🏆 Advanced Development Standards (2025)
+
+### **Next.js + Tailwind CSS Best Practices**
+
+#### **Architecture Standards**
+- **App Router**: Server and client components with proper data fetching
+- **TypeScript**: Strict mode with clear type definitions and Zod validation
+- **Component Hierarchy**: Plan component structure before implementation
+- **Error Boundaries**: Implement proper error handling at component level
+- **Loading States**: Use React Suspense for optimal user experience
+
+#### **Styling & Design System**
+- **Tailwind CSS v4**: CSS variables with consistent color palette
+- **Dark Mode**: Built-in support with semantic color tokens
+- **Responsive Design**: Mobile-first approach with container queries
+- **Typography**: Semantic font sizing and proper line heights
+- **Accessibility**: WCAG 2.2 compliance for educational platform
+
+#### **State Management**
+- **Server Components**: Default choice for server-side state
+- **Client State**: React hooks for client-side state management
+- **Optimistic Updates**: Implement where appropriate for better UX
+- **Cache Strategy**: Proper invalidation and revalidation patterns
+
+#### **Security Implementation**
+- **Input Validation**: Sanitization on both client and server
+- **Authentication**: Proper checks with secure session handling
+- **CSRF Protection**: Implement anti-CSRF measures
+- **Rate Limiting**: API route protection against abuse
+- **XSS Prevention**: Proper output encoding and CSP headers
+
+### **Performance Optimization Standards**
+
+#### **General Principles**
+- **Measure First**: Always profile before optimizing using proper tools
+- **Common Case Focus**: Optimize frequently executed code paths
+- **Resource Efficiency**: Minimize CPU, memory, network, and disk usage
+- **Performance Budgets**: Set and enforce limits for bundle size and load times
+- **Automated Testing**: Include performance tests in CI/CD pipeline
+
+#### **Frontend Performance**
+- **Rendering Optimization**:
+  - Minimize DOM manipulations with batch updates
+  - Use CSS animations over JavaScript for smooth effects
+  - Implement `React.memo`, `useMemo`, and `useCallback` strategically
+  - Avoid inline styles that trigger layout thrashing
+- **Asset Optimization**:
+  - Image compression with modern formats (WebP, AVIF)
+  - Bundle splitting and tree-shaking with proper build tools
+  - Lazy loading for images and components
+  - Font subsetting and `font-display: swap`
+- **Network Optimization**:
+  - HTTP/2 multiplexing and server push where beneficial
+  - CDN usage for global asset delivery
+  - Service Workers for caching strategies
+  - Preload critical resources with proper prioritization
+
+#### **Backend Performance**
+- **Algorithm Efficiency**: Choose appropriate data structures and avoid O(n²) complexity
+- **Concurrency**: Use async/await patterns and proper thread/worker pools
+- **Caching Strategy**: Multi-layer caching with proper invalidation
+- **Database Optimization**: Indexed queries, connection pooling, pagination
+- **API Design**: Efficient payloads with pagination and filtering
+
+#### **Mobile Performance (React Native)**
+- **Bundle Size**: Lazy loading and code splitting for faster startup
+- **Memory Management**: Proper cleanup and efficient image handling
+- **Network Efficiency**: Request batching and offline capabilities
+- **Platform Optimization**: iOS/Android specific optimizations
+
+#### **Code Review Performance Checklist**
+- [ ] Algorithm complexity analysis (avoid O(n²) patterns)
+- [ ] Memory leak prevention (event listeners, references)
+- [ ] Database query optimization and indexing
+- [ ] Bundle size impact assessment
+- [ ] Network request minimization
+- [ ] Caching implementation verification
+- [ ] Error handling performance impact
+- [ ] Mobile responsiveness validation
+
+### **Web3 Performance Considerations**
+- **Gas Optimization**: Efficient smart contract interactions
+- **RPC Calls**: Batch blockchain queries where possible
+- **Wallet Integration**: Optimize connection and transaction flows
+- **IPFS Operations**: Multi-gateway fallback with timeouts
+- **State Synchronization**: Efficient blockchain data caching
+
 ## 🔧 Platform-Specific Patterns
 
 ### **Smart Contract Patterns**
@@ -240,23 +389,56 @@ prerequisitesMet: all above conditions true
 - **Platform Fees**: 2% configurable
 - **Chain ID**: 3441006 (Manta Pacific Testnet)
 
-### **React Native (Expo)**
-- **Wagmi + Viem**: `useBalance`, `useChainId` hooks
-- **AppKit/WalletConnect**: `@reown/appkit-wagmi-react-native` for wallet connections
+### **React Native (Expo) - Enhanced Architecture**
 - **Expo 51**: React Native 0.74.5 with custom dev build
-- **Setup**: `npm run portal → 4 → 1`
-- **Environment**: Auto-managed `.env` + contract addresses
+- **Web3 Stack**: Wagmi + Viem + @reown/appkit-wagmi-react-native
+- **Context Architecture**: `Web3Context.js` with 30+ blockchain functions
+- **Key Features**:
+  - Comprehensive transaction handling with retry logic
+  - Caching system for courses, licenses, and progress
+  - Multi-gateway IPFS integration with fallbacks
+  - Professional error handling with user-friendly messages
+  - Real-time blockchain data synchronization
+- **Setup**: `npm run portal → 4 → 1` for complete mobile configuration
 - **ABI Structure**: Auto-generated `index.js` with `CONTRACT_NAMES`, `CONTRACT_ABIS`
 - **Helper Functions**: `getContractAddress()`, `getContractABI()`, `validateContractSetup()`
+- **Environment**: Auto-managed `.env` with all contract addresses + chain configuration
 
-### **Next.js Frontend**
+**Web3Context Core Functions:**
+```javascript
+// Course Management
+createCourse, getAllCourses, getCourse, getCourseSections, addCourseSection
+// Licensing System
+mintLicense, hasValidLicense, getLicense, getUserLicenses
+// Progress Tracking
+completeSection, getUserProgress, isCourseCompleted
+// Certificate System
+issueCertificate, getCertificateForCourse, getUserCertificates
+// Creator Tools
+getCreatorCourses, getCourseSectionsCount, getTotalCourses
+```
+
+### **Next.js Frontend - Web3 Integration Ready**
 - **Next.js 15**: App Router + React 19 + TypeScript
-- **Tailwind CSS v4**: CSS variables with PostCSS
-- **Turbopack**: Development with `--turbopack` flag
+- **Tailwind CSS v4**: CSS variables with PostCSS optimization
+- **Turbopack**: Development with `--turbopack` flag for faster builds
+- **Current State**: Basic setup ready for Web3 integration
 - **Start**: `cd eduweb && npm run dev` (after portal setup)
-- **Environment**: Auto-managed `.env.local`
+- **Environment**: Auto-managed `.env.local` with contract addresses
+- **ABI Location**: `eduweb/abis/` with individual JSON files + `contract-addresses.json`
+- **Integration Points**: Ready for Wagmi/Viem Web3 components
+- **Styling**: Geist font family + responsive Tailwind patterns
 
-## ⚠️ Critical Rules & Common Issues
+**Ready for Web3 Development:**
+```javascript
+// Available resources for frontend Web3 integration:
+- Contract ABIs: eduweb/abis/*.json (auto-synced)
+- Addresses: eduweb/abis/contract-addresses.json
+- Environment: NEXT_PUBLIC_*_ADDRESS variables (auto-managed)
+- Network: NEXT_PUBLIC_CHAIN_ID=3441006 (Manta Pacific)
+```
+
+## ⚠️ **Critical Rules & Common Issues**
 
 ### **What NOT to Do**
 - ❌ Never call manager modules directly
@@ -265,6 +447,41 @@ prerequisitesMet: all above conditions true
 - ❌ Never bypass portal system
 - ❌ Never run `npx hardhat` commands directly
 - ❌ Never edit `contract-addresses.json` files manually
+
+### **Portal-Only Access Rule**
+Never use npm commands directly - always use portal equivalents:
+```bash
+npm run deploy          # → Use: npm run portal → 1 → 1
+npm run test:interact   # → Use: npm run portal → 3 → 2
+npm run export:abi      # → Use: npm run portal → 4 → 2
+npm run setup:mobile    # → Use: npm run portal → 4 → 1
+npm run verify:comprehensive # → Use: npm run portal → 2 → 3
+```
+
+### **File Management Rules**
+Never edit these files manually - they are auto-managed:
+- `deployed-contracts.json` - Contract addresses
+- `EduVerseApp/src/constants/abi/*.json` - Mobile ABIs
+- `eduweb/abis/*.json` - Frontend ABIs
+- `contract-addresses.json` files - Address mappings
+- `.env` files - Environment variables (auto-updated by portal)
+
+### **Environment Management Rules**
+Portal auto-manages all environment files:
+- **EduVerseApp/.env** - Auto-updated with contract addresses
+- **eduweb/.env.local** - Auto-updated with NEXT_PUBLIC_* variables
+- **Root .env** - User-managed (PRIVATE_KEY, API keys)
+- ❌ Never run `npx hardhat` commands directly
+- ❌ Never edit `contract-addresses.json` files manually
+
+### **Testing Rules**
+Use portal for all testing operations:
+```bash
+npm run portal → 3 → 1    # Run All Tests (sequential execution)
+npm run portal → 3 → 2    # Interactive Contract Test (testnet-interact.js)
+npm run portal → 3 → 6    # Check Testing Prerequisites
+npm run portal → 3 → 7    # Show Testing Status (comprehensive health check)
+```
 
 ### **Issue Resolution**
 - **ABI Mismatch**: Portal auto-syncs → check `→ 6 → 1`
@@ -306,28 +523,66 @@ NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS=0x...
 ## 🚀 Advanced Development Workflows
 
 ### **Daily Development Routine**
-```bash
-# 1. Quick health check
-npm run portal → 6 → 1
+```powershell
+# 1. Check MCP memory first (MANDATORY)
+# Always run: mcp_memory_read_graph and mcp_memory_search_nodes
 
-# 2. If contracts changed
-npm run portal → 1 → 1 → 2 → 1 → 4 → 1
+# 2. Quick health check
+npm run portal; # Navigate to 6 → 1
 
-# 3. Test changes
-npm run portal → 3 → 2
+# 3. If contracts changed (PowerShell command chaining)
+npm run portal; # Navigate to 1 → 1 → 2 → 1 → 4 → 1
 
-# 4. Before committing
-npm run portal → 7 → 6
+# 4. Test changes
+npm run portal; # Navigate to 3 → 2
+
+# 5. Before committing
+npm run portal; # Navigate to 7 → 6
+
+# PowerShell-specific commands for file operations:
+Get-ChildItem deployed-contracts.json    # Check contract file
+Get-Content .env | Select-String "CHAIN" # Verify environment
 ```
 
-### **Status Monitoring System**
-Portal provides real-time health monitoring:
+### **Contract Change Workflow**
+```bash
+# Edit .sol files → Deploy → Verify → ABIs sync automatically → Test
+npm run portal → 1 → 1    # Deploy Complete System
+npm run portal → 2 → 1    # Complete Verification
+# ABIs automatically sync to mobile and frontend
+npm run portal → 3 → 2    # Interactive contract test
+```
+
+### **Prerequisites Check Pattern**
+```bash
+# Always check manager.getStatus() before operations
+# Validate deployed-contracts.json exists
+# Confirm network connectivity to Manta Pacific
+npm run portal → 6 → 1    # Check complete status first
+```
+
+### **Status Monitoring System (Enhanced)**
+Portal provides comprehensive real-time health monitoring:
 ```javascript
-// Quick status indicators in main menu:
-📦 Deployed: ✅/❌     # Has deployed-contracts.json
-🔍 Verified: ✅/❌     # Network compatibility check
-📱 Mobile Ready: ✅/❌  # ABI files + environment setup
-🌐 Frontend Ready: ✅/❌ # ABI files distributed
+// Real-time status indicators in portal main menu:
+📦 Deployed: ✅/❌       # Has deployed-contracts.json with valid addresses
+🔍 Verified: ✅/❌       # Network compatibility + contract verification
+📱 Mobile Ready: ✅/❌    # ABI files + environment setup + auto-generated helpers
+🌐 Frontend Ready: ✅/❌  # ABI files distributed + contract addresses synced
+
+// Detailed status via Portal → 6 → 1 (Complete Overview):
+- Deployment Status: Contract addresses, network validation
+- Verification Status: Blockchain verification, ABI consistency
+- Testing Status: Prerequisites met, script availability
+- Utilities Status: Mobile/Frontend ABI sync, environment files
+- Development Status: Compilation ready, clean build state
+```
+
+**Status Check Workflow:**
+```bash
+npm run portal → 6 → 1    # Complete Project Overview (recommended daily)
+npm run portal → 6 → [2-6] # Individual module status checks
+npm run portal → 7 → 6    # Quick Status Check (fast health monitoring)
 ```
 
 ### **Debugging Portal Issues**
@@ -457,6 +712,24 @@ Contract helper functions
 | Network Issues | "Not connected" errors | Verify Manta Pacific RPC in config |
 | ABI Mismatches | Contract call failures | Run `→ 4 → 1` to resync ABIs |
 | Test Failures | Tests don't run | Check `→ 3 → 6` prerequisites |
+
+### **PowerShell-Specific Commands**
+```powershell
+# File operations (Windows PowerShell)
+Get-ChildItem *.json                    # List JSON files
+Get-Content deployed-contracts.json     # View contract addresses
+Remove-Item .env.backup -Force          # Delete backup files
+Test-Path "deployed-contracts.json"     # Check file existence
+
+# Process management
+Get-Process node                         # Check running Node processes
+Stop-Process -Name node -Force          # Kill Node processes
+Start-Process -FilePath "npm" -ArgumentList "run", "portal" # Start portal
+
+# Network troubleshooting
+Test-NetConnection -ComputerName "pacific-rpc.sepolia-testnet.manta.network" -Port 443
+Invoke-WebRequest -Uri "https://pacific-rpc.sepolia-testnet.manta.network/http" -Method POST
+```
 
 ### **File System Health**
 Portal monitors these critical files:

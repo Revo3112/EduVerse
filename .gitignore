@@ -1,46 +1,125 @@
 # Dependencies
 node_modules/
 */node_modules/
+.pnp
+.pnp.js
+
+# Environment files with sensitive data
+.env.mcp
+*.env.local
+*.env.development
+*.env.production
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
 
 # Environment variables
 .env
 .env.local
 .env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Workspace-specific files (based on actual files found)
+*.backup.*
+.env.backup.*
+.env.contracts
+.env copy.local
+*copy.local
+.gitignore-additions-*
 
 # Development artifacts
 *.log
 *.backup.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
 # Hardhat files
 /cache
 /artifacts
-
-# TypeChain files
 /typechain
 /typechain-types
-
-# solidity-coverage files
 /coverage
 /coverage.json
+gas-report.txt
+contract-sizes.json
+deployments/localhost
+deployments/hardhat
 
 # Hardhat Ignition default folder for deployments against a local node
 ignition/deployments/chain-31337
 
-# IDE files
+# Blockchain deployment files (sensitive)
+deployed-contracts.json
+.openzeppelin/
+.secret
+privatekey.txt
+mnemonic.txt
+
+# Testing artifacts
+/test-results/
+/playwright-report/
+/playwright/.cache/
+coverage/
+*.lcov
+.nyc_output
+
+# MCP Memory (personal AI knowledge graph)
+mcp-memory/
+*.memory.json
+
+# IDE files - ignore entire .vscode folder
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# OS files
-.DS_Store
-Thumbs.db
+# Expo (React Native)
+.expo/
+.expo-shared/
+expo-env.d.ts
+web-build/
+ios/
+android/
+
+# Next.js
+.next/
+out/
+.vercel/
+.next/cache/
 
 # Build outputs
 /dist
 /build
-.next/
-out/
+*.tsbuildinfo
+*.tgz
+*.tar.gz
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Documentation artifacts
 MIGRATION-GUIDE.md
@@ -51,3 +130,58 @@ CLEANUP-AUDIT.md
 .github/copilot-instructions.md
 .github/ai-prompt-engineering-safety-best-practices.instructions.md
 .github/performance-optimization.instructions.md
+
+# AI Tools temp files
+.copilot/
+.cursor/
+*.ai-temp.*
+
+# Security and keys
+.secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+private/
+secrets/
+
+# ========================
+# 2025 MODERN PATTERNS
+# ========================
+
+# Modern Web3 Development
+.foundry/
+foundry-rs/
+anvil/
+slither-reports/
+mythril-reports/
+.hardhat_contracts/
+
+# Wagmi/Viem Cache
+.wagmi/
+.viem/
+
+# Modern Build Tools
+.turbopack/
+.swc/
+.parcel-cache/
+
+# IPFS & Decentralized Storage
+.ipfs/
+ipfs-cache/
+pinata-cache/
+arweave-cache/
+
+# Modern AI Development Tools
+.codeium/
+.tabnine/
+.github-copilot/
+*.copilot-workspace
+.cursor-tutor/
+
+# Modern Testing & Security
+.vitest/
+.snyk
+sonarqube-report/
+audit-ci-cache/

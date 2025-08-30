@@ -13,6 +13,7 @@ module.exports = {
         enabled: true,
         runs: 200  // Nilai rendah (misal 50-200) akan mengoptimalkan ukuran kontrak
       },
+      viaIR: true  // Enable Intermediate Representation to fix "Stack too deep" errors
     },
   },
   networks: {

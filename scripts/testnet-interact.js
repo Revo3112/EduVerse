@@ -241,14 +241,14 @@ async function main() {
     await sendTransaction(
       certificateManager
         .connect(student)
-        .issueCertificate(courseId1, "John Doe", { value: certFee }),
+        .mintCertificate(courseId1, "John Doe", { value: certFee }),
       "Menerbitkan Sertifikat Kursus 1"
     );
 
     await sendTransaction(
       certificateManager
         .connect(student)
-        .issueCertificate(courseId2, "Jane Doe", { value: certFee }),
+        .mintCertificate(courseId2, "John Doe", { value: certFee }),
       "Menerbitkan Sertifikat Kursus 2"
     );
 

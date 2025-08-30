@@ -3,95 +3,104 @@
  * Handles all testing-related operations
  */
 
-const { Logger, executeCommand, getNetworkInfo, colors, fileExists } = require('../../core/system');
+const { Logger, executeCommand, getNetworkInfo, colors, fileExists, validateMantaNetwork } = require('../../core/system');
 
 class TestingManager {
   constructor() {
     this.testResults = {};
+    this.testScripts = {
+      interactive: 'testnet-interact.js',
+      courseExploration: 'testing-explore-courses.js',
+      licenseSystem: 'testing-my-licenses.js',
+      courseUpdate: 'update_course.js'
+    };
+  }
+
+  /**
+   * Generic test executor with network validation
+   */
+  async executeTest(testName, scriptName, description) {
+    Logger.header(description);
+
+    try {
+      // Validate network before testing
+      if (!this.validateTestNetwork()) {
+        throw new Error("Invalid network configuration for testing");
+      }
+
+      await executeCommand(
+        `npx hardhat run scripts/${scriptName} --network mantaPacificTestnet`,
+        description
+      );
+
+      Logger.success(`${description} completed!`);
+      this.testResults[testName] = { success: true, timestamp: new Date() };
+      return true;
+
+    } catch (error) {
+      Logger.error(`${description} failed: ${error.message}`);
+      this.testResults[testName] = { success: false, error: error.message, timestamp: new Date() };
+      return false;
+    }
+  }
+
+  /**
+   * Validate network configuration for testing
+   */
+  validateTestNetwork() {
+    const validation = validateMantaNetwork();
+
+    if (!validation.valid) {
+      Logger.error(`Testing requires Manta Pacific Sepolia Testnet`);
+      Logger.error(validation.error);
+      return false;
+    }
+
+    return true;
   }
 
   /**
    * Run interactive contract testing
    */
   async runInteractiveTest() {
-    Logger.header("Interactive Contract Testing");
-
-    try {
-      await executeCommand(
-        'npx hardhat run scripts/testnet-interact.js --network mantaPacificTestnet',
-        'Running interactive contract tests'
-      );
-
-      Logger.success("Interactive testing completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`Interactive testing failed: ${error.message}`);
-      return false;
-    }
+    return await this.executeTest(
+      'interactive',
+      this.testScripts.interactive,
+      'Interactive Contract Testing'
+    );
   }
 
   /**
    * Test course exploration functionality
    */
   async testCourseExploration() {
-    Logger.header("Course Exploration Testing");
-
-    try {
-      await executeCommand(
-        'npx hardhat run scripts/testing-explore-courses.js --network mantaPacificTestnet',
-        'Testing course exploration'
-      );
-
-      Logger.success("Course exploration testing completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`Course exploration testing failed: ${error.message}`);
-      return false;
-    }
+    return await this.executeTest(
+      'courseExploration',
+      this.testScripts.courseExploration,
+      'Course Exploration Testing'
+    );
   }
 
   /**
    * Test license functionality
    */
   async testLicenseSystem() {
-    Logger.header("License System Testing");
-
-    try {
-      await executeCommand(
-        'npx hardhat run scripts/testing-my-licenses.js --network mantaPacificTestnet',
-        'Testing license functionality'
-      );
-
-      Logger.success("License system testing completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`License system testing failed: ${error.message}`);
-      return false;
-    }
+    return await this.executeTest(
+      'licenseSystem',
+      this.testScripts.licenseSystem,
+      'License System Testing'
+    );
   }
 
   /**
    * Test course update functionality
    */
   async testCourseUpdate() {
-    Logger.header("Course Update Testing");
-
-    try {
-      await executeCommand(
-        'npx hardhat run scripts/update_course.js --network mantaPacificTestnet',
-        'Testing course update functionality'
-      );
-
-      Logger.success("Course update testing completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`Course update testing failed: ${error.message}`);
-      return false;
-    }
+    return await this.executeTest(
+      'courseUpdate',
+      this.testScripts.courseUpdate,
+      'Course Update Testing'
+    );
   }
 
   /**

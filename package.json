@@ -28,6 +28,8 @@
     "export:mobile": "node scripts/export-system.js --target=mobile --skip-env",
     "export:frontend": "node scripts/export-system.js --target=frontend",
     "update:env": "node scripts/export-system.js --env-only",
+
+    "mcp:start": "npx @jpisnice/shadcn-ui-mcp-server --framework react",
     "setup:mobile": "node scripts/export-system.js --target=mobile"
   },
   "keywords": [

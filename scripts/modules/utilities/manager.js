@@ -39,7 +39,7 @@ class UtilitiesManager {
   }
 
   /**
-   * Export ABI files to mobile app and frontend
+   * Export ABI files to all targets (unified approach)
    */
   async exportABIs() {
     Logger.header("ABI Export Process");
@@ -50,6 +50,23 @@ class UtilitiesManager {
 
     } catch (error) {
       Logger.error(`ABI export failed: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Export ABIs with specific target and options
+   */
+  async exportABIsWithOptions(target = "all", options = {}) {
+    Logger.header(`ABI Export - Target: ${target.toUpperCase()}`);
+
+    try {
+      await this.exportSystem.export({ target, ...options });
+      Logger.success(`${target.toUpperCase()} ABI export completed!`);
+      return true;
+
+    } catch (error) {
+      Logger.error(`${target.toUpperCase()} ABI export failed: ${error.message}`);
       return false;
     }
   }
@@ -70,55 +87,28 @@ class UtilitiesManager {
     }
   }
 
-  /**
-   * Manual ABI export with detailed feedback
-   */
-  async exportABIsManual() {
-    Logger.header("Manual ABI Export");
-
-    try {
-      await this.exportSystem.export({ target: "all", skipEnv: true });
-      Logger.success("Manual ABI export completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`Manual ABI export failed: ${error.message}`);
-      return false;
-    }
-  }
+  // Legacy wrapper functions for portal compatibility
+  // These call the unified exportABIsWithOptions method
 
   /**
    * Export ABI files to mobile only
    */
   async exportMobileOnly() {
-    Logger.header("Mobile ABI Export");
-
-    try {
-      await this.exportSystem.export({ target: "mobile", skipEnv: true });
-      Logger.success("Mobile ABI export completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`Mobile ABI export failed: ${error.message}`);
-      return false;
-    }
+    return await this.exportABIsWithOptions("mobile", { skipEnv: true });
   }
 
   /**
    * Export ABI files to frontend only
    */
   async exportFrontendOnly() {
-    Logger.header("Frontend ABI Export");
+    return await this.exportABIsWithOptions("frontend");
+  }
 
-    try {
-      await this.exportSystem.export({ target: "frontend" });
-      Logger.success("Frontend ABI export completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`Frontend ABI export failed: ${error.message}`);
-      return false;
-    }
+  /**
+   * Manual ABI export with detailed feedback (legacy compatibility)
+   */
+  async exportABIsManual() {
+    return await this.exportABIsWithOptions("all", { skipEnv: true });
   }
 
   /**

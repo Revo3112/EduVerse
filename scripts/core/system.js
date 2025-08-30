@@ -46,6 +46,29 @@ const NETWORK_CONFIG = {
 // ==================== UTILITY FUNCTIONS ====================
 
 /**
+ * Validate network configuration for Manta Pacific Sepolia Testnet
+ */
+function validateMantaNetwork() {
+  const networkInfo = getNetworkInfo();
+  const expectedConfig = NETWORK_CONFIG.mantaPacificTestnet;
+
+  if (!networkInfo.chainId || networkInfo.chainId !== expectedConfig.chainId) {
+    return {
+      valid: false,
+      error: `Invalid Chain ID. Expected: ${expectedConfig.chainId}, Got: ${networkInfo.chainId}`,
+      expected: expectedConfig,
+      current: networkInfo
+    };
+  }
+
+  return {
+    valid: true,
+    config: expectedConfig,
+    message: `Network validation passed - ${expectedConfig.displayName}`
+  };
+}
+
+/**
  * Colorize text for console output
  */
 function colorize(text, color) {
@@ -337,5 +360,6 @@ module.exports = {
   displayProjectStatus,
   pause,
   getUserInput,
-  validateNetworkCompatibility
+  validateNetworkCompatibility,
+  validateMantaNetwork
 };

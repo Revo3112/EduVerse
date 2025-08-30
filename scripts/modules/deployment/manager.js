@@ -3,7 +3,7 @@
  * Handles all deployment-related operations
  */
 
-const { Logger, executeCommand, getNetworkInfo, ensureDirectory } = require('../../core/system');
+const { Logger, executeCommand, getNetworkInfo, ensureDirectory, validateMantaNetwork } = require('../../core/system');
 const { ExportSystem } = require('../../export-system');
 const fs = require('fs');
 const path = require('path');
@@ -21,17 +21,19 @@ class DeploymentManager {
     Logger.header("Complete System Deployment");
 
     try {
+      // Validate network first
+      if (!this.validateNetwork()) {
+        throw new Error("Invalid network configuration for Manta Pacific Sepolia Testnet");
+      }
+
       // Step 1: Compile contracts
       await this.compile();
 
       // Step 2: Deploy to Manta Pacific
       await this.deployToMantaPacific();
 
-      // Step 3: Export ABIs
-      await this.exportABIs();
-
-      // Step 4: Update mobile environment
-      await this.updateMobileEnvironment();
+      // Step 3: Export ABIs and update all environments
+      await this.exportAndUpdateEnvironments();
 
       Logger.success("Complete deployment finished successfully!");
       return true;
@@ -106,19 +108,29 @@ class DeploymentManager {
   }
 
   /**
-   * Export ABI files
+   * Export ABIs and update environments (integrated step)
    */
-  async exportABIs() {
-    Logger.step(3, 4, "Exporting ABI files");
-    await this.exportSystem.export({ target: "all", skipEnv: true });
+  async exportAndUpdateEnvironments() {
+    Logger.step(3, 4, "Exporting ABIs and updating environments");
+    await this.exportSystem.export({ target: "all" });
   }
 
   /**
-   * Update mobile app environment
+   * Validate network configuration for Manta Pacific Sepolia Testnet
    */
-  async updateMobileEnvironment() {
-    Logger.step(4, 4, "Updating mobile environment");
-    await this.exportSystem.export({ envOnly: true });
+  validateNetwork() {
+    Logger.section("Validating Network Configuration");
+
+    const validation = validateMantaNetwork();
+
+    if (!validation.valid) {
+      Logger.error(validation.error);
+      Logger.info(`Expected: ${validation.expected.displayName} (${validation.expected.chainId})`);
+      return false;
+    }
+
+    Logger.success(validation.message);
+    return true;
   }
 
   /**

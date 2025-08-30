@@ -11,6 +11,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { validateMantaNetwork } = require("./core/system");
 
 class ExportSystem {
   constructor() {
@@ -38,6 +39,22 @@ class ExportSystem {
   }
 
   /**
+   * Validate network configuration before export
+   */
+  validateNetwork() {
+    if (fs.existsSync(this.config.paths.deployedContracts)) {
+      const validation = validateMantaNetwork();
+
+      if (!validation.valid) {
+        console.warn(`⚠️ Network validation warning: ${validation.error}`);
+        console.log(`💡 Continuing with export - deployed contracts will be used as-is`);
+      } else {
+        console.log(`✅ ${validation.message}`);
+      }
+    }
+  }
+
+  /**
    * Main export function with configurable targets
    */
   async export(options = {}) {
@@ -47,6 +64,9 @@ class ExportSystem {
     console.log(`📅 Started: ${new Date().toISOString()}`);
 
     try {
+      // Validate network configuration
+      this.validateNetwork();
+
       if (!envOnly) {
         await this.exportABIs(target);
       }
