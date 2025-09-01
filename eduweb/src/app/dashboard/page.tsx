@@ -152,7 +152,7 @@ export default function DashboardPage() {
               <div className="space-y-1">
                 <p className="font-medium">Certificate Earned</p>
                 <p className="text-sm text-muted-foreground">
-                  Completed "Advanced DeFi Strategies" course
+                  Completed &quot;Advanced DeFi Strategies&quot; course
                 </p>
                 <p className="text-xs text-muted-foreground">2 hours ago</p>
               </div>
@@ -162,7 +162,7 @@ export default function DashboardPage() {
               <div className="space-y-1">
                 <p className="font-medium">Course Section Added</p>
                 <p className="text-sm text-muted-foreground">
-                  Added new section to "Blockchain Fundamentals"
+                  Added new section to &quot;Blockchain Fundamentals&quot;
                 </p>
                 <p className="text-xs text-muted-foreground">1 day ago</p>
               </div>
