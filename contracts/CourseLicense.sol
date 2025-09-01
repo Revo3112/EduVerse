@@ -8,8 +8,8 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./CourseFactory.sol";
 
 /**
- * @title CourseLicense         
- * @dev Course license NFT contract - Simplified for Manta Pacific
+ * @title CourseLicense
+ * @dev Production-ready course license NFT contract for Manta Pacific
  */
 contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     using Strings for uint256;
@@ -26,17 +26,34 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     }
 
     uint256 public constant SECONDS_PER_MONTH = 30 days;
+    uint256 public constant MAX_DURATION_MONTHS = 12;
 
     // Mappings
     mapping(uint256 => mapping(address => License)) public licenses;
     mapping(address => mapping(uint256 => uint256)) public studentTokenIds;
+    mapping(uint256 => string) public courseMetadataURI; // New: Course-specific metadata URIs
 
-    // Simple counter for generating unique token IDs
+    // Track relationships between tokens and courses
+    mapping(uint256 => uint256) public tokenIdToCourseId;    // tokenId => courseId
+    mapping(uint256 => address) public tokenIdToStudent;     // tokenId => student address
+    uint256 public nextTokenId = 1;
+
     uint256 private _tokenIds;
+    uint256 public platformFeePercentage = 200; // 2%
 
-    // Platform fee percentage (in basis points: 200 = 2%)
-    uint256 public platformFeePercentage = 200;
+    string private _baseURI; // Base URI for metadata
 
+    // Custom errors
+    error InvalidDuration(uint256 duration, uint256 maxDuration);
+    error CourseNotActive(uint256 courseId);
+    error InsufficientPayment(uint256 sent, uint256 required);
+    error LicenseNotFound(uint256 courseId, address student);
+    error ActiveLicenseExists(uint256 courseId, address student);
+    error ArithmeticOverflow();
+    error PaymentFailed(string recipient);
+    error InvalidAddress(address addr);
+
+    // Events
     event LicenseMinted(
         uint256 indexed courseId,
         address indexed student,
@@ -54,57 +71,80 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     );
 
     constructor(address _courseFactory, address _platformWallet)
-        ERC1155("ipfs://")
+        ERC1155("")
         Ownable(msg.sender)
     {
+        if (_courseFactory == address(0)) revert InvalidAddress(_courseFactory);
+        if (_platformWallet == address(0)) revert InvalidAddress(_platformWallet);
+
         courseFactory = CourseFactory(_courseFactory);
         platformWallet = _platformWallet;
     }
 
     /**
-     * @dev Mints a new license NFT for a course
+     * @dev Mints a new license NFT for a course with overflow protection
      * @param courseId ID of the course
      * @param durationMonths Duration of the license in months
      */
     function mintLicense(uint256 courseId, uint256 durationMonths) external payable nonReentrant {
-        require(durationMonths > 0, "Duration must be positive");
-        require(durationMonths <= 12, "Maximum 12 months per transaction");
+        if (durationMonths == 0 || durationMonths > MAX_DURATION_MONTHS) {
+            revert InvalidDuration(durationMonths, MAX_DURATION_MONTHS);
+        }
 
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
-        require(course.isActive, "Course is not active");
+        if (!course.isActive) revert CourseNotActive(courseId);
 
+        // Safe multiplication check
         uint256 totalPrice;
-        unchecked {
-            totalPrice = course.pricePerMonth * durationMonths;
+        if (durationMonths > 0 && course.pricePerMonth > type(uint256).max / durationMonths) {
+            revert ArithmeticOverflow();
         }
-        require(totalPrice >= course.pricePerMonth, "Price overflow");
-        require(msg.value >= totalPrice, "Insufficient payment");
+        totalPrice = course.pricePerMonth * durationMonths;
+
+        if (msg.value < totalPrice) {
+            revert InsufficientPayment(msg.value, totalPrice);
+        }
 
         uint256 tokenId;
         License storage existingLicense = licenses[courseId][msg.sender];
 
         if (studentTokenIds[msg.sender][courseId] == 0) {
+            // New license - assign new tokenId
+            tokenId = nextTokenId;
             unchecked {
-                _tokenIds++;
+                nextTokenId++;
             }
-            tokenId = _tokenIds;
             studentTokenIds[msg.sender][courseId] = tokenId;
+
+            // Track tokenId relationships
+            tokenIdToCourseId[tokenId] = courseId;
+            tokenIdToStudent[tokenId] = msg.sender;
         } else {
+            // Existing license - check if expired (preserve current business logic)
             tokenId = studentTokenIds[msg.sender][courseId];
-            require(existingLicense.expiryTimestamp < block.timestamp, "Existing license not expired");
+            if (existingLicense.expiryTimestamp >= block.timestamp) {
+                revert ActiveLicenseExists(courseId, msg.sender);
+            }
+
+            // FIX: Burn expired token before minting replacement to prevent balance accumulation
+            if (balanceOf(msg.sender, tokenId) > 0) {
+                _burn(msg.sender, tokenId, balanceOf(msg.sender, tokenId));
+            }
         }
 
+        // Safe duration calculation
         uint256 durationInSeconds;
-        unchecked {
-            durationInSeconds = durationMonths * SECONDS_PER_MONTH;
+        if (durationMonths > type(uint256).max / SECONDS_PER_MONTH) {
+            revert ArithmeticOverflow();
         }
-        require(durationInSeconds >= durationMonths, "Duration overflow");
+        durationInSeconds = durationMonths * SECONDS_PER_MONTH;
 
+        // Safe expiry calculation
         uint256 expiryTimestamp;
-        unchecked {
-            expiryTimestamp = block.timestamp + durationInSeconds;
+        if (block.timestamp > type(uint256).max - durationInSeconds) {
+            revert ArithmeticOverflow();
         }
-        require(expiryTimestamp >= block.timestamp, "Expiry overflow");
+        expiryTimestamp = block.timestamp + durationInSeconds;
 
         licenses[courseId][msg.sender] = License({
             courseId: courseId,
@@ -115,59 +155,69 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         });
 
         _mint(msg.sender, tokenId, 1, "");
-
         _processPayment(course.creator, totalPrice);
 
         emit LicenseMinted(courseId, msg.sender, tokenId, durationMonths, expiryTimestamp);
     }
 
     /**
-     * @dev Renews an existing license
+     * @dev Renews an existing license with enhanced validation
      * @param courseId ID of the course
      * @param durationMonths Additional duration in months
      */
     function renewLicense(uint256 courseId, uint256 durationMonths) external payable nonReentrant {
-        require(durationMonths > 0, "Invalid duration");
-        require(durationMonths <= 12, "Maximum 12 months per transaction");
+        if (durationMonths == 0 || durationMonths > MAX_DURATION_MONTHS) {
+            revert InvalidDuration(durationMonths, MAX_DURATION_MONTHS);
+        }
 
         uint256 tokenId = studentTokenIds[msg.sender][courseId];
-        require(tokenId != 0, "License does not exist");
+        if (tokenId == 0) revert LicenseNotFound(courseId, msg.sender);
 
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
-        require(course.isActive, "Course is not active");
+        if (!course.isActive) revert CourseNotActive(courseId);
 
+        // Safe price calculation
         uint256 totalPrice;
-        unchecked {
-            totalPrice = course.pricePerMonth * durationMonths;
+        if (durationMonths > 0 && course.pricePerMonth > type(uint256).max / durationMonths) {
+            revert ArithmeticOverflow();
         }
-        require(totalPrice >= course.pricePerMonth, "Price overflow");
-        require(msg.value >= totalPrice, "Insufficient payment");
+        totalPrice = course.pricePerMonth * durationMonths;
+
+        if (msg.value < totalPrice) {
+            revert InsufficientPayment(msg.value, totalPrice);
+        }
 
         License storage license = licenses[courseId][msg.sender];
 
+        // Safe duration calculation
         uint256 durationInSeconds;
-        unchecked {
-            durationInSeconds = durationMonths * SECONDS_PER_MONTH;
+        if (durationMonths > type(uint256).max / SECONDS_PER_MONTH) {
+            revert ArithmeticOverflow();
         }
-        require(durationInSeconds >= durationMonths, "Duration overflow");
+        durationInSeconds = durationMonths * SECONDS_PER_MONTH;
 
         uint256 newExpiryTimeStamp;
         if (license.expiryTimestamp > block.timestamp) {
-            unchecked {
-                newExpiryTimeStamp = license.expiryTimestamp + durationInSeconds;
+            // License still active - extend from current expiry
+            if (license.expiryTimestamp > type(uint256).max - durationInSeconds) {
+                revert ArithmeticOverflow();
             }
-            require(newExpiryTimeStamp >= license.expiryTimestamp, "Expiry overflow");
+            newExpiryTimeStamp = license.expiryTimestamp + durationInSeconds;
         } else {
-            unchecked {
-                newExpiryTimeStamp = block.timestamp + durationInSeconds;
+            // License expired - extend from now
+            if (block.timestamp > type(uint256).max - durationInSeconds) {
+                revert ArithmeticOverflow();
             }
-            require(newExpiryTimeStamp >= block.timestamp, "Expiry overflow");
+            newExpiryTimeStamp = block.timestamp + durationInSeconds;
+        }
+
+        // Safe addition for duration
+        if (license.durationLicense > type(uint256).max - durationMonths) {
+            revert ArithmeticOverflow();
         }
 
         license.expiryTimestamp = newExpiryTimeStamp;
-        unchecked {
-            license.durationLicense += durationMonths;
-        }
+        license.durationLicense += durationMonths;
         license.isActive = true;
 
         _processPayment(course.creator, totalPrice);
@@ -191,32 +241,77 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Gets all courses a student has purchased
+     * @dev Gets all courses a student has purchased (batch operation)
      */
-    function getStudentCourses(address student, uint256[] calldata courseIds) external view returns (bool[] memory) {
+    function getStudentCourses(address student, uint256[] calldata courseIds)
+        external
+        view
+        returns (bool[] memory)
+    {
         bool[] memory results = new bool[](courseIds.length);
 
-        for (uint256 i = 0; i < courseIds.length; i++) {
+        for (uint256 i = 0; i < courseIds.length;) {
             uint256 courseId = courseIds[i];
             License memory license = licenses[courseId][student];
-            results[i] = license.isActive;
+            results[i] = license.isActive && license.expiryTimestamp > block.timestamp;
+
+            unchecked {
+                ++i;
+            }
         }
 
         return results;
     }
 
     /**
-     * @dev Gets token URI for a given token ID
+     * @dev Gets token URI for a given token ID with proper IPFS handling
      */
     function uri(uint256 tokenId) public view override returns (string memory) {
-        return string(abi.encodePacked(super.uri(tokenId), tokenId.toString(), ".json"));
+        // First check if there's a specific metadata URI for this course
+        License memory license = licenses[_getCourseIdFromTokenId(tokenId)][_getStudentFromTokenId(tokenId)];
+        if (license.courseId != 0 && bytes(courseMetadataURI[license.courseId]).length > 0) {
+            return courseMetadataURI[license.courseId];
+        }
+
+        // Fallback to base URI + tokenId pattern
+        if (bytes(_baseURI).length > 0) {
+            return string(abi.encodePacked(_baseURI, tokenId.toString(), ".json"));
+        }
+
+        // Final fallback - empty string (indicates no metadata set)
+        return "";
     }
 
     /**
-     * @dev Sets the base URI for all token metadata
+     * @dev Sets the base URI for all token metadata (owner only)
+     * @param newBaseURI New base URI (should be complete IPFS path like "ipfs://QmHash/")
      */
-    function setURI(string memory newuri) external onlyOwner {
-        _setURI(newuri);
+    function setURI(string memory newBaseURI) external onlyOwner {
+        _baseURI = newBaseURI;
+        _setURI(newBaseURI);
+    }
+
+    /**
+     * @dev Sets metadata URI for a specific course (owner only)
+     * @param courseId The course ID
+     * @param metadataURI Complete IPFS URI for this course's metadata
+     */
+    function setCourseMetadataURI(uint256 courseId, string memory metadataURI) external onlyOwner {
+        courseMetadataURI[courseId] = metadataURI;
+    }
+
+    /**
+     * @dev Internal function to extract courseId from tokenId
+     */
+    function _getCourseIdFromTokenId(uint256 tokenId) internal view returns (uint256) {
+        return tokenIdToCourseId[tokenId];
+    }
+
+    /**
+     * @dev Internal function to extract student address from tokenId
+     */
+    function _getStudentFromTokenId(uint256 tokenId) internal view returns (address) {
+        return tokenIdToStudent[tokenId];
     }
 
     /**
@@ -238,45 +333,74 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
      * @dev Updates platform wallet address (only owner)
      */
     function setPlatformWallet(address _platformWallet) external onlyOwner {
-        require(_platformWallet != address(0), "Invalid address");
+        if (_platformWallet == address(0)) revert InvalidAddress(_platformWallet);
         platformWallet = _platformWallet;
     }
 
     /**
-     * @dev Internal function to handle payment processing
+     * @dev Internal function to handle payment processing with enhanced error handling
      */
     function _processPayment(address creator, uint256 totalPrice) internal {
-        // Calculate platform fee
+        // Calculate platform fee with overflow protection
         uint256 platformFee;
-        unchecked {
+        if (totalPrice > 0 && platformFeePercentage > 0) {
+            if (totalPrice > type(uint256).max / platformFeePercentage) {
+                revert ArithmeticOverflow();
+            }
             platformFee = (totalPrice * platformFeePercentage) / 10000;
         }
 
         uint256 creatorPayment;
-        unchecked {
+        if (totalPrice >= platformFee) {
             creatorPayment = totalPrice - platformFee;
+        } else {
+            revert ArithmeticOverflow();
         }
 
         // Send platform fee
         if (platformFee > 0 && platformWallet != address(0)) {
             (bool platformSuccess, ) = platformWallet.call{value: platformFee}("");
-            require(platformSuccess, "Platform fee transfer failed");
+            if (!platformSuccess) revert PaymentFailed("platform");
         }
 
         // Send creator payment
         if (creatorPayment > 0) {
             (bool creatorSuccess, ) = creator.call{value: creatorPayment}("");
-            require(creatorSuccess, "Creator payment failed");
+            if (!creatorSuccess) revert PaymentFailed("creator");
         }
 
         // Refund excess payment if any
         if (msg.value > totalPrice) {
-            uint256 refundAmount;
-            unchecked {
-                refundAmount = msg.value - totalPrice;
-            }
+            uint256 refundAmount = msg.value - totalPrice;
             (bool refundSuccess, ) = msg.sender.call{value: refundAmount}("");
-            require(refundSuccess, "Refund failed");
+            if (!refundSuccess) revert PaymentFailed("refund");
         }
+    }
+
+    /**
+     * @dev Emergency function to deactivate license (owner only)
+     */
+    function emergencyDeactivateLicense(address student, uint256 courseId)
+        external
+        onlyOwner
+    {
+        License storage license = licenses[courseId][student];
+        if (!license.isActive) revert LicenseNotFound(courseId, student);
+
+        license.isActive = false;
+    }
+
+    /**
+     * @dev Override _update to prevent license transfers (soulbound behavior)
+     * @dev Course licenses should be personal and non-transferable for business logic compliance
+     */
+    function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
+        internal
+        override
+    {
+        // Allow minting (from = address(0)) and burning (to = address(0))
+        // Prevent all other transfers to maintain license integrity
+        require(from == address(0) || to == address(0), "License transfers not allowed");
+        super._update(from, to, ids, values);
     }
 }

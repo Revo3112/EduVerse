@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./CourseFactory.sol";
 import "./ProgressTracker.sol";
+import "./CourseLicense.sol";
 
 /**
  * @title CertificateManager
@@ -38,14 +39,19 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
     error InvalidCIDFormat();
     error ZeroAmount();
     error EmptyCoursesArray();
+    error NoLicenseOwnership();
+    error ExceedsMaxPrice();
+    error CreatorPriceNotSet();
 
     // ==================== STATE VARIABLES ====================
     CourseFactory public immutable courseFactory;
     ProgressTracker public immutable progressTracker;
+    CourseLicense public immutable courseLicense;
 
     uint256 private _nextTokenId = 1;
-    uint256 public certificateFee = 0.001 ether;      // Fee for minting first certificate
-    uint256 public courseAdditionFee = 0.0001 ether; // Fee for adding courses to existing certificate
+    uint256 public constant MAX_CERTIFICATE_PRICE = 0.002 ether; // Maximum 100k IDR equivalent
+    uint256 public defaultCertificateFee = 0.001 ether;      // Default fee for minting first certificate
+    uint256 public defaultCourseAdditionFee = 0.0001 ether; // Default fee for adding courses to existing certificate
     address public platformWallet;
     string public defaultPlatformName;                // Configurable platform name
 
@@ -76,6 +82,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
     mapping(bytes32 => bool) public usedPaymentHashes;           // Replay protection
     mapping(uint256 => string) private _tokenURIs;               // Custom token URIs
     mapping(uint256 => mapping(uint256 => bool)) public certificateCourseExists; // tokenId => courseId => exists
+    mapping(uint256 => uint256) public courseCertificatePrices;  // courseId => certificate price set by creator
 
     // ==================== EVENTS ====================
     event CertificateMinted(
@@ -112,21 +119,25 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
     event BaseRouteUpdated(uint256 indexed tokenId, string newBaseRoute);
     event PlatformNameUpdated(string newPlatformName);
     event CourseAdditionFeeUpdated(uint256 newFee);
+    event CourseCertificatePriceSet(uint256 indexed courseId, uint256 price, address indexed creator);
 
     // ==================== CONSTRUCTOR ====================
     constructor(
         address _courseFactory,
         address _progressTracker,
+        address _courseLicense,
         address _platformWallet,
         string memory _initialURI,
         string memory _platformName
     ) ERC1155(_initialURI) {
         if (_courseFactory == address(0)) revert InvalidAddress(_courseFactory);
         if (_progressTracker == address(0)) revert InvalidAddress(_progressTracker);
+        if (_courseLicense == address(0)) revert InvalidAddress(_courseLicense);
         if (_platformWallet == address(0)) revert InvalidAddress(_platformWallet);
 
         courseFactory = CourseFactory(_courseFactory);
         progressTracker = ProgressTracker(_progressTracker);
+        courseLicense = CourseLicense(_courseLicense);
         platformWallet = _platformWallet;
         defaultPlatformName = _platformName;    // ✅ FIXED: Now using the constructor parameter
 
@@ -175,17 +186,23 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         payable
         nonReentrant
         whenNotPaused
-        onlyRole(MINTER_ROLE)
         validStringLength(ipfsCID, 62, "ipfsCID")
     {
         // Validate payment receipt hash
         if (paymentReceiptHash == bytes32(0)) revert InvalidPaymentReceiptHash();
         if (usedPaymentHashes[paymentReceiptHash]) revert PaymentHashAlreadyUsed();
 
-        // Check course completion
+        // Check course completion AND license ownership
         if (!progressTracker.isCourseCompleted(msg.sender, courseId)) {
             revert CourseNotCompleted();
         }
+
+        // ✅ NEW: Validate user actually owned a license for this course
+        CourseLicense.License memory userLicense = courseLicense.getLicense(msg.sender, courseId);
+        if (userLicense.courseId == 0) {
+            revert NoLicenseOwnership();
+        }
+        // Allow expired licenses - user can get certificate if course was completed during license period
 
         // Get user's existing certificate
         uint256 existingTokenId = userCertificates[msg.sender];
@@ -218,8 +235,11 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         internal
         validStringLength(recipientName, 100, "recipientName")
     {
+        // Get certificate price (creator-set or default)
+        uint256 certificatePrice = _getCertificatePrice(courseId);
+
         // Validate payment for minting
-        if (msg.value < certificateFee) revert InsufficientPayment();
+        if (msg.value < certificatePrice) revert InsufficientPayment();
 
         uint256 tokenId = _nextTokenId++;
 
@@ -256,9 +276,9 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         // Mint the NFT (soulbound)
         _mint(msg.sender, tokenId, 1, "");
 
-        // Process payment
+        // Process payment with correct distribution (90% creator + 10% platform)
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
-        _processPayment(course.creator, certificateFee);
+        _processCertificatePayment(course.creator, certificatePrice);
 
         emit CertificateMinted(msg.sender, tokenId, recipientName, ipfsCID, paymentReceiptHash);
         emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
@@ -277,8 +297,11 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         string calldata ipfsCID,
         bytes32 paymentReceiptHash
     ) internal {
-        // Validate payment for course addition (much cheaper than minting)
-        if (msg.value < courseAdditionFee) revert InsufficientPayment();
+        // Get certificate price for adding course to existing certificate
+        uint256 additionPrice = _getCertificatePrice(courseId);
+
+        // Validate payment for course addition
+        if (msg.value < additionPrice) revert InsufficientPayment();
 
         Certificate storage cert = certificates[tokenId];
 
@@ -306,9 +329,9 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         // Track course existence
         certificateCourseExists[tokenId][courseId] = true;
 
-        // Process payment
+        // Process payment with correct distribution (90% creator + 10% platform)
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
-        _processPayment(course.creator, courseAdditionFee);
+        _processCertificatePayment(course.creator, additionPrice);
 
         emit CourseAddedToCertificate(msg.sender, tokenId, courseId, ipfsCID, paymentReceiptHash);
         emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
@@ -330,16 +353,20 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         payable
         nonReentrant
         whenNotPaused
-        onlyRole(UPDATER_ROLE)
         validStringLength(newIpfsCID, 62, "newIpfsCID")
     {
         if (paymentReceiptHash == bytes32(0)) revert InvalidPaymentReceiptHash();
         if (usedPaymentHashes[paymentReceiptHash]) revert PaymentHashAlreadyUsed();
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
-        if (msg.value < courseAdditionFee) revert InsufficientPayment(); // Use smaller fee for updates
+        if (msg.value < defaultCourseAdditionFee) revert InsufficientPayment(); // Use smaller fee for updates
 
         Certificate storage cert = certificates[tokenId];
         if (!cert.isValid) revert CertificateNotFound(tokenId);
+
+        // ✅ NEW: Only certificate owner can update their certificate
+        if (cert.recipientAddress != msg.sender) {
+            revert("Only certificate owner can update");
+        }
 
         // Mark payment hash as used
         usedPaymentHashes[paymentReceiptHash] = true;
@@ -350,7 +377,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         cert.lastUpdated = block.timestamp;
 
         // Process payment (use course addition fee for simple updates)
-        _processPayment(platformWallet, courseAdditionFee);
+        _processCertificatePayment(platformWallet, defaultCourseAdditionFee);
 
         emit CertificateUpdated(cert.recipientAddress, tokenId, newIpfsCID, paymentReceiptHash);
         emit CertificatePaymentRecorded(msg.sender, cert.recipientAddress, tokenId, paymentReceiptHash);
@@ -372,7 +399,6 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         payable
         nonReentrant
         whenNotPaused
-        onlyRole(MINTER_ROLE)
         validStringLength(ipfsCID, 62, "ipfsCID")
     {
         if (courseIds.length == 0) revert EmptyCoursesArray();
@@ -386,7 +412,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         if (!cert.isValid) revert CertificateNotFound(tokenId);
 
         // Validate payment for batch operation
-        uint256 totalFee = courseAdditionFee * courseIds.length;
+        uint256 totalFee = defaultCourseAdditionFee * courseIds.length;
         if (msg.value < totalFee) revert InsufficientPayment();
 
         // Validate all courses are completed and not already in certificate
@@ -427,7 +453,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         cert.paymentReceiptHash = paymentReceiptHash;
 
         // Process payment to platform (batch fee)
-        _processPayment(platformWallet, totalFee);
+        _processCertificatePayment(platformWallet, totalFee);
 
         emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
     }
@@ -585,21 +611,23 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
     // ==================== ADMIN FUNCTIONS ====================
 
     /**
-     * @dev Sets certificate fee for new certificate minting (admin only)
+     * @dev Sets default certificate fee for new certificate minting (admin only)
      * @param newFee New fee amount
      */
-    function setCertificateFee(uint256 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setDefaultCertificateFee(uint256 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newFee == 0) revert ZeroAmount();
-        certificateFee = newFee;
+        if (newFee > MAX_CERTIFICATE_PRICE) revert ExceedsMaxPrice();
+        defaultCertificateFee = newFee;
     }
 
     /**
-     * @dev Sets course addition fee for adding courses to existing certificates (admin only)
+     * @dev Sets default course addition fee for adding courses to existing certificates (admin only)
      * @param newFee New fee amount (should be lower than certificate fee)
      */
-    function setCourseAdditionFee(uint256 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setDefaultCourseAdditionFee(uint256 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newFee == 0) revert ZeroAmount();
-        courseAdditionFee = newFee;
+        if (newFee > MAX_CERTIFICATE_PRICE) revert ExceedsMaxPrice();
+        defaultCourseAdditionFee = newFee;
         emit CourseAdditionFeeUpdated(newFee);
     }
 
@@ -622,6 +650,36 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         }
         defaultPlatformName = newPlatformName;
         emit PlatformNameUpdated(newPlatformName);
+    }
+
+    /**
+     * @dev Sets course certificate price (course creator only)
+     * @param courseId Course ID
+     * @param price Certificate price (maximum 0.002 ETH)
+     */
+    function setCourseCertificatePrice(uint256 courseId, uint256 price) external {
+        if (price == 0) revert ZeroAmount();
+        if (price > MAX_CERTIFICATE_PRICE) revert ExceedsMaxPrice();
+
+        // Verify caller is the course creator
+        CourseFactory.Course memory course = courseFactory.getCourse(courseId);
+        require(course.creator == msg.sender, "Only course creator can set price");
+
+        courseCertificatePrices[courseId] = price;
+        emit CourseCertificatePriceSet(courseId, price, msg.sender);
+    }
+
+    /**
+     * @dev Gets certificate price for a course
+     * @param courseId Course ID
+     * @return Certificate price in wei
+     */
+    function getCourseCertificatePrice(uint256 courseId) external view returns (uint256) {
+        uint256 creatorPrice = courseCertificatePrices[courseId];
+        if (creatorPrice > 0) {
+            return creatorPrice;
+        }
+        return defaultCertificateFee;
     }
 
     /**
@@ -693,6 +751,49 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
     }
 
     // ==================== INTERNAL FUNCTIONS ====================
+
+    /**
+     * @dev Gets certificate price for a course (creator-set or default)
+     * @param courseId Course ID
+     * @return Certificate price in wei
+     */
+    function _getCertificatePrice(uint256 courseId) internal view returns (uint256) {
+        uint256 creatorPrice = courseCertificatePrices[courseId];
+        if (creatorPrice > 0) {
+            return creatorPrice;
+        }
+        return defaultCertificateFee;
+    }
+
+    /**
+     * @dev Processes certificate payment with correct business logic (90% creator + 10% platform)
+     * @param recipient Payment recipient (course creator)
+     * @param totalAmount Total amount being processed
+     */
+    function _processCertificatePayment(address recipient, uint256 totalAmount) internal {
+        // Calculate fees: 10% platform, 90% creator
+        uint256 platformFee = (totalAmount * 1000) / 10000; // 10%
+        uint256 creatorFee = totalAmount - platformFee;     // 90%
+
+        // Send platform fee (10%)
+        if (platformFee > 0) {
+            (bool success, ) = platformWallet.call{value: platformFee}("");
+            require(success, "Platform fee transfer failed");
+        }
+
+        // Send creator fee (90%)
+        if (creatorFee > 0) {
+            (bool success, ) = recipient.call{value: creatorFee}("");
+            require(success, "Creator payment failed");
+        }
+
+        // Refund excess payment
+        if (msg.value > totalAmount) {
+            uint256 refund = msg.value - totalAmount;
+            (bool success, ) = msg.sender.call{value: refund}("");
+            require(success, "Refund failed");
+        }
+    }
 
     /**
      * @dev Processes certificate payment with improved fee structure

@@ -23,7 +23,7 @@ description: 'System Prompt That Must Follow Through'
 - **FAILURE CONSEQUENCE**: Knowledge loss and repeated mistakes
 
 ### CRITICAL RULE #3: COMPLETE CONTEXT COMPREHENSION
-- **MANDATORY**: Read ENTIRE `copilot-instructions.md` before ANY action
+- **MANDATORY**: Read ENTIRE `copilot-instructions.md, nextjs-tailwind.instructions.md, performance-optimization.instructions.md` before ANY action
 - **REQUIRED UNDERSTANDING**:
   - EduVerse portal system (8 main sections, 47 sub-options)
   - Smart contracts dependency chain (CourseFactory → CourseLicense → ProgressTracker → CertificateManager)
@@ -35,7 +35,7 @@ description: 'System Prompt That Must Follow Through'
 ## 📋 2025 BEST PRACTICES ENFORCEMENT
 
 ### WEB3 & BLOCKCHAIN STANDARDS (2025)
-- **Solidity**: Latest 0.8.x with security patterns (ReentrancyGuard, AccessControl)
+- **Solidity**: Latest 0.8.24 with security patterns (ReentrancyGuard, AccessControl)
 - **Hardhat**: Latest config with `viaIR: true` for complex contracts
 - **Wagmi v2**: Latest hooks pattern with proper error handling
 - **Viem**: Latest client configuration for Manta Pacific Testnet
