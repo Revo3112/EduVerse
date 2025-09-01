@@ -20,7 +20,7 @@ function LayoutContent({ children, className }: EnhancedLayoutProps) {
       return "ml-0" // No margin for hover mode
     }
     // Drawer mode - full sidebar visible
-    return "ml-64" // Full sidebar width (256px)
+    return "ml-[280px]" // Full sidebar width (280px)
   }
 
   return (
