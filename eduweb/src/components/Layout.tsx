@@ -51,7 +51,7 @@ function LayoutContent({ children, className }: EnhancedLayoutProps) {
   )
 }
 
-export function EnhancedLayout({ children, className }: EnhancedLayoutProps) {
+export function Layout({ children, className }: EnhancedLayoutProps) {
   return (
     <SidebarModeProvider>
       <LayoutContent className={className}>

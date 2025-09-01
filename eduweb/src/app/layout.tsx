@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThirdwebProvider } from "thirdweb/react";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { EnhancedLayout } from "@/components/EnhancedLayout";
+import { Layout } from "@/components/Layout";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -37,9 +37,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ThirdwebProvider>
-            <EnhancedLayout>
+            <Layout>
               {children}
-            </EnhancedLayout>
+            </Layout>
           </ThirdwebProvider>
         </ThemeProvider>
       </body>
