@@ -19,6 +19,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@/components/ui/sidebar"
 import {
   Tooltip,
@@ -32,7 +33,7 @@ import Image from "next/image"
 interface NavigationItem {
   title: string
   url: string
-  icon: any
+  icon: React.ComponentType<{ className?: string }>
   description: string
 }
 
@@ -92,23 +93,26 @@ export function EduVerseSidebar() {
 
   return (
     <TooltipProvider>
-      <Sidebar className="border-r">
-        <SidebarHeader className="border-b p-6">
-          <Link href="/dashboard" className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-lg overflow-hidden">
-              <Image
-                src="/Eduverse_logo.png"
-                alt="EduVerse Logo"
-                width={40}
-                height={40}
-                className="w-full h-full object-contain"
-                priority
-              />
-            </div>
-            <div>
-              <span className="text-lg font-bold">EduVerse</span>
-            </div>
-          </Link>
+      <Sidebar className="border-none shadow-none bg-transparent" collapsible="offcanvas">
+        <SidebarHeader className="border-b border-border/50 p-6">
+          <div className="flex items-center justify-between">
+            <Link href="/dashboard" className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-lg overflow-hidden">
+                <Image
+                  src="/Eduverse_logo.png"
+                  alt="EduVerse Logo"
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-contain"
+                  priority
+                />
+              </div>
+              <div>
+                <span className="text-lg font-bold">EduVerse</span>
+              </div>
+            </Link>
+            <SidebarTrigger className="ml-4 hover:bg-accent/50 transition-colors" />
+          </div>
         </SidebarHeader>
 
         <SidebarContent className="p-4">
@@ -123,8 +127,8 @@ export function EduVerseSidebar() {
                       <SidebarMenuButton
                         asChild
                         className={cn(
-                          "w-full justify-start",
-                          isActive && "bg-accent text-accent-foreground"
+                          "w-full justify-start transition-colors hover:bg-accent/70",
+                          isActive && "bg-accent/90 text-accent-foreground font-medium"
                         )}
                       >
                         <Link href={item.url} className="flex items-center space-x-3">

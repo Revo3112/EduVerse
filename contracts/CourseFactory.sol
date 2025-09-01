@@ -17,33 +17,40 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
     // Course Categories for educational content organization
     enum CourseCategory {
-        Programming,        // 0 - Software Development, Coding, Web Development
-        Design,            // 1 - UI/UX, Graphic Design, Web Design
-        Business,          // 2 - Entrepreneurship, Management, Strategy
-        Marketing,         // 3 - Digital Marketing, Social Media, SEO
-        DataScience,       // 4 - Analytics, Machine Learning, AI
-        Finance,           // 5 - Accounting, Investment, Cryptocurrency
-        Healthcare,        // 6 - Medical, Nursing, Health Sciences
-        Language,          // 7 - English, Foreign Languages, Communication
-        Arts,              // 8 - Music, Photography, Creative Arts
-        Mathematics,       // 9 - Pure Math, Statistics, Calculus, Algebra
-        Science,           // 10 - Physics, Chemistry, Biology, Earth Sciences
-        Engineering,       // 11 - Mechanical, Electrical, Civil Engineering
-        Technology,        // 12 - Cybersecurity, DevOps, Cloud Computing
-        Education,         // 13 - Teaching Methods, Curriculum Design
-        Psychology,        // 14 - Mental Health, Behavioral Psychology
-        Culinary,          // 15 - Cooking, Nutrition, Food Safety
+        Programming, // 0 - Software Development, Coding, Web Development
+        Design, // 1 - UI/UX, Graphic Design, Web Design
+        Business, // 2 - Entrepreneurship, Management, Strategy
+        Marketing, // 3 - Digital Marketing, Social Media, SEO
+        DataScience, // 4 - Analytics, Machine Learning, AI
+        Finance, // 5 - Accounting, Investment, Cryptocurrency
+        Healthcare, // 6 - Medical, Nursing, Health Sciences
+        Language, // 7 - English, Foreign Languages, Communication
+        Arts, // 8 - Music, Photography, Creative Arts
+        Mathematics, // 9 - Pure Math, Statistics, Calculus, Algebra
+        Science, // 10 - Physics, Chemistry, Biology, Earth Sciences
+        Engineering, // 11 - Mechanical, Electrical, Civil Engineering
+        Technology, // 12 - Cybersecurity, DevOps, Cloud Computing
+        Education, // 13 - Teaching Methods, Curriculum Design
+        Psychology, // 14 - Mental Health, Behavioral Psychology
+        Culinary, // 15 - Cooking, Nutrition, Food Safety
         PersonalDevelopment, // 16 - Leadership, Productivity, Communication
-        Legal,             // 17 - Law, Compliance, Intellectual Property
-        Sports,            // 18 - Fitness, Athletics, Sports Science
-        Other              // 19 - Miscellaneous categories
+        Legal, // 17 - Law, Compliance, Intellectual Property
+        Sports, // 18 - Fitness, Athletics, Sports Science
+        Other // 19 - Miscellaneous categories
+    }
+
+    // Course difficulty levels for educational content progression
+    enum CourseDifficulty {
+        Beginner, // 0 - Entry level, no prerequisites
+        Intermediate, // 1 - Some background knowledge required
+        Advanced // 2 - Expert level, extensive prerequisites
     }
 
     // Rating system structure for course evaluation
     struct CourseRating {
-        uint256 totalRatings;        // Total number of ratings received
-        uint256 ratingSum;           // Sum of all ratings (for average calculation)
-        uint256 averageRating;       // Cached average rating (scaled by 10000, e.g., 45000 = 4.5000 stars)
+        uint256 totalRatings; // Total number of ratings received
+        uint256 ratingSum; // Sum of all ratings (for average calculation)
+        uint256 averageRating; // Cached average rating (scaled by 10000, e.g., 45000 = 4.5000 stars)
         mapping(address => uint256) userRatings; // User's individual ratings (1-5 stars)
     }
 
@@ -54,7 +61,8 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         string thumbnailCID;
         address creator;
         bool isActive;
-        CourseCategory category;     // Course category for filtering
+        CourseCategory category; // Course category for filtering
+        CourseDifficulty difficulty; // Course difficulty level
         uint256 pricePerMonth;
         uint256 createdAt;
     }
@@ -100,7 +108,11 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     error SectionNotFound(uint256 courseId, uint256 sectionId);
     error PriceExceedsMaximum(uint256 price, uint256 maxPrice);
     error ZeroPrice();
-    error InvalidDuration(uint256 duration, uint256 minDuration, uint256 maxDuration);
+    error InvalidDuration(
+        uint256 duration,
+        uint256 minDuration,
+        uint256 maxDuration
+    );
     error InvalidReorderLength(uint256 provided, uint256 expected);
 
     // Batch operations custom errors
@@ -118,20 +130,58 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     error NoRatingToDelete();
 
     // Events
-    event CourseCreated(uint256 indexed courseId, address indexed creator, string title, CourseCategory category);
+    event CourseCreated(
+        uint256 indexed courseId,
+        address indexed creator,
+        string title,
+        CourseCategory category,
+        CourseDifficulty difficulty
+    );
     event CourseUpdated(uint256 indexed courseId, address indexed creator);
-    event SectionAdded(uint256 indexed courseId, uint256 indexed sectionId, string title);
+    event SectionAdded(
+        uint256 indexed courseId,
+        uint256 indexed sectionId,
+        string title
+    );
     event SectionUpdated(uint256 indexed courseId, uint256 indexed sectionId);
     event SectionDeleted(uint256 indexed courseId, uint256 indexed sectionId);
-    event SectionMoved(uint256 indexed courseId, uint256 fromIndex, uint256 toIndex, string sectionTitle);
-    event SectionsSwapped(uint256 indexed courseId, uint256 indexA, uint256 indexB);
+    event SectionMoved(
+        uint256 indexed courseId,
+        uint256 fromIndex,
+        uint256 toIndex,
+        string sectionTitle
+    );
+    event SectionsSwapped(
+        uint256 indexed courseId,
+        uint256 indexA,
+        uint256 indexB
+    );
     event SectionsBatchReordered(uint256 indexed courseId, uint256[] newOrder);
 
     // Rating system events
-    event CourseRated(uint256 indexed courseId, address indexed user, uint256 rating, uint256 newAverageRating);
-    event RatingUpdated(uint256 indexed courseId, address indexed user, uint256 oldRating, uint256 newRating, uint256 newAverageRating);
-    event RatingDeleted(uint256 indexed courseId, address indexed user, uint256 previousRating);
-    event RatingRemoved(uint256 indexed courseId, address indexed user, address indexed admin);
+    event CourseRated(
+        uint256 indexed courseId,
+        address indexed user,
+        uint256 rating,
+        uint256 newAverageRating
+    );
+    event RatingUpdated(
+        uint256 indexed courseId,
+        address indexed user,
+        uint256 oldRating,
+        uint256 newRating,
+        uint256 newAverageRating
+    );
+    event RatingDeleted(
+        uint256 indexed courseId,
+        address indexed user,
+        uint256 previousRating
+    );
+    event RatingRemoved(
+        uint256 indexed courseId,
+        address indexed user,
+        address indexed admin
+    );
     event UserBlacklisted(address indexed user, address indexed admin);
     event UserUnblacklisted(address indexed user, address indexed admin);
     event RatingsPaused(uint256 indexed courseId, address indexed admin);
@@ -141,7 +191,11 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     event BatchSectionsAdded(uint256 indexed courseId, uint256[] sectionIds);
 
     // Modifiers
-    modifier validStringLength(string memory str, uint256 maxLength, string memory paramName) {
+    modifier validStringLength(
+        string memory str,
+        uint256 maxLength,
+        string memory paramName
+    ) {
         if (bytes(str).length == 0 || bytes(str).length > maxLength) {
             revert InvalidStringLength(paramName, maxLength);
         }
@@ -169,6 +223,13 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         _;
     }
 
+    modifier validDifficulty(CourseDifficulty difficulty) {
+        if (uint256(difficulty) > uint256(CourseDifficulty.Advanced)) {
+            revert InvalidCategory(uint256(difficulty));
+        }
+        _;
+    }
+
     modifier validRating(uint256 rating) {
         if (rating < 1 || rating > 5) {
             revert InvalidRating(rating);
@@ -186,28 +247,34 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     constructor() Ownable(msg.sender) {}
 
     /**
-     * @dev Creates a new course with category classification
+     * @dev Creates a new course with category classification and difficulty level
      * @param title Course title
      * @param description Course description
      * @param thumbnailCID IPFS CID for thumbnail
      * @param pricePerMonth Price in ETH per month
      * @param category Course category for educational classification
+     * @param difficulty Course difficulty level for learner guidance
      */
     function createCourse(
         string memory title,
         string memory description,
         string memory thumbnailCID,
         uint256 pricePerMonth,
-        CourseCategory category
-    ) external
-      nonReentrant
-      validStringLength(title, 200, "title")
-      validStringLength(description, 2000, "description")
-      validStringLength(thumbnailCID, 150, "thumbnailCID")
-      validCategory(category)
-      returns (uint256) {
+        CourseCategory category,
+        CourseDifficulty difficulty
+    )
+        external
+        nonReentrant
+        validStringLength(title, 200, "title")
+        validStringLength(description, 2000, "description")
+        validStringLength(thumbnailCID, 150, "thumbnailCID")
+        validCategory(category)
+        validDifficulty(difficulty)
+        returns (uint256)
+    {
         if (pricePerMonth == 0) revert ZeroPrice();
-        if (pricePerMonth > MAX_PRICE_ETH) revert PriceExceedsMaximum(pricePerMonth, MAX_PRICE_ETH);
+        if (pricePerMonth > MAX_PRICE_ETH)
+            revert PriceExceedsMaximum(pricePerMonth, MAX_PRICE_ETH);
 
         unchecked {
             _courseIds++;
@@ -224,16 +291,23 @@ contract CourseFactory is Ownable, ReentrancyGuard {
             pricePerMonth: pricePerMonth,
             isActive: true,
             createdAt: block.timestamp,
-            category: category
+            category: category,
+            difficulty: difficulty
         });
 
         creatorsCourses[msg.sender].push(newCourseId);
-        emit CourseCreated(newCourseId, msg.sender, title, category);
+        emit CourseCreated(
+            newCourseId,
+            msg.sender,
+            title,
+            category,
+            difficulty
+        );
         return newCourseId;
     }
 
     /**
-     * @dev Updates an existing course with category support
+     * @dev Updates an existing course with category and difficulty support
      */
     function updateCourse(
         uint256 courseId,
@@ -242,8 +316,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         string memory thumbnailCID,
         uint256 pricePerMonth,
         bool isActive,
-        CourseCategory category
-    ) external
+        CourseCategory category,
+        CourseDifficulty difficulty
+    )
+        external
         nonReentrant
         courseExists(courseId)
         onlyCreator(courseId)
@@ -251,9 +327,11 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         validStringLength(description, 1000, "description")
         validStringLength(thumbnailCID, 100, "thumbnailCID")
         validCategory(category)
+        validDifficulty(difficulty)
     {
         if (pricePerMonth == 0) revert ZeroPrice();
-        if (pricePerMonth > MAX_PRICE_ETH) revert PriceExceedsMaximum(pricePerMonth, MAX_PRICE_ETH);
+        if (pricePerMonth > MAX_PRICE_ETH)
+            revert PriceExceedsMaximum(pricePerMonth, MAX_PRICE_ETH);
 
         Course storage course = courses[courseId];
         course.title = title;
@@ -262,6 +340,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         course.pricePerMonth = pricePerMonth;
         course.isActive = isActive;
         course.category = category;
+        course.difficulty = difficulty;
 
         emit CourseUpdated(courseId, msg.sender);
     }
@@ -269,7 +348,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     /**
      * @dev Adds a section to a course
      */
-     function addCourseSection(
+    function addCourseSection(
         uint256 courseId,
         string memory title,
         string memory contentCID,
@@ -294,14 +373,16 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
         uint256 sectionId = courseSections[courseId].length;
 
-        courseSections[courseId].push(CourseSection({
-            id: sectionId,
-            courseId: courseId,
-            title: title,
-            contentCID: contentCID,
-            duration: duration,
-            orderId: sectionId
-        }));
+        courseSections[courseId].push(
+            CourseSection({
+                id: sectionId,
+                courseId: courseId,
+                title: title,
+                contentCID: contentCID,
+                duration: duration,
+                orderId: sectionId
+            })
+        );
 
         emit SectionAdded(courseId, sectionId, title);
         return sectionId;
@@ -316,7 +397,8 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         string memory title,
         string memory contentCID,
         uint256 duration
-    ) external
+    )
+        external
         nonReentrant
         courseExists(courseId)
         onlyCreator(courseId)
@@ -340,23 +422,21 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     }
 
     /**
-    * @dev Delete a course section while maintaining educational order
-    * @param courseId The course ID
-    * @param sectionId The section index to delete (NOT the section.id field)
-    * @notice This maintains the logical sequence of educational content
-    * @notice Gas optimized: ~40% reduction from unchecked math and efficient copying
-    * @notice Gas cost: O(n) where n = sections after deleted position
-    */
-    function deleteCourseSection(uint256 courseId, uint256 sectionId)
-        external
-        nonReentrant
-        courseExists(courseId)
-        onlyCreator(courseId)
-    {
+     * @dev Delete a course section while maintaining educational order
+     * @param courseId The course ID
+     * @param sectionId The section index to delete (NOT the section.id field)
+     * @notice This maintains the logical sequence of educational content
+     * @notice Gas optimized: ~40% reduction from unchecked math and efficient copying
+     * @notice Gas cost: O(n) where n = sections after deleted position
+     */
+    function deleteCourseSection(
+        uint256 courseId,
+        uint256 sectionId
+    ) external nonReentrant courseExists(courseId) onlyCreator(courseId) {
         CourseSection[] storage sections = courseSections[courseId];
 
         // Validate section exists
-        if(sectionId >= sections.length){
+        if (sectionId >= sections.length) {
             revert SectionNotFound(courseId, sectionId);
         }
 
@@ -387,12 +467,11 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @notice Gas optimized with unchecked blocks and direction-aware logic
      * @notice Gas cost: O(n) where n = distance between positions
      */
-    function moveCourseSection(uint256 courseId, uint256 fromIndex, uint256 toIndex)
-        external
-        nonReentrant
-        courseExists(courseId)
-        onlyCreator(courseId)
-    {
+    function moveCourseSection(
+        uint256 courseId,
+        uint256 fromIndex,
+        uint256 toIndex
+    ) external nonReentrant courseExists(courseId) onlyCreator(courseId) {
         CourseSection[] storage sections = courseSections[courseId];
 
         // Validate bounds
@@ -415,12 +494,11 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param indexB Second section index
      * @notice Gas efficient for adjacent section reordering
      */
-    function swapCourseSections(uint256 courseId, uint256 indexA, uint256 indexB)
-        external
-        nonReentrant
-        courseExists(courseId)
-        onlyCreator(courseId)
-    {
+    function swapCourseSections(
+        uint256 courseId,
+        uint256 indexA,
+        uint256 indexB
+    ) external nonReentrant courseExists(courseId) onlyCreator(courseId) {
         CourseSection[] storage sections = courseSections[courseId];
 
         if (indexA >= sections.length || indexB >= sections.length) {
@@ -447,12 +525,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param sectionIndex Index of section to move to top
      * @notice Convenience function for common operation
      */
-    function moveToTop(uint256 courseId, uint256 sectionIndex)
-        external
-        nonReentrant
-        courseExists(courseId)
-        onlyCreator(courseId)
-    {
+    function moveToTop(
+        uint256 courseId,
+        uint256 sectionIndex
+    ) external nonReentrant courseExists(courseId) onlyCreator(courseId) {
         if (sectionIndex >= courseSections[courseId].length) {
             revert SectionNotFound(courseId, sectionIndex);
         }
@@ -468,12 +544,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param sectionIndex Index of section to move to bottom
      * @notice Convenience function for common operation
      */
-    function moveToBottom(uint256 courseId, uint256 sectionIndex)
-        external
-        nonReentrant
-        courseExists(courseId)
-        onlyCreator(courseId)
-    {
+    function moveToBottom(
+        uint256 courseId,
+        uint256 sectionIndex
+    ) external nonReentrant courseExists(courseId) onlyCreator(courseId) {
         CourseSection[] storage sections = courseSections[courseId];
 
         if (sectionIndex >= sections.length) {
@@ -491,7 +565,11 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param fromIndex Current position of the section
      * @param toIndex Target position for the section
      */
-    function _moveCourseSection(uint256 courseId, uint256 fromIndex, uint256 toIndex) internal {
+    function _moveCourseSection(
+        uint256 courseId,
+        uint256 fromIndex,
+        uint256 toIndex
+    ) internal {
         CourseSection[] storage sections = courseSections[courseId];
 
         // Store the section to move
@@ -528,12 +606,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @notice More gas efficient for multiple changes
      * @notice Educational use: Complete course restructuring
      */
-    function batchReorderSections(uint256 courseId, uint256[] calldata newOrder)
-        external
-        nonReentrant
-        courseExists(courseId)
-        onlyCreator(courseId)
-    {
+    function batchReorderSections(
+        uint256 courseId,
+        uint256[] calldata newOrder
+    ) external nonReentrant courseExists(courseId) onlyCreator(courseId) {
         CourseSection[] storage sections = courseSections[courseId];
 
         // Validate new order array
@@ -554,7 +630,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         }
 
         // Create temporary array with new order
-        CourseSection[] memory reorderedSections = new CourseSection[](sections.length);
+        CourseSection[] memory reorderedSections = new CourseSection[](
+            sections.length
+        );
 
         unchecked {
             for (uint256 i = 0; i < newOrder.length; ++i) {
@@ -583,7 +661,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @notice Users can update existing ratings after 24-hour cooldown
      * @notice Educational platforms benefit from public reviews and feedback
      */
-    function rateCourse(uint256 courseId, uint256 rating)
+    function rateCourse(
+        uint256 courseId,
+        uint256 rating
+    )
         external
         nonReentrant
         courseExists(courseId)
@@ -608,17 +689,25 @@ contract CourseFactory is Ownable, ReentrancyGuard {
             courseRating.ratingSum += rating;
 
             // Calculate new average (scaled by 10000 for precision)
-            courseRating.averageRating = (courseRating.ratingSum * 10000) / courseRating.totalRatings;
+            courseRating.averageRating =
+                (courseRating.ratingSum * 10000) /
+                courseRating.totalRatings;
 
             // Update last rating time
             lastRatingTime[msg.sender][courseId] = block.timestamp;
 
-            emit CourseRated(courseId, msg.sender, rating, courseRating.averageRating);
+            emit CourseRated(
+                courseId,
+                msg.sender,
+                rating,
+                courseRating.averageRating
+            );
         } else {
             // Update existing rating - check cooldown
             uint256 lastTime = lastRatingTime[msg.sender][courseId];
             if (block.timestamp < lastTime + RATING_COOLDOWN) {
-                uint256 remainingTime = (lastTime + RATING_COOLDOWN) - block.timestamp;
+                uint256 remainingTime = (lastTime + RATING_COOLDOWN) -
+                    block.timestamp;
                 revert RatingCooldownActive(remainingTime);
             }
 
@@ -626,15 +715,26 @@ contract CourseFactory is Ownable, ReentrancyGuard {
             courseRating.userRatings[msg.sender] = rating;
 
             // Update sum: remove old rating, add new rating
-            courseRating.ratingSum = courseRating.ratingSum - oldRating + rating;
+            courseRating.ratingSum =
+                courseRating.ratingSum -
+                oldRating +
+                rating;
 
             // Recalculate average (scaled by 10000 for precision)
-            courseRating.averageRating = (courseRating.ratingSum * 10000) / courseRating.totalRatings;
+            courseRating.averageRating =
+                (courseRating.ratingSum * 10000) /
+                courseRating.totalRatings;
 
             // Update last rating time
             lastRatingTime[msg.sender][courseId] = block.timestamp;
 
-            emit RatingUpdated(courseId, msg.sender, oldRating, rating, courseRating.averageRating);
+            emit RatingUpdated(
+                courseId,
+                msg.sender,
+                oldRating,
+                rating,
+                courseRating.averageRating
+            );
         }
     }
 
@@ -644,11 +744,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @notice Users can delete their rating anytime without cooldown
      * @notice Properly recalculates course average after deletion
      */
-    function deleteMyRating(uint256 courseId)
-        external
-        nonReentrant
-        courseExists(courseId)
-    {
+    function deleteMyRating(
+        uint256 courseId
+    ) external nonReentrant courseExists(courseId) {
         CourseRating storage courseRating = courseRatings[courseId];
         uint256 userRating = courseRating.userRatings[msg.sender];
 
@@ -662,7 +760,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
         // Recalculate average (handle zero division)
         if (courseRating.totalRatings > 0) {
-            courseRating.averageRating = (courseRating.ratingSum * 10000) / courseRating.totalRatings;
+            courseRating.averageRating =
+                (courseRating.ratingSum * 10000) /
+                courseRating.totalRatings;
         } else {
             courseRating.averageRating = 0;
         }
@@ -681,22 +781,16 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @return averageRating Average rating (scaled by 10000, e.g., 45000 = 4.5000 stars)
      * @return ratingSum Sum of all ratings
      */
-    function getCourseRating(uint256 courseId)
+    function getCourseRating(
+        uint256 courseId
+    )
         external
         view
         courseExists(courseId)
-        returns (
-            uint256 totalRatings,
-            uint256 averageRating,
-            uint256 ratingSum
-        )
+        returns (uint256 totalRatings, uint256 averageRating, uint256 ratingSum)
     {
         CourseRating storage rating = courseRatings[courseId];
-        return (
-            rating.totalRatings,
-            rating.averageRating,
-            rating.ratingSum
-        );
+        return (rating.totalRatings, rating.averageRating, rating.ratingSum);
     }
 
     /**
@@ -705,12 +799,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param user User address
      * @return rating User's rating (0 if not rated, 1-5 if rated)
      */
-    function getUserRating(uint256 courseId, address user)
-        external
-        view
-        courseExists(courseId)
-        returns (uint256 rating)
-    {
+    function getUserRating(
+        uint256 courseId,
+        address user
+    ) external view courseExists(courseId) returns (uint256 rating) {
         return courseRatings[courseId].userRatings[user];
     }
 
@@ -723,11 +815,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @notice Only owner can call this function
      * @notice Properly recalculates course average after removal
      */
-    function removeRating(uint256 courseId, address user)
-        external
-        onlyOwner
-        courseExists(courseId)
-    {
+    function removeRating(
+        uint256 courseId,
+        address user
+    ) external onlyOwner courseExists(courseId) {
         CourseRating storage courseRating = courseRatings[courseId];
         uint256 userRating = courseRating.userRatings[user];
 
@@ -741,7 +832,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
         // Recalculate average (handle zero division)
         if (courseRating.totalRatings > 0) {
-            courseRating.averageRating = (courseRating.ratingSum * 10000) / courseRating.totalRatings;
+            courseRating.averageRating =
+                (courseRating.ratingSum * 10000) /
+                courseRating.totalRatings;
         } else {
             courseRating.averageRating = 0;
         }
@@ -758,11 +851,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param courseId Course ID to pause ratings for
      * @notice Only owner can call this function
      */
-    function pauseCourseRatings(uint256 courseId)
-        external
-        onlyOwner
-        courseExists(courseId)
-    {
+    function pauseCourseRatings(
+        uint256 courseId
+    ) external onlyOwner courseExists(courseId) {
         ratingsDisabled[courseId] = true;
         emit RatingsPaused(courseId, msg.sender);
     }
@@ -772,11 +863,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param courseId Course ID to unpause ratings for
      * @notice Only owner can call this function
      */
-    function unpauseCourseRatings(uint256 courseId)
-        external
-        onlyOwner
-        courseExists(courseId)
-    {
+    function unpauseCourseRatings(
+        uint256 courseId
+    ) external onlyOwner courseExists(courseId) {
         ratingsDisabled[courseId] = false;
         emit RatingsUnpaused(courseId, msg.sender);
     }
@@ -787,10 +876,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @notice Only owner can call this function
      * @notice Blacklisted users cannot rate any courses
      */
-    function blacklistUser(address user)
-        external
-        onlyOwner
-    {
+    function blacklistUser(address user) external onlyOwner {
         if (user == address(0)) {
             revert InvalidAddress(user);
         }
@@ -803,10 +889,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param user User address to remove from blacklist
      * @notice Only owner can call this function
      */
-    function unblacklistUser(address user)
-        external
-        onlyOwner
-    {
+    function unblacklistUser(address user) external onlyOwner {
         if (user == address(0)) {
             revert InvalidAddress(user);
         }
@@ -824,7 +907,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @notice All sections must belong to the same course (specified by courseId)
      * @return success True if all sections were added successfully
      */
-    function batchAddSections(uint256 courseId, SectionData[] calldata sectionsData)
+    function batchAddSections(
+        uint256 courseId,
+        SectionData[] calldata sectionsData
+    )
         external
         nonReentrant
         courseExists(courseId)
@@ -837,7 +923,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         }
 
         // Check current section count won't exceed maximum
-        if (courseSections[courseId].length + length > MAX_SECTIONS_PER_COURSE) {
+        if (
+            courseSections[courseId].length + length > MAX_SECTIONS_PER_COURSE
+        ) {
             revert MaxSectionsExceeded(MAX_SECTIONS_PER_COURSE);
         }
 
@@ -852,7 +940,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
                 revert InvalidDuration(sectionData.duration, 60, 10800);
             }
 
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         // Add all sections after validation
@@ -861,18 +951,22 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
             uint256 sectionId = courseSections[courseId].length;
 
-            courseSections[courseId].push(CourseSection({
-                id: sectionId,
-                courseId: courseId,
-                title: sectionData.title,
-                contentCID: sectionData.contentCID,
-                duration: sectionData.duration,
-                orderId: sectionId
-            }));
+            courseSections[courseId].push(
+                CourseSection({
+                    id: sectionId,
+                    courseId: courseId,
+                    title: sectionData.title,
+                    contentCID: sectionData.contentCID,
+                    duration: sectionData.duration,
+                    orderId: sectionId
+                })
+            );
 
             emit SectionAdded(courseId, sectionId, sectionData.title);
 
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         return true;
@@ -895,7 +989,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     /**
      * @dev Gets a specific course section
      */
-    function getCourseSection(uint256 courseId, uint256 orderIndex)
+    function getCourseSection(
+        uint256 courseId,
+        uint256 orderIndex
+    )
         external
         view
         courseExists(courseId)
@@ -922,9 +1019,11 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Gets course metadata with category and rating information
+     * @dev Gets course metadata with category, difficulty and rating information
      */
-    function getCourseMetadata(uint256 courseId)
+    function getCourseMetadata(
+        uint256 courseId
+    )
         external
         view
         courseExists(courseId)
@@ -934,6 +1033,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
             string memory thumbnailCID,
             uint256 sectionsCount,
             CourseCategory category,
+            CourseDifficulty difficulty,
             uint256 totalRatings,
             uint256 averageRating
         )
@@ -947,6 +1047,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
             course.thumbnailCID,
             courseSections[courseId].length,
             course.category,
+            course.difficulty,
             rating.totalRatings,
             rating.averageRating
         );
@@ -955,31 +1056,27 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     /**
      * @dev Gets all courses created by a specific creator
      */
-    function getCreatorCourses(address creator) external view returns (uint256[] memory) {
+    function getCreatorCourses(
+        address creator
+    ) external view returns (uint256[] memory) {
         return creatorsCourses[creator];
     }
 
     /**
      * @dev Gets all sections of a course
      */
-    function getCourseSections(uint256 courseId)
-        external
-        view
-        courseExists(courseId)
-        returns (CourseSection[] memory)
-    {
+    function getCourseSections(
+        uint256 courseId
+    ) external view courseExists(courseId) returns (CourseSection[] memory) {
         return courseSections[courseId];
     }
 
     /**
      * @dev Gets a specific course
      */
-    function getCourse(uint256 courseId)
-        external
-        view
-        courseExists(courseId)
-        returns (Course memory)
-    {
+    function getCourse(
+        uint256 courseId
+    ) external view courseExists(courseId) returns (Course memory) {
         return courses[courseId];
     }
 
@@ -993,11 +1090,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     /**
      * @dev Emergency function to deactivate a course (owner only)
      */
-    function emergencyDeactivateCourse(uint256 courseId)
-        external
-        onlyOwner
-        courseExists(courseId)
-    {
+    function emergencyDeactivateCourse(
+        uint256 courseId
+    ) external onlyOwner courseExists(courseId) {
         courses[courseId].isActive = false;
         emit CourseUpdated(courseId, courses[courseId].creator);
     }
