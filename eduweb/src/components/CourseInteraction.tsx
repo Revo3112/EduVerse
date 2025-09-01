@@ -2,7 +2,7 @@
 
 import { useReadContract } from "thirdweb/react";
 import { Lightbulb } from "lucide-react";
-import { courseFactory } from "../lib/contracts";
+import { courseFactory } from "@/lib/contracts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";

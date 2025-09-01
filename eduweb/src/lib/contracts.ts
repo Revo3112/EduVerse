@@ -1,5 +1,5 @@
 import { getContract } from "thirdweb";
-import { client } from "../app/client";
+import { client } from "@/app/client";
 import { chain } from "./chains";
 
 // EduVerse Smart Contract Addresses (auto-synced by portal system)

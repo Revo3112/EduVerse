@@ -1,8 +1,8 @@
 "use client";
 
 import { useActiveAccount, useWalletBalance } from "thirdweb/react";
-import { client } from "../app/client";
-import { chain } from "../lib/chains";
+import { client } from "@/app/client";
+import { chain } from "@/lib/chains";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";

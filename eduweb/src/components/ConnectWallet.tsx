@@ -1,8 +1,8 @@
 "use client";
 
 import { ConnectButton } from "thirdweb/react";
-import { client } from "../app/client";
-import { chain } from "../lib/chains";
+import { client } from "@/app/client";
+import { chain } from "@/lib/chains";
 
 export function ConnectWallet() {
   return (
