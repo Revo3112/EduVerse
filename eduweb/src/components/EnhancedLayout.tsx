@@ -1,9 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { SidebarModeProvider, useSidebarMode } from "./sidebar-mode-provider"
-import { IntegratedSidebar } from "./integrated-sidebar"
-import { EduVerseNavbar } from "./enhanced-navbar"
+import { SidebarModeProvider, useSidebarMode } from "./SidebarModeProvider"
+import { IntegratedSidebar } from "./IntegratedSidebar"
+import { EduVerseNavbar } from "./EnhancedNavbar"
 import { cn } from "@/lib/utils"
 
 interface EnhancedLayoutProps {

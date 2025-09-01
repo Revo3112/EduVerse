@@ -24,7 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
-import { useSidebarMode } from "./sidebar-mode-provider"
+import { useSidebarMode } from "./SidebarModeProvider"
 
 interface NavigationItem {
   title: string

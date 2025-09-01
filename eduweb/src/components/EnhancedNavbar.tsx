@@ -1,7 +1,7 @@
 "use client"
 
-import { WalletConnectButton } from "./wallet-connect-button"
-import { ThemeSwitcher } from "./theme-switcher"
+import { WalletConnectButton } from "./WalletConnectButton"
+import { ThemeSwitcher } from "./ThemeSwitcher"
 
 export function EduVerseNavbar() {
   return (

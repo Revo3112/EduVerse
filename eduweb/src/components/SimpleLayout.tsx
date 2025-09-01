@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { ModernFloatingSidebar } from "./modern-floating-sidebar"
-import { EduVerseNavbar } from "./eduverse-navbar"
+import { ModernFloatingSidebar } from "./ModernFloatingSidebar"
+import { EduVerseNavbar } from "./EdiverseNavbar"
 import { cn } from "@/lib/utils"
 
 interface SimpleLayoutProps {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cd .. && npx next dev --turbopack eduweb",
+    "dev": "npx next dev --turbopack eduweb",
     "dev:local": "next dev --turbopack",
     "dev:standard": "next dev",
     "build": "next build",

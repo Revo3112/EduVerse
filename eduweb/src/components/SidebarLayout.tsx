@@ -3,8 +3,8 @@
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
-import { EduVerseSidebar } from "./eduverse-sidebar"
-import { EduVerseNavbar } from "./eduverse-navbar"
+import { EduVerseSidebar } from "./EdiverseSidebar"
+import { EduVerseNavbar } from "./EdiverseNavbar"
 import { cn } from "@/lib/utils"
 
 interface SidebarLayoutProps {
