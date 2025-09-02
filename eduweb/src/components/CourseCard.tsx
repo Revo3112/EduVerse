@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Star, Clock, User } from "lucide-react";
 import { Course, getCategoryName, getDifficultyName, weiToEth } from "@/lib/mock-data";
-import CourseEnrollmentModalSpacious from "@/components/CourseEnrollmentModalSpacious";
+import EnrollModal from "@/components/EnrollModal";
 
 /**
  * CourseCard Component
@@ -163,7 +163,7 @@ export function CourseCard({ course, onEnroll }: CourseCardProps) {
       </div>
 
       {/* Course Enrollment Modal */}
-      <CourseEnrollmentModalSpacious
+      <EnrollModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         course={course}

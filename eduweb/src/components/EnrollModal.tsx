@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { Course } from '@/lib/mock-data';
 
-interface CourseEnrollmentModalSpaciousProps {
+interface EnrollModalProps {
   course: Course;
   isOpen: boolean;
   onClose: () => void;
@@ -106,12 +106,12 @@ const DURATION_OPTIONS = [
   }
 ];
 
-export default function CourseEnrollmentModalSpacious({
+export default function EnrollModal({
   isOpen,
   onClose,
   course,
   onEnroll
-}: CourseEnrollmentModalSpaciousProps) {
+}: EnrollModalProps) {
   const [selectedDuration, setSelectedDuration] = useState(1); // Start with 1 month
 
   if (!course) return null;
