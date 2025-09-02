@@ -65,7 +65,7 @@ export default function CoursesPage() {
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        <h1 className="text-4xl font-bold text-white">
           Browse Courses
         </h1>
         <p className="text-muted-foreground text-lg">

@@ -10,7 +10,7 @@ export default function CreateCoursePage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Create Course</h1>
+        <h1 className="text-3xl font-bold text-white">Create Course</h1>
         <p className="text-muted-foreground">
           Share your knowledge and start earning by creating courses on EduVerse
         </p>

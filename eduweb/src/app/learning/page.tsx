@@ -69,7 +69,7 @@ export default function LearningPage() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">My Learning</h1>
+        <h1 className="text-3xl font-bold text-white">My Learning</h1>
         <p className="text-muted-foreground">
           Track your progress and continue your Web3 education journey
         </p>

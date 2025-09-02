@@ -7,7 +7,7 @@ export default function DashboardPage() {
     <div className="p-6 space-y-6">
       {/* Welcome Section */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        <h1 className="text-3xl font-bold text-white">
           Welcome to EduVerse
         </h1>
         <p className="text-muted-foreground">
