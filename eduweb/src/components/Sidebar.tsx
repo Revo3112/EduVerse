@@ -146,7 +146,7 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
     return (
       <aside
         className={cn(
-          "fixed left-0 top-0 z-20 h-full bg-background border-r transition-all duration-300",
+          "fixed left-0 top-0 z-20 h-full bg-sidebar border-r transition-all duration-300",
           `w-[${SIDEBAR_WIDTH}px]`,
           className
         )}
@@ -278,7 +278,7 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
                 damping: 35,
                 opacity: { duration: 0.15 }
               }}
-              className="fixed left-4 top-4 bottom-4 z-50 w-72 bg-background/95 backdrop-blur-xl border rounded-2xl shadow-xl overflow-hidden"
+              className="fixed left-4 top-4 bottom-4 z-50 w-72 bg-sidebar/95 backdrop-blur-xl border rounded-2xl shadow-xl overflow-hidden"
               onMouseEnter={keepHoverSidebarVisible}
               onMouseLeave={hideHoverSidebar}
             >
