@@ -272,7 +272,7 @@ export default function CourseEnrollmentModalSpacious({
                   <div>
                     <h3 className="text-xl font-semibold mb-2">Enrollment Summary</h3>
                     <p className="text-gray-600 dark:text-gray-400">
-                      {selectedOption.label} access to "{course.title}"
+                      {selectedOption.label} access to &ldquo;{course.title}&rdquo;
                     </p>
                   </div>
                   <div className="text-right">
