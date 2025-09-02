@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BookOpen, Star, Clock, User } from "lucide-react";
 import { Course, getCategoryName, getDifficultyName, weiToEth } from "@/lib/mock-data";
+import CourseEnrollmentModalSpacious from "@/components/CourseEnrollmentModalSpacious";
 
 /**
  * CourseCard Component
@@ -16,10 +17,12 @@ import { Course, getCategoryName, getDifficultyName, weiToEth } from "@/lib/mock
 
 interface CourseCardProps {
   course: Course;
-  onEnroll?: (courseId: bigint) => void;
+  onEnroll?: (courseId: bigint, duration: number) => void;
 }
 
 export function CourseCard({ course, onEnroll }: CourseCardProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   // Convert creator address for display (show first 6 and last 4 characters)
   const formatAddress = (address: string): string => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -28,6 +31,17 @@ export function CourseCard({ course, onEnroll }: CourseCardProps) {
   // Format date from Unix timestamp
   const formatDate = (timestamp: bigint): string => {
     return new Date(Number(timestamp) * 1000).toLocaleDateString();
+  };
+
+  const handleEnrollClick = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleModalEnroll = (courseId: bigint, duration: number) => {
+    if (onEnroll) {
+      onEnroll(courseId, duration);
+    }
+    setIsModalOpen(false);
   };
 
   // Get difficulty badge variant based on level with distinct colors and proper contrast
@@ -101,7 +115,7 @@ export function CourseCard({ course, onEnroll }: CourseCardProps) {
           {/* Creator Information */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <User className="h-4 w-4" />
-            <span>by {formatAddress(course.creatorAddress)}</span>
+            <span>by {course.creatorName}</span>
           </div>
 
           {/* Course Metadata */}
@@ -126,9 +140,9 @@ export function CourseCard({ course, onEnroll }: CourseCardProps) {
             </Badge>
           </div>
 
-          {/* Price and Enroll Button - Always at Bottom */}
-          <div className="flex items-center justify-between pt-3 border-t mt-auto">
-            <div className="text-left">
+          {/* Price and Enroll Button - Always at Bottom with Edge Alignment */}
+          <div className="flex items-center justify-between pt-3 border-t mt-auto w-full">
+            <div className="text-left flex-shrink-0">
               <div className="text-lg font-bold text-primary">
                 {priceInEth} ETH
               </div>
@@ -138,8 +152,8 @@ export function CourseCard({ course, onEnroll }: CourseCardProps) {
             </div>
 
             <Button
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shrink-0"
-              onClick={() => onEnroll && onEnroll(course.id)}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white flex-shrink-0 ml-4"
+              onClick={handleEnrollClick}
             >
               <BookOpen className="h-4 w-4 mr-2" />
               Enroll
@@ -147,6 +161,14 @@ export function CourseCard({ course, onEnroll }: CourseCardProps) {
           </div>
         </div>
       </div>
+
+      {/* Course Enrollment Modal */}
+      <CourseEnrollmentModalSpacious
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        course={course}
+        onEnroll={handleModalEnroll}
+      />
     </Card>
   );
 }

@@ -60,6 +60,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         string description;
         string thumbnailCID;
         address creator;
+        string creatorName;
         bool isActive;
         CourseCategory category; // Course category for filtering
         CourseDifficulty difficulty; // Course difficulty level
@@ -133,6 +134,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     event CourseCreated(
         uint256 indexed courseId,
         address indexed creator,
+        string creatorName,
         string title,
         CourseCategory category,
         CourseDifficulty difficulty
@@ -259,6 +261,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         string memory title,
         string memory description,
         string memory thumbnailCID,
+        string memory creatorName,
         uint256 pricePerMonth,
         CourseCategory category,
         CourseDifficulty difficulty
@@ -268,6 +271,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         validStringLength(title, 200, "title")
         validStringLength(description, 2000, "description")
         validStringLength(thumbnailCID, 150, "thumbnailCID")
+        validStringLength(creatorName, 100, "creatorName")
         validCategory(category)
         validDifficulty(difficulty)
         returns (uint256)
@@ -288,6 +292,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
             description: description,
             thumbnailCID: thumbnailCID,
             creator: msg.sender,
+            creatorName: creatorName,
             pricePerMonth: pricePerMonth,
             isActive: true,
             createdAt: block.timestamp,
@@ -299,6 +304,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         emit CourseCreated(
             newCourseId,
             msg.sender,
+            creatorName,
             title,
             category,
             difficulty
@@ -314,6 +320,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         string memory title,
         string memory description,
         string memory thumbnailCID,
+        string memory creatorName,
         uint256 pricePerMonth,
         bool isActive,
         CourseCategory category,
@@ -326,6 +333,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         validStringLength(title, 200, "title")
         validStringLength(description, 1000, "description")
         validStringLength(thumbnailCID, 100, "thumbnailCID")
+        validStringLength(creatorName, 100, "creatorName")
         validCategory(category)
         validDifficulty(difficulty)
     {
@@ -337,6 +345,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         course.title = title;
         course.description = description;
         course.thumbnailCID = thumbnailCID;
+        course.creatorName = creatorName;
         course.pricePerMonth = pricePerMonth;
         course.isActive = isActive;
         course.category = category;

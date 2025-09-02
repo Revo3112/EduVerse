@@ -44,10 +44,12 @@ export default function CoursesPage() {
     return matchesSearch && matchesCategory && matchesDifficulty && course.isActive;
   });
 
-  // Handle course enrollment (placeholder function)
-  const handleEnroll = (courseId: bigint) => {
-    console.log(`Enrolling in course with ID: ${courseId}`);
-    // In a real implementation, this would interact with the CourseLicense contract
+  // Handle course enrollment with duration selection (updated for modal)
+  const handleEnroll = (courseId: bigint, duration: number) => {
+    console.log(`Enrolling in course ${courseId} for ${duration} months`);
+    // TODO: Implement Web3 license purchase logic here
+    // This would interact with the CourseLicense contract on Manta Pacific
+    // Example: await contractInstance.mintLicense(courseId, duration, { value: totalPrice })
     // to mint a license NFT for the student
   };
 

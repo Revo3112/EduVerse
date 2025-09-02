@@ -42,6 +42,7 @@ export interface Course {
   description: string;                 // string description
   thumbnailCID: string;               // string thumbnailCID (IPFS hash)
   creatorAddress: `0x${string}`;      // address creator
+  creatorName: string;                // string creatorName
   isActive: boolean;                  // bool isActive
   category: CourseCategory;           // CourseCategory category
   difficulty: CourseDifficulty;       // CourseDifficulty difficulty
@@ -81,6 +82,7 @@ export const mockCourses: Course[] = [
     description: "Learn the core concepts of blockchain technology, cryptocurrencies, and decentralized systems. Perfect for newcomers to Web3.",
     thumbnailCID: "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG", // Example IPFS hash
     creatorAddress: "0x742e8A4C2a9b4f7A76B25e5B8F6a8f9E8A9b4c5D",
+    creatorName: "Dr. Sarah Johnson",
     isActive: true,
     category: CourseCategory.Programming,
     difficulty: CourseDifficulty.Beginner,
@@ -93,6 +95,7 @@ export const mockCourses: Course[] = [
     description: "Master advanced Solidity patterns, security best practices, and gas optimization techniques. Build production-ready smart contracts.",
     thumbnailCID: "QmUNLLsPACCz1vLxQVkXqqLX5R1X9RVxrK7F2z4B8xCmv8",
     creatorAddress: "0x1a2B3c4D5e6F7890aB1c2D3e4F567890aB1c2D3e",
+    creatorName: "Alex Chen",
     isActive: true,
     category: CourseCategory.Programming,
     difficulty: CourseDifficulty.Advanced,
@@ -105,6 +108,7 @@ export const mockCourses: Course[] = [
     description: "Design and build decentralized finance protocols from scratch. Learn about AMMs, lending protocols, and yield farming strategies.",
     thumbnailCID: "QmPvP4z9FJiXpKvP2zq8x7Y6B5a1B2c3D4e5F6g7H8i9J",
     creatorAddress: "0x9F8e7D6c5B4a3921F8e7D6c5B4a39218F7e6D5c4",
+    creatorName: "Maria Rodriguez",
     isActive: true,
     category: CourseCategory.Finance,
     difficulty: CourseDifficulty.Intermediate,
@@ -117,6 +121,7 @@ export const mockCourses: Course[] = [
     description: "Create a full-featured NFT marketplace using React, Thirdweb SDK, and modern Web3 libraries. Includes minting, trading, and auctions.",
     thumbnailCID: "QmT5k8Jz2x9Y3a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P",
     creatorAddress: "0x3e4F5a6B7c8D9e0F1a2B3c4D5e6F7890aB1c2D3e",
+    creatorName: "David Kim",
     isActive: true,
     category: CourseCategory.Technology,
     difficulty: CourseDifficulty.Intermediate,
@@ -129,6 +134,7 @@ export const mockCourses: Course[] = [
     description: "Master the art of designing intuitive and beautiful Web3 user interfaces. Learn wallet integration patterns, transaction flows, and user psychology.",
     thumbnailCID: "QmR6s5T7u8V9w1X2y3Z4a5B6c7D8e9F0g1H2i3J4k5L",
     creatorAddress: "0x6B7c8D9e0F1a2B3c4D5e6F7890aB1c2D3e4F5a6B",
+    creatorName: "Emma Thompson",
     isActive: true,
     category: CourseCategory.Design,
     difficulty: CourseDifficulty.Beginner,
@@ -141,6 +147,7 @@ export const mockCourses: Course[] = [
     description: "Deep dive into cryptographic principles, hash functions, digital signatures, and security vulnerabilities in blockchain systems.",
     thumbnailCID: "QmS7t8U9v0W1x2Y3z4A5b6C7d8E9f0G1h2I3j4K5l6M",
     creatorAddress: "0x8D9e0F1a2B3c4D5e6F7890aB1c2D3e4F5a6B7c8D",
+    creatorName: "Prof. Michael Zhang",
     isActive: true,
     category: CourseCategory.Technology,
     difficulty: CourseDifficulty.Advanced,
