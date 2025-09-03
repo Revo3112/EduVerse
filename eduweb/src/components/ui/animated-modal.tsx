@@ -10,7 +10,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useOnClickOutside } from "@/hooks/use-on-click-outside";
+import { useOnClickOutside } from "@/hooks/useClickOutside";
 
 interface ModalContextType {
   open: boolean;

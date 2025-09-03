@@ -1,7 +1,7 @@
 // Web3 Components Exports
 export { Web3Status } from "./Web3Status";
 export { CourseInteraction } from "./CourseInteraction";
-export { ThirdWebConnectButton } from "./ThirdWebConnectButton";
+export { ConnectButton } from "./ConnectButton";
 
 // Layout and Navigation Components (Professional Naming)
 export { ThemeProvider } from "./ThemeProvider";

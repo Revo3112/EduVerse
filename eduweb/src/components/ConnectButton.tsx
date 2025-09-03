@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ConnectButton } from "thirdweb/react";
+import { ConnectButton as ThirdWebButton } from "thirdweb/react";
 import { client } from "@/app/client";
 import { chain } from "@/lib/chains";
 import { useTheme } from "next-themes";
 import { darkTheme, lightTheme } from "thirdweb/react";
 import { inAppWallet, createWallet } from "thirdweb/wallets";
 
-interface ThirdWebConnectButtonProps {
+interface ConnectButtonProps {
   className?: string;
 }
 
-export function ThirdWebConnectButton({ className }: ThirdWebConnectButtonProps) {
+export function ConnectButton({ className }: ConnectButtonProps) {
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -99,7 +99,7 @@ export function ThirdWebConnectButton({ className }: ThirdWebConnectButtonProps)
 
   return (
     <div className={className}>
-      <ConnectButton
+      <ThirdWebButton
         client={client}
         chain={chain}
         wallets={wallets}

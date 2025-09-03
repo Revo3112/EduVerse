@@ -1,6 +1,6 @@
 "use client"
 
-import { ThirdWebConnectButton } from "./ThirdWebConnectButton"
+import { ConnectButton } from "./ConnectButton"
 import { ThemeSwitcher } from "./ThemeSwitcher"
 
 export function EduVerseNavbar() {
@@ -9,7 +9,7 @@ export function EduVerseNavbar() {
       <div className="flex h-16 items-center justify-end px-6">
         {/* Right side - User controls */}
         <div className="flex items-center gap-4">
-          <ThirdWebConnectButton />
+          <ConnectButton />
           <ThemeSwitcher />
         </div>
       </div>
