@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { memo, useMemo, useCallback } from "react"
 import { SidebarModeProvider, useSidebarMode } from "./SidebarProvider"
 import { IntegratedSidebar } from "./Sidebar"
 import { EduVerseNavbar } from "./Navbar"
@@ -11,30 +12,39 @@ interface EnhancedLayoutProps {
   className?: string
 }
 
-function LayoutContent({ children, className }: EnhancedLayoutProps) {
+// Memoized layout content to prevent unnecessary re-renders
+const LayoutContent = memo<EnhancedLayoutProps>(({ children, className }) => {
   const { mode } = useSidebarMode()
 
-  // Calculate content margin based on sidebar state
-  const getContentMargin = () => {
+  // Memoize margin calculation to avoid recalculating on every render
+  const contentMarginClass = useMemo(() => {
     if (mode === "hover") {
       return "ml-0" // No margin for hover mode
     }
-    // Drawer mode - full sidebar visible
-    return "ml-[280px]" // Full sidebar width (280px)
-  }
+    return "ml-[280px]" // Full sidebar width (280px) for drawer mode
+  }, [mode]);
+
+  // Memoize transition classes to avoid string concatenation on each render
+  const mainContentClass = useMemo(() =>
+    cn(
+      "flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out",
+      contentMarginClass
+    ),
+    [contentMarginClass]
+  );
+
+  const containerClass = useMemo(() =>
+    cn("flex h-screen w-full bg-background", className),
+    [className]
+  );
 
   return (
-    <div className={cn("flex h-screen w-full bg-background", className)}>
+    <div className={containerClass}>
       {/* Integrated sidebar */}
       <IntegratedSidebar />
 
       {/* Main content area with dynamic margin */}
-      <div
-        className={cn(
-          "flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out",
-          getContentMargin()
-        )}
-      >
+      <div className={mainContentClass}>
         {/* Header */}
         <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <EduVerseNavbar />
@@ -49,9 +59,12 @@ function LayoutContent({ children, className }: EnhancedLayoutProps) {
       </div>
     </div>
   )
-}
+});
 
-export function Layout({ children, className }: EnhancedLayoutProps) {
+LayoutContent.displayName = 'LayoutContent';
+
+// Main Layout wrapper with provider
+export const Layout = memo<EnhancedLayoutProps>(({ children, className }) => {
   return (
     <SidebarModeProvider>
       <LayoutContent className={className}>
@@ -59,4 +72,6 @@ export function Layout({ children, className }: EnhancedLayoutProps) {
       </LayoutContent>
     </SidebarModeProvider>
   )
-}
+});
+
+Layout.displayName = 'Layout';

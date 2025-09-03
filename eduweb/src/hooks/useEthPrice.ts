@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 interface UseEthPriceReturn {
   ethToIDR: number;
@@ -10,135 +10,128 @@ interface UseEthPriceReturn {
 
 const ETH_PRICE_API_URL = '/api/eth-price';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const RETRY_DELAY = 2000; // 2 seconds
 
-// Client-side cache (server has its own cache)
-let cachedData: {
+// Global cache shared across all hook instances
+let globalCachedData: {
   ethToIDR: number;
   timestamp: number;
+  isLoading: boolean;
+  error: string | null;
 } | null = null;
 
+// Global promise to prevent multiple simultaneous API calls
+let fetchPromise: Promise<void> | null = null;
+
+// Global subscribers for state changes
+const subscribers = new Set<() => void>();
+
+const notifySubscribers = () => {
+  subscribers.forEach(callback => callback());
+};
+
+const fetchEthPriceGlobal = async (): Promise<void> => {
+  try {
+    // Check if data is still fresh
+    if (globalCachedData && Date.now() - globalCachedData.timestamp < CACHE_DURATION) {
+      return;
+    }
+
+    // Set loading state
+    globalCachedData = {
+      ethToIDR: globalCachedData?.ethToIDR || 0,
+      timestamp: globalCachedData?.timestamp || 0,
+      isLoading: true,
+      error: null,
+    };
+    notifySubscribers();
+
+    const response = await fetch(ETH_PRICE_API_URL, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API ${response.status}: ${response.statusText}`);
+    }
+
+    const apiResponse = await response.json();
+
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.error || 'API returned unsuccessful response');
+    }
+
+    const data = apiResponse.data;
+    if (!data.ethereum || !data.ethereum.idr) {
+      throw new Error('Invalid response format from ETH price API');
+    }
+
+    const now = Date.now();
+    globalCachedData = {
+      ethToIDR: data.ethereum.idr,
+      timestamp: now,
+      isLoading: false,
+      error: null,
+    };
+
+    notifySubscribers();
+  } catch (err) {
+    console.error('Error fetching ETH price:', err);
+
+    const errorMessage = err instanceof Error ? err.message : 'Failed to fetch ETH price';
+
+    globalCachedData = {
+      ethToIDR: globalCachedData?.ethToIDR || 0,
+      timestamp: globalCachedData?.timestamp || 0,
+      isLoading: false,
+      error: errorMessage,
+    };
+
+    notifySubscribers();
+  } finally {
+    fetchPromise = null;
+  }
+};
+
 export function useEthPrice(): UseEthPriceReturn {
-  const [ethToIDR, setEthToIDR] = useState<number>(0);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const isMountedRef = useRef(true);
+  const [, forceUpdate] = useState({});
 
-  const fetchEthPrice = useCallback(async (retryCount = 0) => {
-    try {
-      // Check cache first
-      if (cachedData && Date.now() - cachedData.timestamp < CACHE_DURATION) {
-        setEthToIDR(cachedData.ethToIDR);
-        setLastUpdated(new Date(cachedData.timestamp));
-        setIsLoading(false);
-        setError(null);
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-      const response = await fetch(ETH_PRICE_API_URL, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`API ${response.status}: ${response.statusText}`);
-      }
-
-      const apiResponse = await response.json();
-
-      // Handle API response format
-      if (!apiResponse.success) {
-        throw new Error(apiResponse.error || 'API returned unsuccessful response');
-      }
-
-      const data = apiResponse.data;
-      if (!data.ethereum || !data.ethereum.idr) {
-        throw new Error('Invalid response format from ETH price API');
-      }
-
-      const price = data.ethereum.idr;
-      const now = Date.now();
-
-      // Update cache
-      cachedData = {
-        ethToIDR: price,
-        timestamp: now,
-      };
-
-      setEthToIDR(price);
-      setLastUpdated(new Date(now));
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching ETH price:', err);
-
-      let errorMessage = 'Failed to fetch ETH price';
-
-      if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          errorMessage = 'Request timeout';
-        } else if (err.message.includes('NetworkError') || err.message.includes('fetch')) {
-          errorMessage = 'Network connection error';
-        } else {
-          errorMessage = err.message;
-        }
-      }
-
-      // Retry logic for network errors
-      if (retryCount < 2 && (errorMessage.includes('Network') || errorMessage.includes('timeout'))) {
-        setTimeout(() => {
-          fetchEthPrice(retryCount + 1);
-        }, RETRY_DELAY * (retryCount + 1)); // Exponential backoff
-        return;
-      }
-
-      setError(errorMessage);
-
-      // Use cached data if available, even if expired
-      if (cachedData) {
-        setEthToIDR(cachedData.ethToIDR);
-        setLastUpdated(new Date(cachedData.timestamp));
-        setError(`Using cached data: ${errorMessage}`);
-      }
-    } finally {
-      setIsLoading(false);
+  const triggerRerender = useCallback(() => {
+    if (isMountedRef.current) {
+      forceUpdate({});
     }
   }, []);
 
-  const refetch = useCallback(() => {
-    // Invalidate cache and fetch fresh data
-    cachedData = null;
-    fetchEthPrice();
-  }, [fetchEthPrice]);
+  const returnValue = useMemo((): UseEthPriceReturn => {
+    const refetch = () => {
+      if (!fetchPromise) {
+        fetchPromise = fetchEthPriceGlobal();
+      }
+    };
+
+    return {
+      ethToIDR: globalCachedData?.ethToIDR || 0,
+      isLoading: globalCachedData?.isLoading || false,
+      error: globalCachedData?.error || null,
+      lastUpdated: globalCachedData?.timestamp ? new Date(globalCachedData.timestamp) : null,
+      refetch,
+    };
+  }, [globalCachedData?.ethToIDR, globalCachedData?.isLoading, globalCachedData?.error, globalCachedData?.timestamp]);
 
   useEffect(() => {
-    fetchEthPrice();
+    subscribers.add(triggerRerender);
 
-    // Set up periodic refresh every 5 minutes
-    const intervalId = setInterval(() => {
-      fetchEthPrice();
-    }, CACHE_DURATION);
+    if (!globalCachedData || Date.now() - globalCachedData.timestamp > CACHE_DURATION) {
+      if (!fetchPromise) {
+        fetchPromise = fetchEthPriceGlobal();
+      }
+    }
 
     return () => {
-      clearInterval(intervalId);
+      isMountedRef.current = false;
+      subscribers.delete(triggerRerender);
     };
-  }, [fetchEthPrice]);
+  }, [triggerRerender]);
 
-  return {
-    ethToIDR,
-    isLoading,
-    error,
-    lastUpdated,
-    refetch,
-  };
+  return returnValue;
 }

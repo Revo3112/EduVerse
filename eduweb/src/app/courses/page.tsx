@@ -97,11 +97,14 @@ export default function CoursesPage() {
           >
             <Filter className="h-4 w-4 mr-2" />
             Filters
-            {(selectedCategory !== null || selectedDifficulty !== null) && (
-              <Badge variant="secondary" className="ml-2 text-xs px-1.5 py-0.5">
-                {(selectedCategory !== null ? 1 : 0) + (selectedDifficulty !== null ? 1 : 0)}
-              </Badge>
-            )}
+            {(() => {
+              const filterCount = (selectedCategory !== null ? 1 : 0) + (selectedDifficulty !== null ? 1 : 0);
+              return filterCount > 0 && (
+                <Badge variant="secondary" className="ml-2 text-xs px-1.5 py-0.5">
+                  {filterCount}
+                </Badge>
+              );
+            })()}
           </Button>
         </div>
 

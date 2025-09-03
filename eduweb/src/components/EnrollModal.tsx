@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Clock, Users, Award, CheckCircle, Zap, Shield, BookOpen, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ interface EnrollModalProps {
   onEnroll: (courseId: bigint, duration: number) => void;
 }
 
+// Memoized helper functions
 const formatIDR = (amount: number): string => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -26,47 +27,53 @@ const formatIDR = (amount: number): string => {
   }).format(amount);
 };
 
-const PriceDisplay: React.FC<{ ethAmount: string; className?: string }> = ({ ethAmount, className = '' }) => {
-  const { ethToIDR, isLoading, error } = useEthPrice();
-
-  if (isLoading) {
-    return (
-      <div className={`text-gray-500 text-sm ${className}`}>
-        Loading price...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className={`text-gray-500 text-sm ${className}`}>
-        <span className="text-2xl font-bold">{ethAmount} ETH</span>
-      </div>
-    );
-  }
-
-  const ethValue = parseFloat(ethAmount);
-  const idrAmount = ethValue * ethToIDR;
-
-  return (
-    <div className={className}>
-      <div className="text-2xl font-bold">{ethAmount} ETH</div>
-      <div className="text-gray-600 dark:text-gray-400 text-sm">≈ {formatIDR(idrAmount)}</div>
-    </div>
-  );
-};
-
 const weiToEth = (wei: bigint): string => {
   const ethValue = Number(wei) / Math.pow(10, 18);
   return ethValue.toFixed(6);
 };
 
-// Format creator address for display (show first 6 and last 4 characters)
 const formatAddress = (address: string): string => {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
-// Duration options based on mobile app - clean and minimalist
+// Memoized PriceDisplay component
+const PriceDisplay = memo<{ ethAmount: string; className?: string }>(({ ethAmount, className = '' }) => {
+  const { ethToIDR, isLoading, error } = useEthPrice();
+
+  const priceContent = useMemo(() => {
+    if (isLoading) {
+      return (
+        <div className={`text-gray-500 text-sm ${className}`}>
+          Loading price...
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className={`text-gray-500 text-sm ${className}`}>
+          <span className="text-2xl font-bold">{ethAmount} ETH</span>
+        </div>
+      );
+    }
+
+    const ethValue = parseFloat(ethAmount);
+    const idrAmount = ethValue * ethToIDR;
+
+    return (
+      <div className={className}>
+        <div className="text-2xl font-bold">{ethAmount} ETH</div>
+        <div className="text-gray-600 dark:text-gray-400 text-sm">≈ {formatIDR(idrAmount)}</div>
+      </div>
+    );
+  }, [ethAmount, ethToIDR, isLoading, error, className]);
+
+  return priceContent;
+});
+
+PriceDisplay.displayName = 'PriceDisplay';
+
+// Duration options - memoized to prevent recreation
 const DURATION_OPTIONS = [
   {
     months: 1,
@@ -99,36 +106,45 @@ const DURATION_OPTIONS = [
     months: 12,
     label: '1 Year',
     description: 'Best value',
-    discount: 25,
+    discount: 20,
     popular: false,
     icon: Award,
-    priceMultiplier: 9 // 12 months * (1 - 25% discount)
+    priceMultiplier: 9.6 // 12 months * (1 - 20% discount)
   }
 ];
 
-export default function EnrollModal({
-  isOpen,
-  onClose,
-  course,
-  onEnroll
-}: EnrollModalProps) {
-  const [selectedDuration, setSelectedDuration] = useState(1); // Start with 1 month
+const EnrollModal = memo<EnrollModalProps>(({ course, isOpen, onClose, onEnroll }) => {
+  const [selectedDuration, setSelectedDuration] = useState(3); // Default to 3 months
 
-  if (!course) return null;
+  // Memoize expensive calculations
+  const courseData = useMemo(() => ({
+    priceInEth: weiToEth(course.pricePerMonth),
+    formattedCreator: formatAddress(course.creatorName),
+  }), [course.pricePerMonth, course.creatorName]);
 
-  const coursePriceETH = weiToEth(course.pricePerMonth);
+  const selectedOption = useMemo(() =>
+    DURATION_OPTIONS.find(option => option.months === selectedDuration) || DURATION_OPTIONS[1],
+    [selectedDuration]
+  );
 
-  // Use months as ID and calculate based on CourseFactory data
-  const selectedOption = DURATION_OPTIONS.find(option => option.months === selectedDuration) || DURATION_OPTIONS[0];
-  const basePrice = parseFloat(coursePriceETH);
-  const totalPriceETH = (basePrice * selectedOption.priceMultiplier).toFixed(6);
-  const originalPriceETH = (basePrice * selectedOption.months).toFixed(6);
-  const savingsText = selectedOption.discount > 0 ? `Save ${selectedOption.discount}%` : null;
+  const totalPrice = useMemo(() => {
+    const basePrice = parseFloat(courseData.priceInEth);
+    return (basePrice * selectedOption.priceMultiplier).toFixed(6);
+  }, [courseData.priceInEth, selectedOption.priceMultiplier]);
 
-  const handleEnroll = () => {
+  const handleEnroll = useCallback(() => {
     onEnroll(course.id, selectedDuration);
     onClose();
-  };
+  }, [onEnroll, course.id, selectedDuration, onClose]);
+
+  const handleDurationSelect = useCallback((months: number) => {
+    setSelectedDuration(months);
+  }, []);
+
+  // Additional calculated values
+  const savingsText = selectedOption.discount > 0 ? `Save ${selectedOption.discount}%` : null;
+
+  if (!course) return null;
 
   return (
     <AnimatePresence>
@@ -171,14 +187,6 @@ export default function EnrollModal({
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <h2 className="text-2xl font-semibold">Course Details</h2>
-                      <div className="flex items-center gap-4">
-                        <Badge variant="secondary" className="text-sm">
-                          {course.category}
-                        </Badge>
-                        <Badge variant="outline" className="text-sm">
-                          {course.difficulty}
-                        </Badge>
-                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -196,7 +204,7 @@ export default function EnrollModal({
                     <div className="space-y-4">
                       <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">Monthly Price</div>
-                        <PriceDisplay ethAmount={coursePriceETH} className="text-lg" />
+                        <PriceDisplay ethAmount={courseData.priceInEth} className="text-lg" />
                       </div>
                       <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">Selected Duration</div>
@@ -205,7 +213,7 @@ export default function EnrollModal({
                       </div>
                       <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">Total Cost</div>
-                        <PriceDisplay ethAmount={totalPriceETH} className="text-2xl" />
+                        <PriceDisplay ethAmount={totalPrice} className="text-2xl" />
                         {savingsText && (
                           <div className="text-green-600 text-sm font-medium">{savingsText}</div>
                         )}
@@ -255,7 +263,7 @@ export default function EnrollModal({
                           </div>
                           <div className="text-sm font-medium">
                             <PriceDisplay
-                              ethAmount={(basePrice * option.priceMultiplier).toFixed(6)}
+                              ethAmount={(parseFloat(courseData.priceInEth) * option.priceMultiplier).toFixed(6)}
                               className="text-sm"
                             />
                           </div>
@@ -276,7 +284,7 @@ export default function EnrollModal({
                     </p>
                   </div>
                   <div className="text-right">
-                    <PriceDisplay ethAmount={totalPriceETH} className="text-2xl" />
+                    <PriceDisplay ethAmount={totalPrice} className="text-2xl" />
                     {savingsText && (
                       <p className="text-green-600 text-sm font-medium">
                         {savingsText} compared to monthly billing
@@ -289,7 +297,7 @@ export default function EnrollModal({
                   onClick={handleEnroll}
                   className="w-full h-14 text-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg"
                 >
-                  Enroll Now - {totalPriceETH} ETH
+                  Enroll Now - {totalPrice} ETH
                 </Button>
               </div>
             </div>
@@ -298,4 +306,8 @@ export default function EnrollModal({
       )}
     </AnimatePresence>
   );
-}
+});
+
+EnrollModal.displayName = 'EnrollModal';
+
+export default EnrollModal;
