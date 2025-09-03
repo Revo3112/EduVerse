@@ -36,23 +36,24 @@ const formatAddress = (address: string): string => {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
-// Memoized PriceDisplay component
+// Memoized PriceDisplay component with improved state handling
 const PriceDisplay = memo<{ ethAmount: string; className?: string }>(({ ethAmount, className = '' }) => {
-  const { ethToIDR, isLoading, error } = useEthPrice();
+  const { ethToIDR, isLoading, error, lastUpdated } = useEthPrice();
 
   const priceContent = useMemo(() => {
-    if (isLoading) {
+    if (isLoading && !ethToIDR) {
       return (
         <div className={`text-gray-500 text-sm ${className}`}>
-          Loading price...
+          <div className="animate-pulse">Loading price...</div>
         </div>
       );
     }
 
-    if (error) {
+    if (error && !ethToIDR) {
       return (
         <div className={`text-gray-500 text-sm ${className}`}>
           <span className="text-2xl font-bold">{ethAmount} ETH</span>
+          <div className="text-xs text-red-500">Price unavailable</div>
         </div>
       );
     }
@@ -63,10 +64,19 @@ const PriceDisplay = memo<{ ethAmount: string; className?: string }>(({ ethAmoun
     return (
       <div className={className}>
         <div className="text-2xl font-bold">{ethAmount} ETH</div>
-        <div className="text-gray-600 dark:text-gray-400 text-sm">≈ {formatIDR(idrAmount)}</div>
+        {ethToIDR > 0 && (
+          <div className="text-gray-600 dark:text-gray-400 text-sm">
+            ≈ {formatIDR(idrAmount)}
+            {lastUpdated && (
+              <span className="text-xs ml-1 text-gray-500">
+                ({new Date(lastUpdated).toLocaleTimeString()})
+              </span>
+            )}
+          </div>
+        )}
       </div>
     );
-  }, [ethAmount, ethToIDR, isLoading, error, className]);
+  }, [ethAmount, ethToIDR, isLoading, error, lastUpdated, className]);
 
   return priceContent;
 });

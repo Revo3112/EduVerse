@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from 'react';
 
 interface UseEthPriceReturn {
   ethToIDR: number;
@@ -22,11 +22,17 @@ let globalCachedData: {
 // Global promise to prevent multiple simultaneous API calls
 let fetchPromise: Promise<void> | null = null;
 
-// Global subscribers for state changes
-const subscribers = new Set<() => void>();
+// Global subscribers for state changes with improved callback tracking
+const subscribers = new Set<(data: GlobalCacheData) => void>();
 
 const notifySubscribers = () => {
-  subscribers.forEach(callback => callback());
+  subscribers.forEach(callback => {
+    try {
+      callback(globalCachedData);
+    } catch (error) {
+      console.error('Error in subscriber callback:', error);
+    }
+  });
 };
 
 const fetchEthPriceGlobal = async (): Promise<void> => {
@@ -73,6 +79,7 @@ const fetchEthPriceGlobal = async (): Promise<void> => {
       error: null,
     };
 
+    // Ensure all subscribers are notified of the successful update
     notifySubscribers();
   } catch (err) {
     console.error('Error fetching ETH price:', err);
@@ -92,46 +99,109 @@ const fetchEthPriceGlobal = async (): Promise<void> => {
   }
 };
 
+// Reducer for reliable re-rendering
+type EthPriceState = {
+  ethToIDR: number;
+  isLoading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+  updateCount: number; // Force re-render trigger
+};
+
+type GlobalCacheData = {
+  ethToIDR: number;
+  timestamp: number;
+  isLoading: boolean;
+  error: string | null;
+} | null;
+
+type EthPriceAction =
+  | { type: 'UPDATE_FROM_GLOBAL'; data: GlobalCacheData }
+  | { type: 'FORCE_UPDATE' };
+
+const ethPriceReducer = (state: EthPriceState, action: EthPriceAction): EthPriceState => {
+  switch (action.type) {
+    case 'UPDATE_FROM_GLOBAL':
+      const data = action.data;
+      const newState = {
+        ethToIDR: data?.ethToIDR || 0,
+        isLoading: data?.isLoading || false,
+        error: data?.error || null,
+        lastUpdated: data?.timestamp ? new Date(data.timestamp) : null,
+        updateCount: state.updateCount + 1,
+      };
+
+      return newState;
+
+    case 'FORCE_UPDATE':
+      return {
+        ...state,
+        updateCount: state.updateCount + 1,
+      };
+    default:
+      return state;
+  }
+};
+
 export function useEthPrice(): UseEthPriceReturn {
   const isMountedRef = useRef(true);
-  const [, forceUpdate] = useState({});
 
-  const triggerRerender = useCallback(() => {
-    if (isMountedRef.current) {
-      forceUpdate({});
+  // Use useReducer for reliable state updates
+  const [state, dispatch] = useReducer(ethPriceReducer, {
+    ethToIDR: globalCachedData?.ethToIDR || 0,
+    isLoading: globalCachedData?.isLoading || false,
+    error: globalCachedData?.error || null,
+    lastUpdated: globalCachedData?.timestamp ? new Date(globalCachedData.timestamp) : null,
+    updateCount: 0,
+  });
+
+  // Subscriber callback that dispatches updates
+  const handleGlobalUpdate = useCallback((data: GlobalCacheData) => {
+    // Always dispatch updates - let reducer handle state changes
+    dispatch({ type: 'UPDATE_FROM_GLOBAL', data });
+  }, []);
+
+  // Refetch function
+  const refetch = useCallback(() => {
+    if (!fetchPromise) {
+      fetchPromise = fetchEthPriceGlobal();
     }
   }, []);
 
-  const returnValue = useMemo((): UseEthPriceReturn => {
-    const refetch = () => {
-      if (!fetchPromise) {
-        fetchPromise = fetchEthPriceGlobal();
-      }
-    };
-
-    return {
-      ethToIDR: globalCachedData?.ethToIDR || 0,
-      isLoading: globalCachedData?.isLoading || false,
-      error: globalCachedData?.error || null,
-      lastUpdated: globalCachedData?.timestamp ? new Date(globalCachedData.timestamp) : null,
-      refetch,
-    };
-  }, [globalCachedData?.ethToIDR, globalCachedData?.isLoading, globalCachedData?.error, globalCachedData?.timestamp]);
-
   useEffect(() => {
-    subscribers.add(triggerRerender);
+    // Ensure mounted state is set correctly
+    isMountedRef.current = true;
 
-    if (!globalCachedData || Date.now() - globalCachedData.timestamp > CACHE_DURATION) {
-      if (!fetchPromise) {
-        fetchPromise = fetchEthPriceGlobal();
-      }
+    // Subscribe to global state changes
+    subscribers.add(handleGlobalUpdate);
+
+    // Initial data sync if global data exists
+    if (globalCachedData) {
+      dispatch({ type: 'UPDATE_FROM_GLOBAL', data: globalCachedData });
+    }
+
+    // Fetch if no data or data is stale
+    const shouldFetch = !globalCachedData || Date.now() - globalCachedData.timestamp > CACHE_DURATION;
+
+    if (shouldFetch && !fetchPromise) {
+      fetchPromise = fetchEthPriceGlobal();
     }
 
     return () => {
-      isMountedRef.current = false;
-      subscribers.delete(triggerRerender);
+      // Delay unmount flag to allow final updates to process
+      setTimeout(() => {
+        isMountedRef.current = false;
+      }, 100);
+      subscribers.delete(handleGlobalUpdate);
     };
-  }, [triggerRerender]);
+  }, [handleGlobalUpdate]);
 
-  return returnValue;
+  // Return memoized result to prevent unnecessary re-renders of parent components
+  return useMemo((): UseEthPriceReturn => ({
+    ethToIDR: state.ethToIDR,
+    isLoading: state.isLoading,
+    error: state.error,
+    lastUpdated: state.lastUpdated,
+    refetch,
+  }), [state.ethToIDR, state.isLoading, state.error, state.lastUpdated, refetch]);
 }
