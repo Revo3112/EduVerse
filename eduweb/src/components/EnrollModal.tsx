@@ -69,7 +69,11 @@ const PriceDisplay = memo<{ ethAmount: string; className?: string }>(({ ethAmoun
             ≈ {formatIDR(idrAmount)}
             {lastUpdated && (
               <span className="text-xs ml-1 text-gray-500">
-                ({new Date(lastUpdated).toLocaleTimeString()})
+                ({new Date(lastUpdated).toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: 'numeric',
+                  second: 'numeric'
+                })})
               </span>
             )}
           </div>

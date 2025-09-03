@@ -32,7 +32,11 @@ const formatAddress = (address: string): string => {
 };
 
 const formatDate = (timestamp: bigint): string => {
-  return new Date(Number(timestamp) * 1000).toLocaleDateString();
+  return new Date(Number(timestamp) * 1000).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric'
+  });
 };
 
 const getDifficultyBadgeVariant = (difficulty: number) => {
