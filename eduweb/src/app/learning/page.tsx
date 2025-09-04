@@ -21,7 +21,7 @@ export default function LearningPage() {
 
   // Handle course actions
   const handleContinueLearning = (courseId: number) => {
-    router.push(`/courses/${courseId}`);
+    router.push(`/learning/course-details?id=${courseId}`);
   };
 
   const handleViewCertificate = (courseId: number) => {
