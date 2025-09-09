@@ -123,7 +123,7 @@ class MockEduVerseDatabase {
         description: "Master blockchain technology from basics to advanced Web3 development. Learn smart contracts, DeFi protocols, and build decentralized applications with hands-on projects.",
         creator: "0x742d35Cc8d2c0c2c21a7e7e2b6C3b3b3e3b3b3b3",
         creatorName: "Dr. Alex Chen",
-        thumbnailCID: "QmThumbnailBlockchainFundamentals2024",
+        thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
         category: CourseCategory.Technology,
         difficulty: CourseDifficulty.Beginner,
         pricePerMonth: 2000000000000000, // 0.002 ETH in wei
@@ -139,7 +139,7 @@ class MockEduVerseDatabase {
         description: "Deep dive into smart contract security patterns, common vulnerabilities, and professional auditing techniques. Learn to identify and prevent critical security flaws in DeFi protocols.",
         creator: "0x2C8b5b3C8D2E2c4a5b6C7d8E9f10A11b12C13D14",
         creatorName: "Sarah Martinez",
-        thumbnailCID: "QmThumbnailSmartContractSecurity2024",
+        thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
         category: CourseCategory.Technology,
         difficulty: CourseDifficulty.Advanced,
         pricePerMonth: 2000000000000000, // 0.002 ETH in wei
@@ -155,7 +155,7 @@ class MockEduVerseDatabase {
         description: "Build your own DeFi protocol from concept to deployment. Master liquidity pools, yield farming, governance tokens, and create sustainable tokenomics for your protocol.",
         creator: "0x8E9f10A11b12C13D145E6F17G18H19I20J21K22L",
         creatorName: "Michael Torres",
-        thumbnailCID: "QmThumbnailDeFiProtocolDesign2024",
+        thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
         category: CourseCategory.Technology,
         difficulty: CourseDifficulty.Intermediate,
         pricePerMonth: 2000000000000000, // 0.002 ETH in wei
@@ -174,40 +174,40 @@ class MockEduVerseDatabase {
   private initializeSections() {
     // Course 1 - Blockchain Fundamentals (10 sections)
     const course1Sections: CourseSectionData[] = [
-      { id: 0, courseId: 1, title: "Introduction to Blockchain Technology", contentCID: "QmBlockchainIntroductionBasics2024", duration: 1800, orderId: 0 },
-      { id: 1, courseId: 1, title: "Understanding Cryptographic Hash Functions", contentCID: "QmCryptographicHashFunctions2024", duration: 2100, orderId: 1 },
-      { id: 2, courseId: 1, title: "Digital Signatures and Public Key Cryptography", contentCID: "QmDigitalSignaturesPublicKey2024", duration: 1950, orderId: 2 },
-      { id: 3, courseId: 1, title: "Merkle Trees and Data Structures", contentCID: "QmMerkleTreesDataStructures2024", duration: 1650, orderId: 3 },
-      { id: 4, courseId: 1, title: "Consensus Mechanisms: PoW vs PoS", contentCID: "QmConsensusProofOfWorkStake2024", duration: 2250, orderId: 4 },
-      { id: 5, courseId: 1, title: "Ethereum Virtual Machine Deep Dive", contentCID: "QmEVMVirtualMachineDeepDive2024", duration: 2400, orderId: 5 },
-      { id: 6, courseId: 1, title: "Smart Contract Development with Solidity", contentCID: "QmSoliditySmartContractDev2024", duration: 3000, orderId: 6 },
-      { id: 7, courseId: 1, title: "Web3.js and Contract Interaction", contentCID: "QmWeb3ContractInteraction2024", duration: 2700, orderId: 7 },
-      { id: 8, courseId: 1, title: "Building Your First DApp", contentCID: "QmBuildingFirstDApp2024", duration: 3600, orderId: 8 },
-      { id: 9, courseId: 1, title: "Testing and Deployment Strategies", contentCID: "QmTestingDeploymentStrategies2024", duration: 2850, orderId: 9 }
+      { id: 0, courseId: 1, title: "Introduction to Blockchain Technology", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1800, orderId: 0 },
+      { id: 1, courseId: 1, title: "Understanding Cryptographic Hash Functions", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2100, orderId: 1 },
+      { id: 2, courseId: 1, title: "Digital Signatures and Public Key Cryptography", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1950, orderId: 2 },
+      { id: 3, courseId: 1, title: "Merkle Trees and Data Structures", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1650, orderId: 3 },
+      { id: 4, courseId: 1, title: "Consensus Mechanisms: PoW vs PoS", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2250, orderId: 4 },
+      { id: 5, courseId: 1, title: "Ethereum Virtual Machine Deep Dive", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2400, orderId: 5 },
+      { id: 6, courseId: 1, title: "Smart Contract Development with Solidity", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 3000, orderId: 6 },
+      { id: 7, courseId: 1, title: "Web3.js and Contract Interaction", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2700, orderId: 7 },
+      { id: 8, courseId: 1, title: "Building Your First DApp", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 3600, orderId: 8 },
+      { id: 9, courseId: 1, title: "Testing and Deployment Strategies", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2850, orderId: 9 }
     ];
 
     // Course 2 - Smart Contract Security (8 sections)
     const course2Sections: CourseSectionData[] = [
-      { id: 10, courseId: 2, title: "Security Threat Landscape Overview", contentCID: "QmSecurityThreatLandscape2024", duration: 1500, orderId: 0 },
-      { id: 11, courseId: 2, title: "Reentrancy Attacks and Prevention", contentCID: "QmReentrancyAttacksPrevention2024", duration: 1800, orderId: 1 },
-      { id: 12, courseId: 2, title: "Integer Overflow and Underflow", contentCID: "QmIntegerOverflowUnderflow2024", duration: 1350, orderId: 2 },
-      { id: 13, courseId: 2, title: "Access Control Vulnerabilities", contentCID: "QmAccessControlVulnerabilities2024", duration: 1650, orderId: 3 },
-      { id: 14, courseId: 2, title: "Flash Loan Attacks Analysis", contentCID: "QmFlashLoanAttacksAnalysis2024", duration: 2100, orderId: 4 },
-      { id: 15, courseId: 2, title: "Formal Verification Techniques", contentCID: "QmFormalVerificationTechniques2024", duration: 2400, orderId: 5 },
-      { id: 16, courseId: 2, title: "Professional Audit Methodology", contentCID: "QmProfessionalAuditMethodology2024", duration: 1950, orderId: 6 },
-      { id: 17, courseId: 2, title: "Security Tools and Best Practices", contentCID: "QmSecurityToolsBestPractices2024", duration: 1800, orderId: 7 }
+      { id: 10, courseId: 2, title: "Security Threat Landscape Overview", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1500, orderId: 0 },
+      { id: 11, courseId: 2, title: "Reentrancy Attacks and Prevention", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1800, orderId: 1 },
+      { id: 12, courseId: 2, title: "Integer Overflow and Underflow", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1350, orderId: 2 },
+      { id: 13, courseId: 2, title: "Access Control Vulnerabilities", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1650, orderId: 3 },
+      { id: 14, courseId: 2, title: "Flash Loan Attacks Analysis", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2100, orderId: 4 },
+      { id: 15, courseId: 2, title: "Formal Verification Techniques", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2400, orderId: 5 },
+      { id: 16, courseId: 2, title: "Professional Audit Methodology", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1950, orderId: 6 },
+      { id: 17, courseId: 2, title: "Security Tools and Best Practices", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1800, orderId: 7 }
     ];
 
     // Course 3 - DeFi Protocol Design (8 sections)
     const course3Sections: CourseSectionData[] = [
-      { id: 18, courseId: 3, title: "DeFi Ecosystem Architecture", contentCID: "QmDeFiEcosystemArchitecture2024", duration: 1650, orderId: 0 },
-      { id: 19, courseId: 3, title: "Automated Market Makers (AMMs)", contentCID: "QmAutomatedMarketMakers2024", duration: 2100, orderId: 1 },
-      { id: 20, courseId: 3, title: "Liquidity Pools and Impermanent Loss", contentCID: "QmLiquidityPoolsImpermanentLoss2024", duration: 1950, orderId: 2 },
-      { id: 21, courseId: 3, title: "Yield Farming Strategies", contentCID: "QmYieldFarmingStrategies2024", duration: 1800, orderId: 3 },
-      { id: 22, courseId: 3, title: "Governance Token Economics", contentCID: "QmGovernanceTokenEconomics2024", duration: 2250, orderId: 4 },
-      { id: 23, courseId: 3, title: "Protocol Risk Management", contentCID: "QmProtocolRiskManagement2024", duration: 1650, orderId: 5 },
-      { id: 24, courseId: 3, title: "Conversion Rate Optimization", contentCID: "QmConversionRateOptimizationCRO24", duration: 1500, orderId: 6 },
-      { id: 25, courseId: 3, title: "Growth Hacking Strategies", contentCID: "QmGrowthHackingStrategiesStartups", duration: 1750, orderId: 7 }
+      { id: 18, courseId: 3, title: "DeFi Ecosystem Architecture", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1650, orderId: 0 },
+      { id: 19, courseId: 3, title: "Automated Market Makers (AMMs)", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2100, orderId: 1 },
+      { id: 20, courseId: 3, title: "Liquidity Pools and Impermanent Loss", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1950, orderId: 2 },
+      { id: 21, courseId: 3, title: "Yield Farming Strategies", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1800, orderId: 3 },
+      { id: 22, courseId: 3, title: "Governance Token Economics", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 2250, orderId: 4 },
+      { id: 23, courseId: 3, title: "Protocol Risk Management", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1650, orderId: 5 },
+      { id: 24, courseId: 3, title: "Conversion Rate Optimization", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1500, orderId: 6 },
+      { id: 25, courseId: 3, title: "Growth Hacking Strategies", contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", duration: 1750, orderId: 7 }
     ];
 
     this.sections = [...course1Sections, ...course2Sections, ...course3Sections];

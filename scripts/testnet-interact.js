@@ -65,7 +65,7 @@ async function main() {
       courseFactory.connect(creator).createCourse(
         "Web3 Development 101", // title
         "Introduction to blockchain application development", // description
-        "QmWebDevThumbnail", // thumbnailCID
+        "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y", // thumbnailCID
         pricePerMonth1 // pricePerMonth
       ),
       "Membuat Kursus 1"
@@ -82,7 +82,7 @@ async function main() {
       courseFactory.connect(creator).addCourseSection(
         courseId1,
         "Introduction to Blockchain", // title
-        "QmWebDev1", // contentCID
+        "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", // contentCID
         3600 // 1 jam
       ),
       "Menambahkan Bagian 1.1"
@@ -92,7 +92,7 @@ async function main() {
       courseFactory.connect(creator).addCourseSection(
         courseId1,
         "Smart Contracts with Solidity", // title
-        "QmWebDev2", // contentCID
+        "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", // contentCID
         4800 // 1 jam 20 menit
       ),
       "Menambahkan Bagian 1.2"
@@ -106,7 +106,7 @@ async function main() {
       courseFactory.connect(creator).createCourse(
         "DeFi Fundamentals", // title
         "Learn about decentralized finance protocols and applications", // description
-        "QmDeFiThumbnail", // thumbnailCID
+        "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y", // thumbnailCID
         pricePerMonth2 // pricePerMonth
       ),
       "Membuat Kursus 2"
@@ -123,7 +123,7 @@ async function main() {
       courseFactory.connect(creator).addCourseSection(
         courseId2,
         "Understanding DeFi Protocols", // title
-        "QmDeFi1", // contentCID
+        "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", // contentCID
         2700 // 45 menit
       ),
       "Menambahkan Bagian 2.1"
@@ -133,7 +133,7 @@ async function main() {
       courseFactory.connect(creator).addCourseSection(
         courseId2,
         "Yield Farming Strategies", // title
-        "QmDeFi2", // contentCID
+        "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", // contentCID
         3300 // 55 menit
       ),
       "Menambahkan Bagian 2.2"
@@ -143,7 +143,7 @@ async function main() {
       courseFactory.connect(creator).addCourseSection(
         courseId2,
         "DeFi Security Considerations", // title
-        "QmDeFi3", // contentCID
+        "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli", // contentCID
         3600 // 1 jam
       ),
       "Menambahkan Bagian 2.3"

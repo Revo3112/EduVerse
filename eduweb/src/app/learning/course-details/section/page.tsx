@@ -178,7 +178,7 @@ class MockEduVerseSectionDatabase {
         description: "Master blockchain technology from basics to advanced Web3 development. Learn smart contracts, DeFi protocols, and build decentralized applications with hands-on projects.",
         creator: "0x742d35Cc8d2c0c2c21a7e7e2b6C3b3b3e3b3b3b3",
         creatorName: "Dr. Alex Chen",
-        thumbnailCID: "QmThumbnailBlockchainFundamentals2024",
+        thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
         category: CourseCategory.Technology,
         difficulty: CourseDifficulty.Beginner,
         pricePerMonth: 2000000000000000,
@@ -193,7 +193,7 @@ class MockEduVerseSectionDatabase {
         description: "Deep dive into smart contract security patterns, common vulnerabilities, and professional auditing techniques.",
         creator: "0x2C8b5b3C8D2E2c4a5b6C7d8E9f10A11b12C13D14",
         creatorName: "Sarah Martinez",
-        thumbnailCID: "QmThumbnailSmartContractSecurity2024",
+        thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
         category: CourseCategory.Technology,
         difficulty: CourseDifficulty.Advanced,
         pricePerMonth: 2000000000000000,
@@ -208,7 +208,7 @@ class MockEduVerseSectionDatabase {
         description: "Build your own DeFi protocol from concept to deployment. Master liquidity pools, yield farming, governance tokens.",
         creator: "0x8E9f10A11b12C13D145E6F17G18H19I20J21K22L",
         creatorName: "Michael Torres",
-        thumbnailCID: "QmThumbnailDeFiProtocolDesign2024",
+        thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
         category: CourseCategory.Technology,
         difficulty: CourseDifficulty.Intermediate,
         pricePerMonth: 2000000000000000,
@@ -228,11 +228,11 @@ class MockEduVerseSectionDatabase {
         courseId: 1,
         title: "Introduction to Blockchain Technology",
         description: "Welcome to the fascinating world of blockchain technology! In this foundational section, you'll discover what makes blockchain revolutionary and how it's transforming industries worldwide. We'll explore the core concepts that make decentralized systems possible, examine real-world applications, and set the stage for your journey into Web3 development. Perfect for beginners, this section requires no prior technical knowledge.",
-        contentCID: "QmBlockchainIntroductionBasics2024",
+        contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli",
         duration: 1800,
         orderId: 0,
         videoMetadata: {
-          thumbnailCID: "QmThumbIntroBlockchain2024",
+          thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
           qualityOptions: [
             { resolution: "1080p", bitrate: 4000, size: 720 },
             { resolution: "720p", bitrate: 2500, size: 450 },
@@ -253,11 +253,11 @@ class MockEduVerseSectionDatabase {
         courseId: 1,
         title: "Understanding Cryptographic Hash Functions",
         description: "Dive deep into the mathematical foundations that secure blockchain networks. You'll learn how hash functions work, why they're one-way operations, and how they create the immutable links between blocks. Through interactive examples and visual demonstrations, you'll understand SHA-256, collision resistance, and the avalanche effect. This knowledge is crucial for understanding how blockchain achieves security and integrity.",
-        contentCID: "QmCryptographicHashFunctions2024",
+        contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli",
         duration: 2100,
         orderId: 1,
         videoMetadata: {
-          thumbnailCID: "QmThumbCryptoHash2024",
+          thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
           qualityOptions: [
             { resolution: "1080p", bitrate: 4000, size: 840 },
             { resolution: "720p", bitrate: 2500, size: 525 },
@@ -278,11 +278,11 @@ class MockEduVerseSectionDatabase {
         courseId: 1,
         title: "Digital Signatures and Public Key Cryptography",
         description: "Master the cryptographic techniques that enable secure, trustless transactions on blockchain networks. You'll explore how public-private key pairs work, understand digital signature algorithms like ECDSA, and learn how these technologies prevent fraud and ensure transaction authenticity. Hands-on exercises will help you generate keys, sign messages, and verify signatures using real tools.",
-        contentCID: "QmDigitalSignaturesPublicKey2024",
+        contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli",
         duration: 1950,
         orderId: 2,
         videoMetadata: {
-          thumbnailCID: "QmThumbDigitalSigs2024",
+          thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
           qualityOptions: [
             { resolution: "1080p", bitrate: 4000, size: 780 },
             { resolution: "720p", bitrate: 2500, size: 487 },
@@ -303,11 +303,11 @@ class MockEduVerseSectionDatabase {
         courseId: 1,
         title: "Merkle Trees and Data Structures",
         description: "Explore the elegant data structures that make blockchain scalable and efficient. Learn how Merkle trees enable fast verification of large datasets, understand root hashes and proof paths, and discover how these structures are used in Bitcoin, Ethereum, and other blockchains. You'll build your own Merkle tree implementation and understand why they're essential for blockchain architecture.",
-        contentCID: "QmMerkleTreesDataStructures2024",
+        contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli",
         duration: 1650,
         orderId: 3,
         videoMetadata: {
-          thumbnailCID: "QmThumbMerkleTrees2024",
+          thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
           qualityOptions: [
             { resolution: "1080p", bitrate: 4000, size: 660 },
             { resolution: "720p", bitrate: 2500, size: 412 },
@@ -1161,7 +1161,8 @@ export default function SectionLearningPage() {
                       className="w-full justify-start"
                     >
                       <ChevronLeft className="h-4 w-4 mr-2" />
-                      <div className="text-left">
+                      {/* Tambahkan kelas flex-1 dan min-w-0 di sini */}
+                      <div className="text-left flex-1 min-w-0">
                         <div className="text-xs text-muted-foreground">Previous</div>
                         <div className="truncate">{previousSection.title}</div>
                       </div>
@@ -1176,7 +1177,8 @@ export default function SectionLearningPage() {
                       disabled={mockDB.getSectionStatus(courseId, nextSection.id) === 'locked'}
                     >
                       <ChevronRight className="h-4 w-4 mr-2" />
-                      <div className="text-left">
+                      {/* Tambahkan kelas flex-1 dan min-w-0 di sini */}
+                      <div className="text-left flex-1 min-w-0">
                         <div className="text-xs text-muted-foreground">Next</div>
                         <div className="truncate">{nextSection.title}</div>
                       </div>
