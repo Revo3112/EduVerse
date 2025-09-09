@@ -309,7 +309,7 @@ const EnrollModal = memo<EnrollModalProps>(({ course, isOpen, onClose, onEnroll 
 
                 <Button
                   onClick={handleEnroll}
-                  className="w-full h-14 text-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg"
+                  className="w-full h-14 text-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg text-white"
                 >
                   Enroll Now - {totalPrice} ETH
                 </Button>

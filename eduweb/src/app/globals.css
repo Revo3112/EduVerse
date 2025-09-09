@@ -130,9 +130,9 @@
 
   /* Enhanced gradient variables for theme consistency */
   :root {
-    --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-foreground) 100%);
+    --gradient-primary: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-accent) 100%);
     --gradient-secondary: linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%);
-    --gradient-accent: linear-gradient(135deg, var(--accent) 0%, var(--muted) 100%);
+    --gradient-accent: linear-gradient(135deg, var(--brand-secondary) 0%, var(--brand-accent) 100%);
     --gradient-card: linear-gradient(135deg, var(--card) 0%, var(--muted) 100%);
     --gradient-background: linear-gradient(135deg, var(--background) 0%, var(--muted) 100%);
 
@@ -143,9 +143,9 @@
   }
 
   .dark {
-    --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-foreground) 100%);
+    --gradient-primary: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-accent) 100%);
     --gradient-secondary: linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%);
-    --gradient-accent: linear-gradient(135deg, var(--accent) 0%, var(--muted) 100%);
+    --gradient-accent: linear-gradient(135deg, var(--brand-secondary) 0%, var(--brand-accent) 100%);
     --gradient-card: linear-gradient(135deg, var(--card) 0%, var(--muted) 100%);
     --gradient-background: linear-gradient(135deg, var(--background) 0%, var(--muted) 100%);
 
@@ -174,6 +174,7 @@
   /* Utility classes for consistent gradients */
   .gradient-primary {
     background: var(--gradient-primary);
+    color: white;
   }
 
   .gradient-secondary {
@@ -182,6 +183,7 @@
 
   .gradient-accent {
     background: var(--gradient-accent);
+    color: white;
   }
 
   .gradient-card {
@@ -190,6 +192,19 @@
 
   .gradient-background {
     background: var(--gradient-background);
+  }
+
+  /* Enhanced button utilities */
+  .btn-primary-gradient {
+    background: var(--gradient-primary);
+    color: white;
+    transition: all 0.2s ease-in-out;
+  }
+
+  .btn-primary-gradient:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
 
   /* EduVerse sophisticated gradient utilities */

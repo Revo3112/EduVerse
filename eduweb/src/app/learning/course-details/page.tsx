@@ -25,12 +25,13 @@ import {
   Video,
   FileText,
   ChevronRight,
+  ArrowLeft,
   Timer,
   Copy,
   Check
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 // 🚀 SMART CONTRACT COMPATIBLE INTERFACES
 // Exact match with CourseFactory.sol structs
@@ -312,6 +313,7 @@ const getDifficultyLabel = (difficulty: CourseDifficulty): string => {
 
 export default function CourseDetailsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [courseData, setCourseData] = useState<CourseData | null>(null);
@@ -585,7 +587,21 @@ export default function CourseDetailsPage() {
 
             {/* Pricing & Actions */}
             <div className="lg:col-span-1">
-              <div className="bg-card rounded-xl p-6 shadow-lg border sticky top-6">
+              <div className="space-y-6">
+                {/* Back to My Learning Button */}
+                <div className="bg-card rounded-xl p-4 shadow-sm border">
+                  <Button
+                    onClick={() => router.push('/learning')}
+                    variant="outline"
+                    className="w-full flex items-center gap-2 hover:bg-primary/10 transition-all duration-200"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to My Learning
+                  </Button>
+                </div>
+
+                {/* Pricing Card */}
+                <div className="bg-card rounded-xl p-6 shadow-lg border sticky top-6">
                 <div className="text-center mb-6">
                   <div className="text-3xl font-bold text-primary mb-2">
                     {formatPrice(courseData.pricePerMonth)}
@@ -608,6 +624,7 @@ export default function CourseDetailsPage() {
                     <span>Decentralized progress tracking</span>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
           </div>
@@ -653,7 +670,7 @@ export default function CourseDetailsPage() {
                           ? 'opacity-60 cursor-not-allowed'
                           : 'hover:bg-accent/30 cursor-pointer hover:shadow-sm'
                       } ${isNextSection ? 'bg-gradient-to-r from-primary/5 to-primary/10 border-l-4 border-l-primary' : ''}`}
-                      onClick={() => section.status !== 'locked' && console.log('Open section:', section)}
+                      onClick={() => section.status !== 'locked' && router.push(`/learning/course-details/section?courseId=${courseData.id}&sectionId=${section.id}`)}
                     >
                       <div className="p-6">
                         <div className="flex items-start gap-4">
@@ -682,20 +699,9 @@ export default function CourseDetailsPage() {
                           {/* Section Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between mb-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  {isNextSection && (
-                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-                                      Continue Learning
-                                    </span>
-                                  )}
-                                  {section.status === 'completed' && (
-                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                      ✅ Completed
-                                    </span>
-                                  )}
-                                </div>
-                                <h3 className={`text-lg font-semibold mb-2 transition-colors ${
+                              <div className="flex-1 min-w-0 pr-4">
+                                {/* Section Title - Larger and more prominent */}
+                                <h3 className={`text-xl font-bold mb-3 transition-colors leading-tight ${
                                   section.status === 'completed' ? 'text-green-700' :
                                   section.status === 'in_progress' ? 'text-primary' :
                                   'text-gray-500'
@@ -703,37 +709,56 @@ export default function CourseDetailsPage() {
                                   {section.title}
                                 </h3>
 
+                                {/* Completion Details - Better positioned */}
                                 {sectionProgress && sectionProgress.completed && (
-                                  <div className="flex items-center gap-2 text-sm text-green-600 mb-2">
+                                  <div className="flex items-center gap-2 text-sm text-green-600 mb-3">
                                     <Trophy className="h-4 w-4" />
                                     <span>Completed on {new Date(sectionProgress.completedAt * 1000).toLocaleDateString()}</span>
                                   </div>
                                 )}
 
-                                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                  <div className="flex items-center gap-1">
+                                {/* Section Metadata - Improved typography */}
+                                <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                                  <div className="flex items-center gap-2">
                                     <Video className="h-4 w-4" />
-                                    <span>{formatDuration(section.duration)}</span>
+                                    <span className="font-medium">{formatDuration(section.duration)}</span>
                                   </div>
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-2">
                                     <FileText className="h-4 w-4" />
-                                    <span className="font-mono text-xs">
+                                    <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
                                       {section.contentCID.slice(0, 8)}...{section.contentCID.slice(-4)}
                                     </span>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Action Area */}
-                              <div className="flex-shrink-0 ml-4 flex items-center gap-2">
-                                {section.status !== 'locked' && (
-                                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                                  </div>
-                                )}
-                                {section.status === 'in_progress' && !sectionProgress?.completed && (
-                                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-                                )}
+                              {/* Status Badges & Action Area - Moved to right side */}
+                              <div className="flex-shrink-0 flex items-start gap-3">
+                                {/* Status Badges */}
+                                <div className="flex flex-col gap-2 items-end">
+                                  {isNextSection && (
+                                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/30 shadow-sm">
+                                      Continue Learning
+                                    </span>
+                                  )}
+                                  {section.status === 'completed' && (
+                                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200 shadow-sm">
+                                      ✅ Completed
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Action Icons */}
+                                <div className="flex items-center gap-2 mt-1">
+                                  {section.status !== 'locked' && (
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                  {section.status === 'in_progress' && !sectionProgress?.completed && (
+                                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+                                  )}
+                                </div>
                               </div>
                             </div>
 

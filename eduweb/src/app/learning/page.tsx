@@ -173,7 +173,7 @@ export default function LearningPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-white">My Learning</h1>
+          <h1 className="text-3xl font-bold text-foreground">My Learning</h1>
           <p className="text-muted-foreground">
             Track your progress and continue your Web3 education journey
           </p>
@@ -321,7 +321,7 @@ export default function LearningPage() {
                       Next: {course.nextSection}
                     </p>
                     <Button
-                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
                       onClick={() => handleContinueLearning(course.id)}
                     >
                       <PlayCircle className="w-4 h-4 mr-2" />
