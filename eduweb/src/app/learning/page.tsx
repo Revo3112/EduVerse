@@ -1,172 +1,133 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Trophy, TrendingUp, Clock, PlayCircle, CheckCircle, Award, Calendar, User } from 'lucide-react';
+import { BookOpen, Trophy, TrendingUp, Clock, PlayCircle, Award, Calendar, User } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 
+// Import data dan tipe dari file mock-data
+import {
+  mockDB,
+  mockCourses,
+  mockLicenses,
+  mockUserCertificate,
+  getCategoryName,
+  getDifficultyName
+} from '@/lib/mock-data';
+
 /**
- * Static Learning Page - UI Mockup
- * Clean interface without external dependencies for development
+ * Halaman "My Learning" yang sepenuhnya digerakkan oleh data mock.
+ * UI tetap sama, hanya sumber datanya yang diubah menjadi dinamis.
  */
 export default function LearningPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'in-progress' | 'history'>('in-progress');
 
-  // Handle course actions
+  // =================================================================
+  // LOGIKA PENGOLAHAN DATA MOCK
+  // =================================================================
+
+  const learningData = useMemo(() => {
+    const now = Math.floor(Date.now() / 1000);
+    let totalSectionsCompleted = 0;
+    let totalLearningTimeSeconds = 0;
+
+    const processedCourses = mockCourses.map(course => {
+      const license = mockDB.getLicenseForUser(course.id, mockUserCertificate.recipientAddress);
+      const completedSections = course.userProgress.filter(p => p.completed).length;
+      const progress = course.totalSections > 0 ? Math.round((completedSections / course.totalSections) * 100) : 0;
+      const isCompleted = progress === 100;
+      const isLicenseActive = license ? Number(license.expiryTimestamp) > now && license.isActive : false;
+
+      // Hitung total waktu belajar dari sesi yang selesai
+      const timeSpentSeconds = course.userProgress
+        .filter(p => p.completed)
+        .reduce((acc, progressItem) => {
+          const section = course.sections.find(s => s.orderId === progressItem.sectionId);
+          return acc + (section ? Number(section.duration) : 0);
+        }, 0);
+
+      totalSectionsCompleted += completedSections;
+      totalLearningTimeSeconds += timeSpentSeconds;
+
+      // Tentukan sesi berikutnya
+      const lastCompletedOrder = Math.max(-1, ...course.userProgress.filter(p => p.completed).map(p => Number(p.sectionId)));
+      const nextSection = course.sections.find(s => Number(s.orderId) === lastCompletedOrder + 1);
+
+      return {
+        id: Number(course.id),
+        title: course.title,
+        instructor: course.creatorName,
+        progress: progress,
+        totalSections: course.totalSections,
+        completedSections: completedSections,
+        nextSection: nextSection ? nextSection.title : "Course Completed",
+        status: isCompleted ? "Completed" : (isLicenseActive ? "In Progress" : "License Expired"),
+        timeSpent: timeSpentSeconds,
+        category: getCategoryName(course.category),
+        difficulty: getDifficultyName(course.difficulty),
+        enrolledDate: new Date(Number(course.createdAt) * 1000).toISOString(),
+        completedDate: isCompleted ? new Date(Number(course.userProgress.reduce((max, p) => p.completedAt > max ? p.completedAt : max, BigInt(0))) * 1000).toISOString() : null,
+        certificateId: (isCompleted && mockUserCertificate.completedCourses.includes(course.id)) ? `CERT-${mockUserCertificate.tokenId}` : null,
+        expiredDate: license && !isLicenseActive ? new Date(Number(license.expiryTimestamp) * 1000).toISOString() : null,
+      };
+    });
+
+    const inProgressCourses = processedCourses.filter(c => c.status === "In Progress");
+    const historyCourses = processedCourses.filter(c => c.status === "Completed" || c.status === "License Expired");
+    const completedCoursesCount = processedCourses.filter(c => c.status === "Completed").length;
+
+    return {
+      stats: {
+        totalEnrolledCourses: mockCourses.length,
+        completedCourses: completedCoursesCount,
+        inProgressCourses: inProgressCourses.length,
+        totalSectionsCompleted: totalSectionsCompleted,
+        totalLearningTime: totalLearningTimeSeconds,
+      },
+      inProgressCourses,
+      historyCourses,
+    };
+  }, []);
+
+  // =================================================================
+  // HELPER & HANDLER FUNCTIONS
+  // =================================================================
+
   const handleContinueLearning = (courseId: number) => {
     router.push(`/learning/course-details?id=${courseId}`);
   };
 
-  const handleViewCertificate = (courseId: number) => {
-    router.push(`/certificates/${courseId}`);
+  const handleViewCertificate = () => {
+    // Arahkan ke halaman detail sertifikat tunggal pengguna
+    router.push(`/certificates/${mockUserCertificate.tokenId}`);
   };
 
-  // Format learning time
   const formatLearningTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
   };
 
-  // Format date consistently for SSR/client hydration
-  const formatDate = (dateString: string): string => {
+  const formatDate = (dateString: string | null): string => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'numeric',
+      month: 'long',
       day: 'numeric'
     });
   };
 
-  // Static learning statistics
-  const learningStats = {
-    totalEnrolledCourses: 5,
-    completedCourses: 2,
-    inProgressCourses: 3,
-    totalSectionsCompleted: 84,
-    totalLearningTime: 147600, // 41 hours in seconds
-  };
-
-  // In-progress courses data
-  const inProgressCourses = [
-    {
-      id: 1,
-      title: "Advanced Solidity Development",
-      instructor: "Prof. Bob Wilson",
-      progress: 75,
-      totalSections: 12,
-      completedSections: 9,
-      nextSection: "Gas Optimization Techniques",
-      status: "In Progress",
-      timeSpent: "28 hours",
-      category: "Smart Contracts",
-      difficulty: "Advanced",
-      enrolledDate: "2024-08-15",
-    },
-    {
-      id: 2,
-      title: "DeFi Protocol Design",
-      instructor: "Sarah Chen",
-      progress: 45,
-      totalSections: 10,
-      completedSections: 4,
-      nextSection: "Liquidity Pool Implementation",
-      status: "In Progress",
-      timeSpent: "18 hours",
-      category: "DeFi",
-      difficulty: "Intermediate",
-      enrolledDate: "2024-08-20",
-    },
-    {
-      id: 3,
-      title: "React Native Mobile Development",
-      instructor: "Alex Rodriguez",
-      progress: 30,
-      totalSections: 15,
-      completedSections: 4,
-      nextSection: "Navigation Patterns",
-      status: "In Progress",
-      timeSpent: "12 hours",
-      category: "Mobile Development",
-      difficulty: "Intermediate",
-      enrolledDate: "2024-09-01",
-    }
-  ];
-
-  // History courses data (completed + expired licenses)
-  const historyCourses = [
-    // Completed courses with certificates
-    {
-      id: 4,
-      title: "Blockchain Fundamentals",
-      instructor: "Dr. Alice Johnson",
-      progress: 100,
-      totalSections: 8,
-      completedSections: 8,
-      nextSection: null,
-      status: "Completed",
-      timeSpent: "16 hours",
-      category: "Blockchain",
-      difficulty: "Beginner",
-      enrolledDate: "2024-07-10",
-      completedDate: "2024-07-25",
-      certificateId: "CERT-001-2024"
-    },
-    {
-      id: 5,
-      title: "Smart Contract Security",
-      instructor: "Michael Zhang",
-      progress: 100,
-      totalSections: 6,
-      completedSections: 6,
-      nextSection: null,
-      status: "Completed",
-      timeSpent: "14 hours",
-      category: "Security",
-      difficulty: "Advanced",
-      enrolledDate: "2024-07-20",
-      completedDate: "2024-08-05",
-      certificateId: "CERT-002-2024"
-    },
-    // Expired license courses
-    {
-      id: 6,
-      title: "NFT Marketplace Development",
-      instructor: "Emma Thompson",
-      progress: 65,
-      totalSections: 12,
-      completedSections: 8,
-      nextSection: null,
-      status: "License Expired",
-      timeSpent: "22 hours",
-      category: "NFT",
-      difficulty: "Intermediate",
-      enrolledDate: "2024-06-01",
-      expiredDate: "2024-08-30"
-    },
-    {
-      id: 7,
-      title: "Layer 2 Scaling Solutions",
-      instructor: "David Kim",
-      progress: 25,
-      totalSections: 10,
-      completedSections: 2,
-      nextSection: null,
-      status: "License Expired",
-      timeSpent: "8 hours",
-      category: "Blockchain",
-      difficulty: "Advanced",
-      enrolledDate: "2024-05-15",
-      expiredDate: "2024-08-15"
-    }
-  ];
+  // =================================================================
+  // RENDER COMPONENT
+  // =================================================================
 
   return (
     <div className="p-6 space-y-6">
@@ -190,7 +151,7 @@ export default function LearningPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{learningStats.totalEnrolledCourses}</div>
+            <div className="text-2xl font-bold">{learningData.stats.totalEnrolledCourses}</div>
             <p className="text-xs text-muted-foreground">
               Keep going!
             </p>
@@ -205,7 +166,7 @@ export default function LearningPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{learningStats.completedCourses}</div>
+            <div className="text-2xl font-bold">{learningData.stats.completedCourses}</div>
             <p className="text-xs text-muted-foreground">
               Great achievement!
             </p>
@@ -220,7 +181,7 @@ export default function LearningPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{learningStats.totalSectionsCompleted}</div>
+            <div className="text-2xl font-bold">{learningData.stats.totalSectionsCompleted}</div>
             <p className="text-xs text-muted-foreground">
               Sections completed
             </p>
@@ -236,10 +197,10 @@ export default function LearningPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatLearningTime(learningStats.totalLearningTime)}
+              {formatLearningTime(learningData.stats.totalLearningTime)}
             </div>
             <p className="text-xs text-muted-foreground">
-              This month
+              All time
             </p>
           </CardContent>
         </Card>
@@ -254,28 +215,25 @@ export default function LearningPage() {
             className="flex items-center gap-2 cursor-pointer hover:bg-accent/80 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
           >
             <BookOpen className="w-4 h-4" />
-            In Progress ({inProgressCourses.length})
+            In Progress ({learningData.inProgressCourses.length})
           </TabsTrigger>
           <TabsTrigger
             value="history"
             className="flex items-center gap-2 cursor-pointer hover:bg-accent/80 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all duration-200"
           >
             <Trophy className="w-4 h-4" />
-            History ({historyCourses.length})
+            History ({learningData.historyCourses.length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="in-progress" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {inProgressCourses.map((course) => (
+            {learningData.inProgressCourses.map((course) => (
               <Card key={course.id} className="group hover:shadow-lg transition-all duration-300 border border-border bg-card h-full flex flex-col">
                 <CardHeader className="space-y-4">
-                  {/* Course Thumbnail Placeholder */}
                   <div className="relative aspect-video w-full overflow-hidden rounded-md bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                     <BookOpen className="w-12 h-12 text-white/70" />
                   </div>
-
-                  {/* Course Info */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Badge variant="secondary" className="text-xs">
@@ -294,7 +252,6 @@ export default function LearningPage() {
                 </CardHeader>
 
                 <CardContent className="flex-1 flex flex-col space-y-4">
-                  {/* Progress */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Progress: {course.completedSections}/{course.totalSections} sections</span>
@@ -302,20 +259,16 @@ export default function LearningPage() {
                     </div>
                     <Progress value={course.progress} className="w-full" />
                   </div>
-
-                  {/* Course Details */}
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
-                      <span>{course.timeSpent}</span>
+                      <span>{formatLearningTime(course.timeSpent)}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
                       <span>Started {formatDate(course.enrolledDate)}</span>
                     </div>
                   </div>
-
-                  {/* Next Section - Auto push to bottom */}
                   <div className="pt-2 mt-auto">
                     <p className="text-sm text-muted-foreground mb-3">
                       Next: {course.nextSection}
@@ -336,10 +289,9 @@ export default function LearningPage() {
 
         <TabsContent value="history" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {historyCourses.map((course) => (
+            {learningData.historyCourses.map((course) => (
               <Card key={course.id} className="group hover:shadow-lg transition-all duration-300 border border-border bg-card h-full flex flex-col">
                 <CardHeader className="space-y-4">
-                  {/* Course Thumbnail Placeholder */}
                   <div className={`relative aspect-video w-full overflow-hidden rounded-md ${
                     course.status === 'Completed'
                       ? 'bg-gradient-to-br from-green-500 to-emerald-600'
@@ -351,8 +303,6 @@ export default function LearningPage() {
                       <Clock className="w-12 h-12 text-white/70" />
                     )}
                   </div>
-
-                  {/* Course Info */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Badge variant="secondary" className="text-xs">
@@ -362,7 +312,7 @@ export default function LearningPage() {
                         variant={course.status === 'Completed' ? 'default' : 'outline'}
                         className={`text-xs ${
                           course.status === 'Completed'
-                            ? 'bg-green-500 hover:bg-green-600'
+                            ? 'bg-green-500 hover:bg-green-600 text-white'
                             : 'border-yellow-500 text-yellow-600'
                         }`}
                       >
@@ -376,9 +326,7 @@ export default function LearningPage() {
                     </div>
                   </div>
                 </CardHeader>
-
                 <CardContent className="flex-1 flex flex-col space-y-4">
-                  {/* Progress */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Progress: {course.completedSections}/{course.totalSections} sections</span>
@@ -388,25 +336,21 @@ export default function LearningPage() {
                     </div>
                     <Progress value={course.progress} className="w-full" />
                   </div>
-
-                  {/* Course Details */}
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
-                      <span>{course.timeSpent}</span>
+                      <span>{formatLearningTime(course.timeSpent)}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
                       <span>
                         {course.status === 'Completed'
-                          ? `Completed ${formatDate(course.completedDate!)}`
-                          : `Expired ${formatDate(course.expiredDate!)}`
+                          ? `Completed ${formatDate(course.completedDate)}`
+                          : `Expired ${formatDate(course.expiredDate)}`
                         }
                       </span>
                     </div>
                   </div>
-
-                  {/* Status and Action - Auto push to bottom */}
                   <div className="pt-2 mt-auto">
                     {course.status === 'Completed' ? (
                       <>
@@ -416,7 +360,7 @@ export default function LearningPage() {
                         <Button
                           variant="outline"
                           className="w-full"
-                          onClick={() => handleViewCertificate(course.id)}
+                          onClick={() => handleViewCertificate()}
                         >
                           <Award className="w-4 h-4 mr-2" />
                           View Certificate
