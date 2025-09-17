@@ -1,24 +1,23 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { Award, BookOpen, Calendar, Clock, PlayCircle, TrendingUp, Trophy, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Trophy, TrendingUp, Clock, PlayCircle, Award, Calendar, User } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Import data dan tipe dari file mock-data
 import {
-  mockDB,
-  mockCourses,
-  mockLicenses,
-  mockUserCertificate,
-  getCategoryName,
-  getDifficultyName
+    getCategoryName,
+    getDifficultyName,
+    mockCourses,
+    mockDB,
+    mockUserCertificate
 } from '@/lib/mock-data';
 
 /**

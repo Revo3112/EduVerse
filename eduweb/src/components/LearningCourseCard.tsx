@@ -1,13 +1,13 @@
 "use client";
 
-import Image from 'next/image';
-import { Award, BookOpen, Calendar, Clock, User } from 'lucide-react';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
+import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Avatar } from '@/components/ui/avatar';
-import { LearningCourseData, CATEGORY_NAMES, DIFFICULTY_NAMES, CourseStatus } from '@/types/learning';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { CATEGORY_NAMES, DIFFICULTY_NAMES, LearningCourseData } from '@/types/learning';
+import { Award, BookOpen, Calendar } from 'lucide-react';
+import Image from 'next/image';
 
 interface LearningCourseCardProps {
   courseData: LearningCourseData;

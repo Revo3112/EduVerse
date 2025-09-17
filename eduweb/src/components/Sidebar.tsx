@@ -1,29 +1,28 @@
 "use client"
 
-import * as React from "react"
-import Link from "next/link"
-import Image from "next/image"
-import { usePathname } from "next/navigation"
-import { motion, AnimatePresence } from "framer-motion"
-import {
-  BarChart3,
-  BookOpen,
-  GraduationCap,
-  Home,
-  PlusCircle,
-  User,
-  Award,
-  PanelLeft,
-  MousePointer,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { AnimatePresence, motion } from "framer-motion"
+import {
+  Award,
+  BarChart3,
+  BookOpen,
+  GraduationCap,
+  Home,
+  PanelLeft,
+  PlusCircle,
+  User,
+} from "lucide-react"
+import Image from "next/image"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import * as React from "react"
 import { useSidebarMode } from "./SidebarProvider"
 
 interface NavigationItem {
@@ -85,7 +84,6 @@ const navigationItems: NavigationItem[] = [
 ]
 
 const SIDEBAR_WIDTH = 280
-const SIDEBAR_WIDTH_COLLAPSED = 64
 
 interface IntegratedSidebarProps {
   className?: string
@@ -93,8 +91,8 @@ interface IntegratedSidebarProps {
 
 export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
   const { mode, toggleMode, isHoverOpen, setIsHoverOpen } = useSidebarMode()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isHoverVisible, setIsHoverVisible] = React.useState(false)
-  const [isHovered, setIsHovered] = React.useState(false)
   const pathname = usePathname()
   const hideTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
 
@@ -115,13 +113,11 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
       clearTimeout(hideTimeoutRef.current)
     }
     setIsHoverOpen(true)
-    setIsHovered(true)
   }
 
   const hideHoverSidebar = () => {
     if (mode !== "hover") return
 
-    setIsHovered(false)
     hideTimeoutRef.current = setTimeout(() => {
       setIsHoverOpen(false)
     }, 300)
@@ -138,7 +134,6 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
       clearTimeout(hideTimeoutRef.current)
     }
     setIsHoverOpen(false)
-    setIsHovered(false)
   }
 
   // Render drawer mode sidebar

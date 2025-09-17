@@ -1,11 +1,10 @@
 'use client';
 
-import { useControllableState } from '@radix-ui/react-use-controllable-state';
-import { Monitor, Moon, Sun } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useCallback, useEffect, useState } from 'react';
-import { useTheme } from "next-themes";
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
+import { Monitor, Moon, Sun } from 'lucide-react';
+import { useTheme } from "next-themes";
+import { useCallback, useEffect, useState } from 'react';
 
 const themes = [
   {

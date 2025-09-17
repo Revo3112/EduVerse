@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, memo, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Star, Clock, Users, Award, CheckCircle, Zap, Shield, BookOpen, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useEthPrice } from '@/hooks/useEthPrice';
 import { Course } from '@/lib/mock-data';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Award, BookOpen, Clock, X, Zap } from 'lucide-react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 interface EnrollModalProps {
   course: Course;
@@ -150,10 +149,6 @@ const EnrollModal = memo<EnrollModalProps>(({ course, isOpen, onClose, onEnroll 
     onEnroll(course.id, selectedDuration);
     onClose();
   }, [onEnroll, course.id, selectedDuration, onClose]);
-
-  const handleDurationSelect = useCallback((months: number) => {
-    setSelectedDuration(months);
-  }, []);
 
   // Additional calculated values
   const savingsText = selectedOption.discount > 0 ? `Save ${selectedOption.discount}%` : null;

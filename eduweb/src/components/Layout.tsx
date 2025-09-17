@@ -1,11 +1,11 @@
 "use client"
 
-import * as React from "react"
-import { memo, useMemo, useCallback } from "react"
-import { SidebarModeProvider, useSidebarMode } from "./SidebarProvider"
-import { IntegratedSidebar } from "./Sidebar"
-import { EduVerseNavbar } from "./Navbar"
 import { cn } from "@/lib/utils"
+import * as React from "react"
+import { memo, useMemo } from "react"
+import { EduVerseNavbar } from "./Navbar"
+import { IntegratedSidebar } from "./Sidebar"
+import { SidebarModeProvider, useSidebarMode } from "./SidebarProvider"
 
 interface EnhancedLayoutProps {
   children: React.ReactNode

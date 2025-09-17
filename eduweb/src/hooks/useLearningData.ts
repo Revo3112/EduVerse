@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useActiveAccount } from 'thirdweb/react';
 import {
-  Course,
+  CourseCategory,
+  CourseDifficulty,
   LearningCourseData,
   LearningProgress,
   UseLearningDataReturn,
-  CourseCategory,
-  CourseDifficulty,
 } from '@/types/learning';
+import { useCallback, useEffect, useState } from 'react';
+import { useActiveAccount } from 'thirdweb/react';
 
 /**
  * Custom hook to fetch user's learning data from EduVerse smart contracts

@@ -1,28 +1,46 @@
 ﻿"use client";
 
 import {
-  PlayCircle, CheckCircle, Lock, Globe, User, Calendar, Trophy,
-  AlertCircle, RefreshCw, Star, Award, Shield, Wallet, BookOpen, Video,
-  FileText, ChevronRight, ArrowLeft, Timer, Copy, Check
+    AlertCircle,
+    ArrowLeft,
+    Award,
+    BookOpen,
+    Calendar,
+    Check,
+    CheckCircle,
+    ChevronRight,
+    Copy,
+    FileText,
+    Globe,
+    Lock,
+    PlayCircle,
+    RefreshCw,
+    Shield,
+    Star,
+    Timer,
+    Trophy,
+    User,
+    Video,
+    Wallet
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 
 // 🚀 [PENYESUAIAN] Impor helper yang relevan saja. `formatPriceInIDR` sudah dihapus.
 import {
-  mockDB,
-  formatDuration,
-  getCategoryName,
-  getDifficultyName,
-  ExtendedCourse,
-  EnrichedCourseSection,
+    EnrichedCourseSection,
+    ExtendedCourse,
+    formatDuration,
+    getCategoryName,
+    getDifficultyName,
+    mockDB,
 } from '@/lib/mock-data';
 
 // Tipe lokal untuk menggabungkan data sesi dengan statusnya di UI
@@ -35,7 +53,7 @@ interface SectionWithStatus extends EnrichedCourseSection {
  * Halaman Detail Kursus yang sepenuhnya digerakkan oleh data mock terpusat.
  * UI tidak berubah, hanya lapisan datanya yang di-refactor dan diperbaiki.
  */
-export default function CourseDetailsPage() {
+function CourseDetailsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -376,5 +394,28 @@ export default function CourseDetailsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function CourseDetailsLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-purple-400" />
+          <p className="text-muted-foreground">Loading course details...</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main page component with Suspense wrapper
+export default function CourseDetailsPage() {
+  return (
+    <Suspense fallback={<CourseDetailsLoading />}>
+      <CourseDetailsContent />
+    </Suspense>
   );
 }

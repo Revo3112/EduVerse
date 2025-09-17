@@ -4,43 +4,43 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
-  AlertCircle,
-  ArrowLeft,
-  BookOpen,
-  CheckCircle,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  FileText,
-  Maximize,
-  Minimize,
-  Pause,
-  Play,
-  RefreshCw,
-  Shield,
-  SkipBack,
-  SkipForward,
-  Trophy,
-  Volume2,
-  VolumeX,
+    AlertCircle,
+    ArrowLeft,
+    BookOpen,
+    CheckCircle,
+    ChevronLeft,
+    ChevronRight,
+    Clock,
+    FileText,
+    Maximize,
+    Minimize,
+    Pause,
+    Play,
+    RefreshCw,
+    Shield,
+    SkipBack,
+    SkipForward,
+    Trophy,
+    Volume2,
+    VolumeX,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  EnrichedCourseSection,
-  ExtendedCourse,
-  License,
-  MOCK_USER_ADDRESS,
-  mockDB,
-  SectionProgress,
+    EnrichedCourseSection,
+    ExtendedCourse,
+    License,
+    MOCK_USER_ADDRESS,
+    mockDB,
+    SectionProgress,
 } from "@/lib/mock-data";
 
 /* ---------- helpers ---------- */
@@ -225,7 +225,7 @@ function VideoPlayer({ section, onProgressUpdate }: VpProps) {
 }
 
 /* ---------- main page ---------- */
-export default function SectionLearningPage() {
+function SectionLearningContent() {
   const search = useSearchParams();
   const router = useRouter();
 
@@ -248,6 +248,7 @@ export default function SectionLearningPage() {
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
   const [done, setDone] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [watch, setWatch] = useState(0);
 
   useEffect(() => {
@@ -461,12 +462,17 @@ export default function SectionLearningPage() {
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
             <h3 className="text-xl font-semibold mb-2">Section Completed!</h3>
-            <p className="text-muted-foreground mb-6">Congratulations! You've completed "{section.title}". Your progress has been saved.</p>
+            <p className="text-muted-foreground mb-6">Congratulations! You&apos;ve completed &quot;{section.title}&quot;. Your progress has been saved.</p>
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setDone(false)} className="flex-1">
                 Continue Learning
               </Button>
-              <Button onClick={() => { setDone(false); nav.next && go(nav.next.orderId); }} className="flex-1">
+              <Button onClick={() => {
+                setDone(false);
+                if (nav.next) {
+                  go(nav.next.orderId);
+                }
+              }} className="flex-1">
                 Next Section
               </Button>
             </div>
@@ -474,5 +480,28 @@ export default function SectionLearningPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function SectionLearningLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <CheckCircle className="h-8 w-8 animate-spin mx-auto mb-4 text-purple-400" />
+          <p className="text-muted-foreground">Loading section...</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main page component with Suspense wrapper
+export default function SectionLearningPage() {
+  return (
+    <Suspense fallback={<SectionLearningLoading />}>
+      <SectionLearningContent />
+    </Suspense>
   );
 }

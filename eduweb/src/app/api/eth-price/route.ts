@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const COINGECKO_API_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=idr';
 
+// Type definitions for API responses
+interface EthPriceResponse {
+  success: boolean;
+  data: {
+    ethereum: {
+      idr: number;
+    };
+  } | null;
+  cached: boolean;
+  lastUpdated: string;
+  cacheExpiresIn: number;
+  error?: string;
+}
+
 // Cache configuration
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const REQUEST_TIMEOUT = 8000; // 8 seconds (reduced from 10)
@@ -12,7 +26,7 @@ let cachedData: {
   timestamp: number;
 } | null = null;
 
-let ongoingRequest: Promise<any> | null = null;
+let ongoingRequest: Promise<EthPriceResponse> | null = null;
 
 // Rate limiting tracking
 const requestLog = new Map<string, number[]>();
@@ -135,7 +149,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function fetchEthPrice() {
+async function fetchEthPrice(): Promise<EthPriceResponse> {
   // Fetch from CoinGecko API with timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);

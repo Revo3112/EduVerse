@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useCallback, memo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Star, Clock, User } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Course, getCategoryName, getDifficultyName, weiToEth } from "@/lib/mock-data";
+import { BookOpen, Clock, Star, User } from "lucide-react";
 import dynamic from 'next/dynamic';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 // Lazy load EnrollModal to improve initial page load
 const EnrollModal = dynamic(() => import("@/components/EnrollModal"), {

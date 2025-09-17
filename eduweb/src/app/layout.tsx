@@ -1,8 +1,8 @@
+import { ClientThirdwebProvider } from "@/components/ClientThirdwebProvider";
+import { Layout } from "@/components/Layout";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ThirdwebProvider } from "thirdweb/react";
-import { ThemeProvider } from "@/components/ThemeProvider";
-import { Layout } from "@/components/Layout";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,11 +36,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <ThirdwebProvider>
+          <ClientThirdwebProvider>
             <Layout>
               {children}
             </Layout>
-          </ThirdwebProvider>
+          </ClientThirdwebProvider>
         </ThemeProvider>
       </body>
     </html>

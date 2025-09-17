@@ -1,20 +1,19 @@
 "use client";
 
-import React, { useState } from 'react';
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Pill } from "@/components/ui/pill";
-import { Search, Filter, BookOpen, X } from "lucide-react";
 import { CourseCard } from "@/components/CourseCard";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Pill } from "@/components/ui/pill";
 import {
-  mockCourses,
-  Course,
   CourseCategory,
   CourseDifficulty,
   getCategoryName,
-  getDifficultyName
+  getDifficultyName,
+  mockCourses
 } from "@/lib/mock-data";
+import { BookOpen, Filter, Search, X } from "lucide-react";
+import { useState } from 'react';
 
 /**
  * CoursesPage Component
@@ -55,12 +54,12 @@ export default function CoursesPage() {
 
   // Get all unique categories from the enum for filter options
   const availableCategories = Object.entries(CourseCategory)
-    .filter(([key, value]) => typeof value === 'number')
+    .filter(([, value]) => typeof value === 'number')
     .map(([key, value]) => ({ name: key, value: value as CourseCategory }));
 
   // Get all difficulty levels for filter options
   const availableDifficulties = Object.entries(CourseDifficulty)
-    .filter(([key, value]) => typeof value === 'number')
+    .filter(([, value]) => typeof value === 'number')
     .map(([key, value]) => ({ name: key, value: value as CourseDifficulty }));
 
   return (

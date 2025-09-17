@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 
 interface UseEthPriceReturn {
   ethToIDR: number;
