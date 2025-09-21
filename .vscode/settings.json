@@ -4,33 +4,35 @@
     "mcp": {
         "servers": {
             "memory": {
-                "command": "npx",
+                "command": "/home/miku/.nvm/versions/node/v22.19.0/bin/npx",
                 "args": [
                     "-y",
                     "@modelcontextprotocol/server-memory"
                 ],
                 "env": {
-                    "MEMORY_FILE_PATH": "c:\\Work\\Documents\\Project\\Web3\\Eduverse\\mcp-memory\\memory.json"
+                    "MEMORY_FILE_PATH": "/home/miku/Documents/Project/Web3/Eduverse/mcp-memory/memory.json"
                 }
             },
-            "shadcn-ui": {
-                "command": "npx",
+            "shadcn": {
+                "url": "https://www.shadcn.io/api/mcp"
+            },
+            "context7": {
+                "command": "/home/miku/.nvm/versions/node/v22.19.0/bin/npx",
                 "args": [
-                    "@jpisnice/shadcn-ui-mcp-server"
-                ],
-                "env": {
-                    "FRAMEWORK": "react"
-                }
+                    "-y",
+                    "@upstash/context7-mcp"
+                ]
             }
         }
     },
     "github.copilot.enable": {
-        "*": true,
-        "yaml": true,
+        "*": false,
         "plaintext": true,
         "markdown": true,
+        "scminput": false,
+        "yaml": true,
         "json": true,
-        "jsonc": true,
+        "jsonc": false,
         "javascript": true,
         "typescript": true,
         "javascriptreact": true,
@@ -38,5 +40,34 @@
     },
     "github.copilot.advanced": {},
     "continue.telemetryEnabled": false,
-    "continue.enableTabAutocomplete": true
+    "continue.enableTabAutocomplete": true,
+    "chat.mcp": {
+        "discovery": {
+            "enabled": true
+        }
+    },
+    "github.copilot.chat.virtualTools.threshold": 100,
+    "chat.mcp.serverSampling": {
+        "Eduverse/.vscode/mcp.json: shadcn": {
+            "allowedModels": [
+                "copilot/gpt-4.1",
+                "copilot/claude-3.5-sonnet",
+                "copilot/claude-3.7-sonnet",
+                "copilot/claude-3.7-sonnet-thought",
+                "copilot/claude-sonnet-4",
+                "copilot/gemini-2.0-flash-001",
+                "copilot/gemini-2.5-pro",
+                "copilot/gpt-3.5-turbo",
+                "copilot/gpt-4",
+                "copilot/gpt-4-0125-preview",
+                "copilot/gpt-4o",
+                "copilot/gpt-4o-mini",
+                "copilot/gpt-5",
+                "copilot/gpt-5-mini",
+                "copilot/grok-code-fast-1",
+                "copilot/o3-mini",
+                "copilot/o4-mini"
+            ]
+        }
+    }
 }
