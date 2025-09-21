@@ -1,10 +1,11 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DashboardContainer } from "@/components/PageContainer"
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, BookOpen, GraduationCap, Users, TrendingUp, Award } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Award, BarChart3, BookOpen, GraduationCap, TrendingUp, Users } from "lucide-react"
 
 export default function DashboardPage() {
   return (
-    <div className="p-6 space-y-6">
+    <DashboardContainer className="space-y-6">
       {/* Welcome Section */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold text-white">
@@ -180,6 +181,6 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </DashboardContainer>
   )
 }

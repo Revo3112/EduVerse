@@ -1,6 +1,7 @@
 "use client";
 
 import { CourseCard } from "@/components/CourseCard";
+import { ContentContainer } from "@/components/PageContainer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +64,7 @@ export default function CoursesPage() {
     .map(([key, value]) => ({ name: key, value: value as CourseDifficulty }));
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <ContentContainer className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-4xl font-bold text-white">
@@ -258,6 +259,6 @@ export default function CoursesPage() {
           In production, data would be fetched directly from Manta Pacific Testnet blockchain.
         </p>
       </div>
-    </div>
+    </ContentContainer>
   );
 }

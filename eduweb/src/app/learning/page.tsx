@@ -4,6 +4,7 @@ import { Award, BookOpen, Calendar, Clock, PlayCircle, Star, TrendingUp, Trophy,
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
+import { ContentContainer } from "@/components/PageContainer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -159,7 +160,7 @@ export default function LearningPage() {
   // =================================================================
 
   return (
-    <div className="p-6 space-y-6">
+    <ContentContainer className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
@@ -461,6 +462,6 @@ export default function LearningPage() {
           onRatingSubmitted={handleRatingSubmitted}
         />
       )}
-    </div>
+    </ContentContainer>
   )
 }

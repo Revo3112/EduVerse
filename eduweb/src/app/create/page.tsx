@@ -1,5 +1,6 @@
 "use client";
 
+import { FormContainer } from "@/components/PageContainer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { draftStorage, type DraftFormData, type DraftSection } from '@/lib/draftStorage';
 import {
@@ -23,6 +24,7 @@ import {
   Video, X,
   Zap
 } from "lucide-react";
+import Image from "next/image";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 // Type definitions - Updated to work with storage service
@@ -66,7 +68,7 @@ interface NewSection {
 interface FileConfig {
   accept: string;
   maxSize: number;
-  icon: React.ComponentType<any>;
+  icon: React.ComponentType<{ className?: string; size?: number }>;
   color: string;
 }
 
@@ -814,7 +816,7 @@ export default function CreateCoursePage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-40 bg-card/80 backdrop-blur-xl border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <FormContainer>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
@@ -851,10 +853,10 @@ export default function CreateCoursePage() {
               ))}
             </div>
           </div>
-        </div>
+        </FormContainer>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <FormContainer>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content Area */}
           <div className="lg:col-span-2 space-y-6">
@@ -920,9 +922,11 @@ export default function CreateCoursePage() {
                   <div className="relative">
                     {formData.thumbnailPreview ? (
                       <div className="relative group">
-                        <img
+                        <Image
                           src={formData.thumbnailPreview}
                           alt="Thumbnail"
+                          width={400}
+                          height={192}
                           className="w-full h-48 object-cover rounded-xl"
                         />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center gap-2">
@@ -1433,14 +1437,14 @@ export default function CreateCoursePage() {
                   Limited Storage
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Your browser doesn't support enhanced storage. Draft saving is disabled for large files.
+                  Your browser doesn&apos;t support enhanced storage. Draft saving is disabled for large files.
                   Consider using a modern browser for the best experience.
                 </p>
               </div>
             )}
           </div>
         </div>
-      </div>
+      </FormContainer>
 
       {/* Course Preview Modal */}
       {showPreview && (
@@ -1458,9 +1462,11 @@ export default function CreateCoursePage() {
 
             <div className="p-6">
               {formData.thumbnailPreview && (
-                <img
+                <Image
                   src={formData.thumbnailPreview}
                   alt="Course thumbnail"
+                  width={400}
+                  height={256}
                   className="w-full h-64 object-cover rounded-xl mb-6"
                 />
               )}

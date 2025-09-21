@@ -1,31 +1,32 @@
 ﻿"use client";
 
 import {
-    AlertCircle,
-    ArrowLeft,
-    Award,
-    BookOpen,
-    Calendar,
-    Check,
-    CheckCircle,
-    ChevronRight,
-    Copy,
-    FileText,
-    Globe,
-    Lock,
-    PlayCircle,
-    RefreshCw,
-    Shield,
-    Star,
-    Timer,
-    Trophy,
-    User,
-    Video,
-    Wallet
+  AlertCircle,
+  ArrowLeft,
+  Award,
+  BookOpen,
+  Calendar,
+  Check,
+  CheckCircle,
+  ChevronRight,
+  Copy,
+  FileText,
+  Globe,
+  Lock,
+  PlayCircle,
+  RefreshCw,
+  Shield,
+  Star,
+  Timer,
+  Trophy,
+  User,
+  Video,
+  Wallet
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
+import { ContentContainer } from "@/components/PageContainer";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,12 +36,12 @@ import { Separator } from "@/components/ui/separator";
 
 // 🚀 [PENYESUAIAN] Impor helper yang relevan saja. `formatPriceInIDR` sudah dihapus.
 import {
-    EnrichedCourseSection,
-    ExtendedCourse,
-    formatDuration,
-    getCategoryName,
-    getDifficultyName,
-    mockDB,
+  EnrichedCourseSection,
+  ExtendedCourse,
+  formatDuration,
+  getCategoryName,
+  getDifficultyName,
+  mockDB,
 } from '@/lib/mock-data';
 
 // Tipe lokal untuk menggabungkan data sesi dengan statusnya di UI
@@ -208,7 +209,7 @@ function CourseDetailsContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
       <div className="bg-gradient-to-r from-primary/10 to-primary/5 border-b">
-        <div className="container mx-auto px-6 py-12 max-w-7xl">
+        <ContentContainer>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
               <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -263,12 +264,11 @@ function CourseDetailsContent() {
                 </div>
               </div>
             </div>
-
           </div>
-        </div>
+        </ContentContainer>
       </div>
 
-      <div className="container mx-auto px-6 py-12 max-w-7xl">
+      <ContentContainer>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           <div className="lg:col-span-3">
             <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
@@ -293,7 +293,11 @@ function CourseDetailsContent() {
                     <div
                       key={Number(section.id)}
                       className={`group relative transition-all duration-200 ${section.status === 'locked' ? 'opacity-60 cursor-not-allowed' : 'hover:bg-accent/30 cursor-pointer hover:shadow-sm'} ${isNextSection ? 'bg-gradient-to-r from-primary/5 to-primary/10 border-l-4 border-l-primary' : ''}`}
-                      onClick={() => section.status !== 'locked' && router.push(`/learning/section?courseId=${courseData.id}&sectionId=${section.orderId}`)}
+                      onClick={() => {
+                        if (section.status !== 'locked') {
+                          router.push(`/learning/section?courseId=${courseData.id}&sectionId=${section.orderId}`);
+                        }
+                      }}
                     >
                       <div className="p-6">
                         <div className="flex items-start gap-4">
@@ -317,21 +321,56 @@ function CourseDetailsContent() {
                               </div>
                               <div className="flex-shrink-0 flex items-start gap-3">
                                 <div className="flex flex-col gap-2 items-end">
-                                  {isNextSection && (<span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/30 shadow-sm">Continue Learning</span>)}
-                                  {section.status === 'completed' && (<span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200 shadow-sm">✅ Completed</span>)}
+                                  {isNextSection && (
+                                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/30 shadow-sm">
+                                      Continue Learning
+                                    </span>
+                                  )}
+                                  {section.status === 'completed' && (
+                                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200 shadow-sm">
+                                      ✅ Completed
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 mt-1">
-                                  {section.status !== 'locked' && (<div className="opacity-0 group-hover:opacity-100 transition-opacity"><ChevronRight className="h-5 w-5 text-muted-foreground" /></div>)}
-                                  {isNextSection && (<div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>)}
+                                  {section.status !== 'locked' && (
+                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                  {isNextSection && (
+                                    <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+                                  )}
                                 </div>
                               </div>
                             </div>
-                            {isNextSection && (<div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20"><div className="flex items-center justify-between text-sm"><span className="text-primary font-medium">Ready to start</span><div className="flex items-center gap-1 text-primary/80"><Timer className="h-4 w-4" /><span>{formatDuration(section.duration)} remaining</span></div></div></div>)}
-                            {sectionProgress?.completed && (<div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200"><div className="flex items-center justify-between text-sm"><span className="text-green-700 font-medium">🎉 Great job! Section completed</span><span className="text-green-600">{Math.floor((Date.now() / 1000 - Number(sectionProgress.completedAt)) / 86400)} days ago</span></div></div>)}
+                            {isNextSection && (
+                              <div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-primary font-medium">Ready to start</span>
+                                  <div className="flex items-center gap-1 text-primary/80">
+                                    <Timer className="h-4 w-4" />
+                                    <span>{formatDuration(section.duration)} remaining</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {sectionProgress?.completed && (
+                              <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-green-700 font-medium">🎉 Great job! Section completed</span>
+                                  <span className="text-green-600">
+                                    {Math.floor((Date.now() / 1000 - Number(sectionProgress.completedAt)) / 86400)} days ago
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
-                      {section.status !== 'locked' && (<div className="absolute inset-0 border-2 border-transparent group-hover:border-primary/20 rounded-lg transition-all duration-200 pointer-events-none" />)}
+                      {section.status !== 'locked' && (
+                        <div className="absolute inset-0 border-2 border-transparent group-hover:border-primary/20 rounded-lg transition-all duration-200 pointer-events-none" />
+                      )}
                     </div>
                   );
                 })}
@@ -375,25 +414,47 @@ function CourseDetailsContent() {
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200" onClick={() => copyToClipboard(address, name)}>
                             {copiedAddress === name ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                           </Button>
-                          {copiedAddress === name && (<div className="absolute right-2 -top-8 bg-primary text-primary-foreground text-xs px-2 py-1 rounded shadow-lg">Copied!</div>)}
+                          {copiedAddress === name && (
+                            <div className="absolute right-2 -top-8 bg-primary text-primary-foreground text-xs px-2 py-1 rounded shadow-lg">
+                              Copied!
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   </div>
                   <Separator />
                   <div className="space-y-3">
-                      <div className="text-sm font-medium text-muted-foreground">Blockchain Benefits</div>
-                      <div className="flex items-start gap-3"><Award className="h-4 w-4 text-blue-500 mt-0.5" /><div><div className="text-sm font-medium">NFT Certificate</div><div className="text-xs text-muted-foreground">Earn blockchain-verified certificate</div></div></div>
-                      <div className="flex items-start gap-3"><Trophy className="h-4 w-4 text-yellow-500 mt-0.5" /><div><div className="text-sm font-medium">Progress Ownership</div><div className="text-xs text-muted-foreground">Your progress stored on blockchain</div></div></div>
-                      <div className="flex items-start gap-3"><Star className="h-4 w-4 text-purple-500 mt-0.5" /><div><div className="text-sm font-medium">Creator Royalties</div><div className="text-xs text-muted-foreground">Support creators directly</div></div></div>
+                    <div className="text-sm font-medium text-muted-foreground">Blockchain Benefits</div>
+                    <div className="flex items-start gap-3">
+                      <Award className="h-4 w-4 text-blue-500 mt-0.5" />
+                      <div>
+                        <div className="text-sm font-medium">NFT Certificate</div>
+                        <div className="text-xs text-muted-foreground">Earn blockchain-verified certificate</div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Trophy className="h-4 w-4 text-yellow-500 mt-0.5" />
+                      <div>
+                        <div className="text-sm font-medium">Progress Ownership</div>
+                        <div className="text-xs text-muted-foreground">Your progress stored on blockchain</div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Star className="h-4 w-4 text-purple-500 mt-0.5" />
+                      <div>
+                        <div className="text-sm font-medium">Creator Royalties</div>
+                        <div className="text-xs text-muted-foreground">Support creators directly</div>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
           </div>
         </div>
+        </ContentContainer>
       </div>
-    </div>
   );
 }
 

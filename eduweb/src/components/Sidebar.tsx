@@ -59,15 +59,15 @@ const navigationItems: NavigationItem[] = [
   },
   {
     title: "My Courses",
-    url: "/instructor/courses",
+    url: "/myCourse",
     icon: BookOpen,
     description: "Manage your content"
   },
   {
     title: "Analytics",
-    url: "/instructor/analytics",
+    url: "/analytics",
     icon: BarChart3,
-    description: "Track student engagement"
+    description: "Real-time platform analytics"
   },
   {
     title: "Certificates",
