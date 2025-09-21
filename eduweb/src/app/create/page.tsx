@@ -1,8 +1,11 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { draftStorage, type DraftFormData, type DraftSection } from '@/lib/draftStorage';
 import {
+  AlertCircle,
   BookOpen,
+  CheckCircle,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -22,12 +25,13 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-// Type definitions
+// Type definitions - Updated to work with storage service
 interface FormData {
   title: string;
   description: string;
   thumbnailFile: File | null;
   thumbnailPreview: string | null;
+  thumbnailFileId?: string; // Reference to stored file
   creatorName: string;
   pricePerMonth: string;
   category: string;
@@ -42,6 +46,7 @@ interface Section {
   title: string;
   file: File | null;
   filePreview: string | null;
+  fileId?: string; // Reference to stored file
   duration: number;
   type: 'video' | 'document' | 'image';
   description: string;
@@ -52,6 +57,7 @@ interface NewSection {
   title: string;
   file: File | null;
   filePreview: string | null;
+  fileId?: string; // Reference to stored file
   duration: number;
   type: 'video' | 'document' | 'image';
   description: string;
@@ -144,6 +150,13 @@ export default function CreateCoursePage() {
   const [showPreview, setShowPreview] = useState<boolean>(false);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
+  // Draft storage states
+  const [isDraftSupported, setIsDraftSupported] = useState<boolean>(false);
+  const [isSavingDraft, setIsSavingDraft] = useState<boolean>(false);
+  const [isLoadingDraft, setIsLoadingDraft] = useState<boolean>(true);
+  const [draftSaveStatus, setDraftSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
   // Form data state with proper typing
   const [formData, setFormData] = useState<FormData>({
     title: '',
@@ -165,6 +178,7 @@ export default function CreateCoursePage() {
     title: '',
     file: null,
     filePreview: null,
+    fileId: undefined,
     duration: 300,
     type: 'video',
     description: ''
@@ -174,46 +188,141 @@ export default function CreateCoursePage() {
   const [draggedSection, setDraggedSection] = useState<number | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
 
-  // Auto-save to localStorage
+  // Auto-save and load from draft storage
   useEffect(() => {
-    const savedData = localStorage.getItem('courseDraft');
-    if (savedData) {
+    const initializeDraftStorage = async () => {
       try {
-        const parsed = JSON.parse(savedData);
-        if (parsed.formData) {
-          setFormData(prev => ({ ...prev, ...parsed.formData }));
+        setIsLoadingDraft(true);
+
+        // Check if draft storage is supported
+        const supported = await draftStorage.isSupported();
+        setIsDraftSupported(supported);
+
+        if (!supported) {
+          console.warn('Draft storage not supported in this browser');
+          setIsLoadingDraft(false);
+          return;
         }
-        if (parsed.sections) {
-          setSections(parsed.sections);
+
+        // Load existing draft
+        const draftData = await draftStorage.loadDraftData();
+        if (draftData) {
+          // Restore form data
+          setFormData(prev => ({
+            ...prev,
+            ...draftData.formData,
+            // Don't restore file objects, only the IDs
+            thumbnailFile: null,
+            thumbnailPreview: null
+          }));
+
+          // Restore sections (without file objects)
+          const restoredSections: Section[] = draftData.sections.map(section => ({
+            ...section,
+            file: null,
+            filePreview: null
+          }));
+          setSections(restoredSections);
+
+          // Load thumbnail preview if exists
+          if (draftData.formData.thumbnailFileId) {
+            const thumbnailUrl = await draftStorage.createFilePreviewUrl(draftData.formData.thumbnailFileId);
+            if (thumbnailUrl) {
+              setFormData(prev => ({
+                ...prev,
+                thumbnailPreview: thumbnailUrl,
+                thumbnailFileId: draftData.formData.thumbnailFileId
+              }));
+            }
+          }
+
+          // Load section file previews
+          for (let i = 0; i < restoredSections.length; i++) {
+            const section = restoredSections[i];
+            if (section.fileId) {
+              const fileUrl = await draftStorage.createFilePreviewUrl(section.fileId);
+              if (fileUrl) {
+                setSections(prev => prev.map(s =>
+                  s.id === section.id
+                    ? { ...s, filePreview: fileUrl }
+                    : s
+                ));
+              }
+            }
+          }
+
+          setLastSavedAt(new Date(draftData.lastModified));
         }
-      } catch (e) {
-        console.error('Failed to load draft:', e);
+
+        // Cleanup any orphaned files
+        await draftStorage.cleanupOrphanedFiles();
+
+      } catch (error) {
+        console.error('Failed to initialize draft storage:', error);
+      } finally {
+        setIsLoadingDraft(false);
       }
-    }
+    };
+
+    initializeDraftStorage();
   }, []);
 
+  // Auto-save draft data (text only, fast)
   useEffect(() => {
-    const saveTimer = setTimeout(() => {
-      const dataToSave = {
-        formData: {
-          ...formData,
-          thumbnailFile: null,
-          thumbnailPreview: formData.thumbnailPreview
-        },
-        sections: sections.map(s => ({
-          ...s,
-          file: null,
-          filePreview: s.filePreview
-        }))
-      };
-      localStorage.setItem('courseDraft', JSON.stringify(dataToSave));
+    if (isLoadingDraft || !isDraftSupported) return;
+
+    const saveTimer = setTimeout(async () => {
+      try {
+        setIsSavingDraft(true);
+        setDraftSaveStatus('saving');
+
+        // Prepare draft form data
+        const draftFormData: DraftFormData = {
+          title: formData.title,
+          description: formData.description,
+          creatorName: formData.creatorName,
+          pricePerMonth: formData.pricePerMonth,
+          category: formData.category,
+          difficulty: formData.difficulty,
+          learningObjectives: formData.learningObjectives,
+          requirements: formData.requirements,
+          tags: formData.tags,
+          thumbnailFileId: formData.thumbnailFileId,
+          sectionFileIds: sections.map(s => s.fileId).filter(Boolean) as string[]
+        };
+
+        // Prepare sections data
+        const draftSections: DraftSection[] = sections.map(section => ({
+          id: section.id,
+          title: section.title,
+          fileId: section.fileId,
+          duration: section.duration,
+          type: section.type,
+          description: section.description
+        }));
+
+        await draftStorage.saveDraftData(draftFormData, draftSections);
+
+        setDraftSaveStatus('saved');
+        setLastSavedAt(new Date());
+
+        // Reset status after a delay
+        setTimeout(() => setDraftSaveStatus('idle'), 2000);
+
+      } catch (error) {
+        console.error('Failed to save draft:', error);
+        setDraftSaveStatus('error');
+        setTimeout(() => setDraftSaveStatus('idle'), 3000);
+      } finally {
+        setIsSavingDraft(false);
+      }
     }, 1000);
 
     return () => clearTimeout(saveTimer);
-  }, [formData, sections]);
+  }, [formData, sections, isLoadingDraft, isDraftSupported]);
 
-  // Handle thumbnail upload
-  const handleThumbnailUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle thumbnail upload with file storage
+  const handleThumbnailUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -222,20 +331,42 @@ export default function CreateCoursePage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFormData(prev => ({
-        ...prev,
-        thumbnailFile: file,
-        thumbnailPreview: reader.result as string
-      }));
-      setErrors(prev => ({ ...prev, thumbnail: '' }));
-    };
-    reader.readAsDataURL(file);
-  }, []);
+    try {
+      // Create preview immediately
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({
+          ...prev,
+          thumbnailFile: file,
+          thumbnailPreview: reader.result as string
+        }));
+      };
+      reader.readAsDataURL(file);
 
-  // Handle section file upload
-  const handleSectionFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+      // Store file if draft storage is supported
+      if (isDraftSupported) {
+        // Delete old thumbnail file if exists
+        if (formData.thumbnailFileId) {
+          await draftStorage.deleteFile(formData.thumbnailFileId);
+        }
+
+        // Store new file
+        const fileId = await draftStorage.storeFile(file);
+        setFormData(prev => ({
+          ...prev,
+          thumbnailFileId: fileId
+        }));
+      }
+
+      setErrors(prev => ({ ...prev, thumbnail: '' }));
+    } catch (error) {
+      console.error('Failed to store thumbnail:', error);
+      setErrors(prev => ({ ...prev, thumbnail: 'Failed to save thumbnail' }));
+    }
+  }, [isDraftSupported, formData.thumbnailFileId]);
+
+  // Handle section file upload with file storage
+  const handleSectionFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -245,19 +376,37 @@ export default function CreateCoursePage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setNewSection(prev => ({
-        ...prev,
-        file: file,
-        filePreview: reader.result as string
-      }));
-    };
-    reader.readAsDataURL(file);
-  }, [newSection.type]);
+    try {
+      // Create preview immediately
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewSection(prev => ({
+          ...prev,
+          file: file,
+          filePreview: reader.result as string
+        }));
+      };
+      reader.readAsDataURL(file);
 
-  // Add section
-  const addSection = useCallback(() => {
+      // Store file if draft storage is supported (but don't wait for it)
+      if (isDraftSupported) {
+        draftStorage.storeFile(file).then(fileId => {
+          setNewSection(prev => ({
+            ...prev,
+            fileId
+          }));
+        }).catch(error => {
+          console.error('Failed to store section file:', error);
+        });
+      }
+    } catch (error) {
+      console.error('Failed to handle section file upload:', error);
+      alert('Failed to process file upload');
+    }
+  }, [newSection.type, isDraftSupported]);
+
+  // Add section with file management
+  const addSection = useCallback(async () => {
     if (!newSection.title.trim() || !newSection.file) {
       alert("Please provide both title and file for the section");
       return;
@@ -266,19 +415,138 @@ export default function CreateCoursePage() {
     const section: Section = {
       ...newSection,
       id: Date.now().toString(),
-      uploadStatus: 'pending'
+      uploadStatus: 'pending',
+      fileId: newSection.fileId // Carry over the file ID if stored
     };
 
     setSections(prev => [...prev, section]);
+
+    // Reset new section form
     setNewSection({
       title: '',
       file: null,
       filePreview: null,
       duration: 300,
       type: 'video',
-      description: ''
+      description: '',
+      fileId: undefined
     });
   }, [newSection]);
+
+  // Delete section with file cleanup
+  const deleteSection = useCallback(async (sectionId: string) => {
+    const section = sections.find(s => s.id === sectionId);
+
+    // Delete associated file if exists
+    if (section?.fileId && isDraftSupported) {
+      try {
+        await draftStorage.deleteFile(section.fileId);
+      } catch (error) {
+        console.error('Failed to delete section file:', error);
+      }
+    }
+
+    setSections(prev => prev.filter(s => s.id !== sectionId));
+  }, [sections, isDraftSupported]);
+
+  // Clear draft and all associated files
+  const clearDraft = useCallback(async () => {
+    if (!isDraftSupported) {
+      // Fallback to simple state reset
+      setFormData({
+        title: '',
+        description: '',
+        thumbnailFile: null,
+        thumbnailPreview: null,
+        creatorName: '',
+        pricePerMonth: '0.01',
+        category: '',
+        difficulty: '',
+        learningObjectives: ['', '', ''],
+        requirements: [''],
+        tags: []
+      });
+      setSections([]);
+      return;
+    }
+
+    try {
+      await draftStorage.clearDraft();
+
+      // Reset form state
+      setFormData({
+        title: '',
+        description: '',
+        thumbnailFile: null,
+        thumbnailPreview: null,
+        creatorName: '',
+        pricePerMonth: '0.01',
+        category: '',
+        difficulty: '',
+        learningObjectives: ['', '', ''],
+        requirements: [''],
+        tags: []
+      });
+      setSections([]);
+      setLastSavedAt(null);
+
+    } catch (error) {
+      console.error('Failed to clear draft:', error);
+      alert('Failed to clear draft');
+    }
+  }, [isDraftSupported]);
+
+  // Manual save draft
+  const manualSaveDraft = useCallback(async () => {
+    if (!isDraftSupported) {
+      alert('Draft storage not supported in this browser');
+      return;
+    }
+
+    try {
+      setIsSavingDraft(true);
+      setDraftSaveStatus('saving');
+
+      const draftFormData: DraftFormData = {
+        title: formData.title,
+        description: formData.description,
+        creatorName: formData.creatorName,
+        pricePerMonth: formData.pricePerMonth,
+        category: formData.category,
+        difficulty: formData.difficulty,
+        learningObjectives: formData.learningObjectives,
+        requirements: formData.requirements,
+        tags: formData.tags,
+        thumbnailFileId: formData.thumbnailFileId,
+        sectionFileIds: sections.map(s => s.fileId).filter(Boolean) as string[]
+      };
+
+      const draftSections: DraftSection[] = sections.map(section => ({
+        id: section.id,
+        title: section.title,
+        fileId: section.fileId,
+        duration: section.duration,
+        type: section.type,
+        description: section.description
+      }));
+
+      await draftStorage.saveDraftData(draftFormData, draftSections);
+
+      setDraftSaveStatus('saved');
+      setLastSavedAt(new Date());
+      alert('Draft saved successfully!');
+
+      setTimeout(() => setDraftSaveStatus('idle'), 2000);
+
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+      setDraftSaveStatus('error');
+      alert('Failed to save draft');
+      setTimeout(() => setDraftSaveStatus('idle'), 3000);
+    } finally {
+      setIsSavingDraft(false);
+    }
+  }, [formData, sections, isDraftSupported]);
 
   // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -362,7 +630,7 @@ export default function CreateCoursePage() {
       });
 
       // Clear draft after successful publish
-      localStorage.removeItem('courseDraft');
+      await clearDraft();
 
       alert('Course published successfully! 🎉');
 
@@ -396,6 +664,19 @@ export default function CreateCoursePage() {
   const priceInIDR = parseFloat(formData.pricePerMonth) * ethToIDR;
 
   const steps = ['Course Info', 'Content', 'Pricing', 'Review'];
+
+  // Show loading screen while initializing draft storage
+  if (isLoadingDraft) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <h2 className="text-xl font-semibold text-foreground mb-2">Loading Draft...</h2>
+          <p className="text-muted-foreground">Initializing storage and loading your saved work</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -439,7 +720,41 @@ export default function CreateCoursePage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <button className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              {/* Draft Status Indicator */}
+              {isDraftSupported && (
+                <div className="flex items-center gap-2 text-sm">
+                  {draftSaveStatus === 'saving' && (
+                    <div className="flex items-center gap-1 text-blue-600">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Saving...</span>
+                    </div>
+                  )}
+                  {draftSaveStatus === 'saved' && (
+                    <div className="flex items-center gap-1 text-green-600">
+                      <CheckCircle className="h-3 w-3" />
+                      <span>Saved</span>
+                    </div>
+                  )}
+                  {draftSaveStatus === 'error' && (
+                    <div className="flex items-center gap-1 text-red-600">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>Error</span>
+                    </div>
+                  )}
+                  {lastSavedAt && draftSaveStatus === 'idle' && (
+                    <span className="text-muted-foreground">
+                      Last saved: {lastSavedAt.toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={manualSaveDraft}
+                disabled={!isDraftSupported || isSavingDraft}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                <Save className="h-4 w-4 inline mr-2" />
                 Save Draft
               </button>
               <button
@@ -459,16 +774,19 @@ export default function CreateCoursePage() {
           {/* Main Content Area */}
           <div className="lg:col-span-2 space-y-6">
             {/* Course Information Card */}
-            <Card>
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/50 dark:to-purple-950/50 border-b border-border">
-                <CardTitle className="text-xl font-bold text-card-foreground flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  Course Information
-                </CardTitle>
-                <CardDescription>Basic details about your course</CardDescription>
+            {/* FIXED: Removed padding from Card and added rounded-t-xl to CardHeader */}
+            <Card className="p-0">
+              <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/50 dark:to-purple-950/50 border-b border-border p-0 rounded-t-xl">
+                <div className="p-6">
+                  <CardTitle className="text-xl font-bold text-card-foreground flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    Course Information
+                  </CardTitle>
+                  <CardDescription>Basic details about your course</CardDescription>
+                </div>
               </CardHeader>
 
-              <CardContent className="space-y-6">
+              <CardContent className="p-6 space-y-6">
                 {/* Title Input */}
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-foreground">
@@ -609,16 +927,19 @@ export default function CreateCoursePage() {
             </Card>
 
             {/* Course Content Card */}
-            <Card>
-              <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 border-b border-border">
-                <CardTitle className="text-xl font-bold text-card-foreground flex items-center gap-2">
-                  <Video className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  Course Content
-                </CardTitle>
-                <CardDescription>Add videos, documents, and quizzes</CardDescription>
+            {/* FIXED: Removed padding from Card and added rounded-t-xl to CardHeader */}
+            <Card className="p-0">
+              <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 border-b border-border p-0 rounded-t-xl">
+                 <div className="p-6">
+                    <CardTitle className="text-xl font-bold text-card-foreground flex items-center gap-2">
+                      <Video className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      Course Content
+                    </CardTitle>
+                    <CardDescription>Add videos, documents, and quizzes</CardDescription>
+                  </div>
               </CardHeader>
 
-              <CardContent className="space-y-6">
+              <CardContent className="p-6 space-y-6">
                 {/* Sections List */}
                 {sections.length > 0 && (
                   <div className="space-y-3">
@@ -664,7 +985,7 @@ export default function CreateCoursePage() {
                             <ChevronDown className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => setSections(prev => prev.filter(s => s.id !== section.id))}
+                            onClick={() => deleteSection(section.id)}
                             className="p-2 text-red-400 hover:text-red-600 transition-colors"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -769,16 +1090,19 @@ export default function CreateCoursePage() {
             </Card>
 
             {/* Pricing Card */}
-            <Card>
-              <CardHeader className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/50 dark:to-orange-950/50 border-b border-border">
-                <CardTitle className="text-xl font-bold text-card-foreground flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                  Pricing & Creator Info
-                </CardTitle>
-                <CardDescription>Set your course price and creator details</CardDescription>
+            {/* FIXED: Removed padding from Card and added rounded-t-xl to CardHeader */}
+            <Card className="p-0">
+              <CardHeader className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/50 dark:to-orange-950/50 border-b border-border p-0 rounded-t-xl">
+                <div className="p-6">
+                  <CardTitle className="text-xl font-bold text-card-foreground flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                    Pricing & Creator Info
+                  </CardTitle>
+                  <CardDescription>Set your course price and creator details</CardDescription>
+                </div>
               </CardHeader>
 
-              <CardContent className="space-y-6">
+              <CardContent className="p-6 space-y-6">
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-foreground">
                     Creator Name *
@@ -887,19 +1211,21 @@ export default function CreateCoursePage() {
               <CardContent>
                 <div className="space-y-3">
                   <button
-                    onClick={() => {
-                      const dataToSave = {
-                        formData,
-                        sections,
-                        savedAt: new Date().toISOString()
-                      };
-                      localStorage.setItem('courseDraft', JSON.stringify(dataToSave));
-                      alert('Draft saved successfully!');
-                    }}
-                    className="w-full py-3 bg-muted text-muted-foreground font-medium rounded-xl hover:bg-muted/80 hover:text-foreground transition-all flex items-center justify-center gap-2"
+                    onClick={manualSaveDraft}
+                    disabled={!isDraftSupported || isSavingDraft}
+                    className="w-full py-3 bg-muted text-muted-foreground font-medium rounded-xl hover:bg-muted/80 hover:text-foreground transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    <Save className="h-4 w-4" />
-                    Save Draft
+                    {isSavingDraft ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Save Draft
+                      </>
+                    )}
                   </button>
 
                   <button
@@ -979,6 +1305,54 @@ export default function CreateCoursePage() {
                 </li>
               </ul>
             </div>
+
+            {/* Draft Storage Info */}
+            {isDraftSupported && (
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 rounded-2xl p-6 border border-green-200 dark:border-green-800">
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  Enhanced Draft Storage
+                </h3>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <div className="w-1 h-1 bg-muted-foreground rounded-full mt-2"></div>
+                    <span>Large files supported (up to 500MB)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-1 h-1 bg-muted-foreground rounded-full mt-2"></div>
+                    <span>Auto-save every second</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-1 h-1 bg-muted-foreground rounded-full mt-2"></div>
+                    <span>Works offline</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <div className="w-1 h-1 bg-muted-foreground rounded-full mt-2"></div>
+                    <span>Automatic cleanup</span>
+                  </li>
+                </ul>
+                {lastSavedAt && (
+                  <div className="mt-3 pt-3 border-t border-green-200 dark:border-green-700">
+                    <p className="text-xs text-green-700 dark:text-green-300">
+                      Last saved: {lastSavedAt.toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isDraftSupported && (
+              <div className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-950/50 dark:to-red-950/50 rounded-2xl p-6 border border-orange-200 dark:border-orange-800">
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  Limited Storage
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Your browser doesn't support enhanced storage. Draft saving is disabled for large files.
+                  Consider using a modern browser for the best experience.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
