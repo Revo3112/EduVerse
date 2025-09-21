@@ -154,6 +154,7 @@ export default function CreateCoursePage() {
   const [isDraftSupported, setIsDraftSupported] = useState<boolean>(false);
   const [isSavingDraft, setIsSavingDraft] = useState<boolean>(false);
   const [isLoadingDraft, setIsLoadingDraft] = useState<boolean>(true);
+  const [isDeletingItem, setIsDeletingItem] = useState<boolean>(false);
   const [draftSaveStatus, setDraftSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
@@ -269,7 +270,7 @@ export default function CreateCoursePage() {
 
   // Auto-save draft data (text only, fast)
   useEffect(() => {
-    if (isLoadingDraft || !isDraftSupported) return;
+    if (isLoadingDraft || !isDraftSupported || isDeletingItem || isSavingDraft) return;
 
     const saveTimer = setTimeout(async () => {
       try {
@@ -319,7 +320,7 @@ export default function CreateCoursePage() {
     }, 1000);
 
     return () => clearTimeout(saveTimer);
-  }, [formData, sections, isLoadingDraft, isDraftSupported]);
+  }, [formData, sections, isLoadingDraft, isDraftSupported, isDeletingItem, isSavingDraft]);
 
   // Handle thumbnail upload with file storage
   const handleThumbnailUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -433,21 +434,152 @@ export default function CreateCoursePage() {
     });
   }, [newSection]);
 
+  // Handle thumbnail removal with file cleanup
+  const removeThumbnail = useCallback(async () => {
+    setIsDeletingItem(true);
+
+    try {
+      // Delete stored file if exists
+      if (formData.thumbnailFileId && isDraftSupported) {
+        try {
+          await draftStorage.deleteFile(formData.thumbnailFileId);
+        } catch (error) {
+          console.error('Failed to delete thumbnail file:', error);
+        }
+      }
+
+      // Update form data
+      const updatedFormData = {
+        ...formData,
+        thumbnailFile: null,
+        thumbnailPreview: null,
+        thumbnailFileId: undefined
+      };
+      setFormData(updatedFormData);
+
+      // Immediately save the updated state to draft storage
+      if (isDraftSupported) {
+        try {
+          setIsSavingDraft(true);
+          setDraftSaveStatus('saving');
+
+          // Prepare draft form data
+          const draftFormData: DraftFormData = {
+            title: updatedFormData.title,
+            description: updatedFormData.description,
+            creatorName: updatedFormData.creatorName,
+            pricePerMonth: updatedFormData.pricePerMonth,
+            category: updatedFormData.category,
+            difficulty: updatedFormData.difficulty,
+            learningObjectives: updatedFormData.learningObjectives,
+            requirements: updatedFormData.requirements,
+            tags: updatedFormData.tags,
+            thumbnailFileId: undefined, // Explicitly set to undefined
+            sectionFileIds: sections.map(s => s.fileId).filter(Boolean) as string[]
+          };
+
+          // Prepare sections data
+          const draftSections: DraftSection[] = sections.map(section => ({
+            id: section.id,
+            title: section.title,
+            fileId: section.fileId,
+            duration: section.duration,
+            type: section.type,
+            description: section.description
+          }));
+
+          await draftStorage.saveDraftData(draftFormData, draftSections);
+
+          setDraftSaveStatus('saved');
+          setLastSavedAt(new Date());
+
+          // Reset status after a delay
+          setTimeout(() => setDraftSaveStatus('idle'), 2000);
+
+        } catch (error) {
+          console.error('Failed to save draft after thumbnail removal:', error);
+          setDraftSaveStatus('error');
+          setTimeout(() => setDraftSaveStatus('idle'), 3000);
+        } finally {
+          setIsSavingDraft(false);
+        }
+      }
+    } finally {
+      setIsDeletingItem(false);
+    }
+  }, [formData, isDraftSupported, sections]);
+
   // Delete section with file cleanup
   const deleteSection = useCallback(async (sectionId: string) => {
-    const section = sections.find(s => s.id === sectionId);
+    setIsDeletingItem(true);
 
-    // Delete associated file if exists
-    if (section?.fileId && isDraftSupported) {
-      try {
-        await draftStorage.deleteFile(section.fileId);
-      } catch (error) {
-        console.error('Failed to delete section file:', error);
+    try {
+      const section = sections.find(s => s.id === sectionId);
+
+      // Delete associated file if exists
+      if (section?.fileId && isDraftSupported) {
+        try {
+          await draftStorage.deleteFile(section.fileId);
+        } catch (error) {
+          console.error('Failed to delete section file:', error);
+        }
       }
-    }
 
-    setSections(prev => prev.filter(s => s.id !== sectionId));
-  }, [sections, isDraftSupported]);
+      // Update sections state
+      const updatedSections = sections.filter(s => s.id !== sectionId);
+      setSections(updatedSections);
+
+      // Immediately save the updated state to draft storage
+      if (isDraftSupported) {
+        try {
+          setIsSavingDraft(true);
+          setDraftSaveStatus('saving');
+
+          // Prepare draft form data
+          const draftFormData: DraftFormData = {
+            title: formData.title,
+            description: formData.description,
+            creatorName: formData.creatorName,
+            pricePerMonth: formData.pricePerMonth,
+            category: formData.category,
+            difficulty: formData.difficulty,
+            learningObjectives: formData.learningObjectives,
+            requirements: formData.requirements,
+            tags: formData.tags,
+            thumbnailFileId: formData.thumbnailFileId,
+            sectionFileIds: updatedSections.map(s => s.fileId).filter(Boolean) as string[]
+          };
+
+          // Prepare sections data
+          const draftSections: DraftSection[] = updatedSections.map(section => ({
+            id: section.id,
+            title: section.title,
+            fileId: section.fileId,
+            duration: section.duration,
+            type: section.type,
+            description: section.description
+          }));
+
+          await draftStorage.saveDraftData(draftFormData, draftSections);
+
+          setDraftSaveStatus('saved');
+          setLastSavedAt(new Date());
+
+          // Reset status after a delay
+          setTimeout(() => setDraftSaveStatus('idle'), 2000);
+
+        } catch (error) {
+          console.error('Failed to save draft after deletion:', error);
+          setDraftSaveStatus('error');
+          setTimeout(() => setDraftSaveStatus('idle'), 3000);
+        } finally {
+          setIsSavingDraft(false);
+        }
+      }
+    } finally {
+      setIsDeletingItem(false);
+    }
+  }, [sections, isDraftSupported, formData]);
 
   // Clear draft and all associated files
   const clearDraft = useCallback(async () => {
@@ -718,53 +850,6 @@ export default function CreateCoursePage() {
                 </div>
               ))}
             </div>
-
-            <div className="flex items-center gap-2">
-              {/* Draft Status Indicator */}
-              {isDraftSupported && (
-                <div className="flex items-center gap-2 text-sm">
-                  {draftSaveStatus === 'saving' && (
-                    <div className="flex items-center gap-1 text-blue-600">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Saving...</span>
-                    </div>
-                  )}
-                  {draftSaveStatus === 'saved' && (
-                    <div className="flex items-center gap-1 text-green-600">
-                      <CheckCircle className="h-3 w-3" />
-                      <span>Saved</span>
-                    </div>
-                  )}
-                  {draftSaveStatus === 'error' && (
-                    <div className="flex items-center gap-1 text-red-600">
-                      <AlertCircle className="h-3 w-3" />
-                      <span>Error</span>
-                    </div>
-                  )}
-                  {lastSavedAt && draftSaveStatus === 'idle' && (
-                    <span className="text-muted-foreground">
-                      Last saved: {lastSavedAt.toLocaleTimeString()}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <button
-                onClick={manualSaveDraft}
-                disabled={!isDraftSupported || isSavingDraft}
-                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-              >
-                <Save className="h-4 w-4 inline mr-2" />
-                Save Draft
-              </button>
-              <button
-                onClick={() => setShowPreview(!showPreview)}
-                className="px-4 py-2 text-sm font-medium bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 hover:text-foreground transition-all"
-              >
-                <Eye className="h-4 w-4 inline mr-2" />
-                Preview
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -851,7 +936,7 @@ export default function CreateCoursePage() {
                             Change
                           </label>
                           <button
-                            onClick={() => setFormData(prev => ({ ...prev, thumbnailFile: null, thumbnailPreview: null }))}
+                            onClick={removeThumbnail}
                             className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                           >
                             Remove

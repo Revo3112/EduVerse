@@ -1,6 +1,6 @@
 "use client";
 
-import { Award, BookOpen, Calendar, Clock, PlayCircle, TrendingUp, Trophy, User } from 'lucide-react';
+import { Award, BookOpen, Calendar, Clock, PlayCircle, Star, TrendingUp, Trophy, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
@@ -11,13 +11,17 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+// Import rating components
+import { RatingModal } from '@/components/RatingModal';
+
 // Import data dan tipe dari file mock-data
 import {
-    getCategoryName,
-    getDifficultyName,
-    mockCourses,
-    mockDB,
-    mockUserCertificate
+  Course,
+  getCategoryName,
+  getDifficultyName,
+  mockCourses,
+  mockDB,
+  mockUserCertificate
 } from '@/lib/mock-data';
 
 /**
@@ -27,6 +31,13 @@ import {
 export default function LearningPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'in-progress' | 'history'>('in-progress');
+
+  // Rating Modal State
+  const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
+  const [selectedCourseForRating, setSelectedCourseForRating] = useState<Course | null>(null);
+
+  // Mock user address - in production, this would come from wallet connection
+  const mockUserAddress = mockUserCertificate.recipientAddress;
 
   // =================================================================
   // LOGIKA PENGOLAHAN DATA MOCK
@@ -106,6 +117,25 @@ export default function LearningPage() {
   const handleViewCertificate = () => {
     // Arahkan ke halaman detail sertifikat tunggal pengguna
     router.push(`/certificates/${mockUserCertificate.tokenId}`);
+  };
+
+  // Rating Modal Handlers
+  const handleOpenRatingModal = (courseId: number) => {
+    const originalCourse = mockCourses.find(course => Number(course.id) === courseId);
+    if (originalCourse) {
+      setSelectedCourseForRating(originalCourse);
+      setIsRatingModalOpen(true);
+    }
+  };
+
+  const handleCloseRatingModal = () => {
+    setIsRatingModalOpen(false);
+    setSelectedCourseForRating(null);
+  };
+
+  const handleRatingSubmitted = () => {
+    // In production, this would trigger a refetch of course ratings
+    console.log('Rating submitted successfully');
   };
 
   const formatLearningTime = (seconds: number): string => {
@@ -272,13 +302,24 @@ export default function LearningPage() {
                     <p className="text-sm text-muted-foreground mb-3">
                       Next: {course.nextSection}
                     </p>
-                    <Button
-                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
-                      onClick={() => handleContinueLearning(course.id)}
-                    >
-                      <PlayCircle className="w-4 h-4 mr-2" />
-                      Continue Learning
-                    </Button>
+                    <div className="space-y-2">
+                      <Button
+                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                        onClick={() => handleContinueLearning(course.id)}
+                      >
+                        <PlayCircle className="w-4 h-4 mr-2" />
+                        Continue Learning
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="w-full border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950"
+                        onClick={() => handleOpenRatingModal(course.id)}
+                      >
+                        <Star className="w-4 h-4 mr-2" />
+                        Rate Course
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -356,28 +397,50 @@ export default function LearningPage() {
                         <p className="text-sm text-green-600 mb-3 font-medium">
                           ✓ Certificate earned: {course.certificateId}
                         </p>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => handleViewCertificate()}
-                        >
-                          <Award className="w-4 h-4 mr-2" />
-                          View Certificate
-                        </Button>
+                        <div className="space-y-2">
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => handleViewCertificate()}
+                          >
+                            <Award className="w-4 h-4 mr-2" />
+                            View Certificate
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            className="w-full border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950"
+                            onClick={() => handleOpenRatingModal(course.id)}
+                          >
+                            <Star className="w-4 h-4 mr-2" />
+                            Rate Course
+                          </Button>
+                        </div>
                       </>
                     ) : (
                       <>
                         <p className="text-sm text-yellow-600 mb-3 font-medium">
                           ⚠ License expired - {course.progress}% completed
                         </p>
-                        <Button
-                          variant="outline"
-                          className="w-full border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-                          onClick={() => handleContinueLearning(course.id)}
-                        >
-                          <PlayCircle className="w-4 h-4 mr-2" />
-                          Renew & Continue
-                        </Button>
+                        <div className="space-y-2">
+                          <Button
+                            variant="outline"
+                            className="w-full border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                            onClick={() => handleContinueLearning(course.id)}
+                          >
+                            <PlayCircle className="w-4 h-4 mr-2" />
+                            Renew & Continue
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            className="w-full border-yellow-500 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950"
+                            onClick={() => handleOpenRatingModal(course.id)}
+                          >
+                            <Star className="w-4 h-4 mr-2" />
+                            Rate Course
+                          </Button>
+                        </div>
                       </>
                     )}
                   </div>
@@ -387,6 +450,17 @@ export default function LearningPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Rating Modal */}
+      {selectedCourseForRating && (
+        <RatingModal
+          course={selectedCourseForRating}
+          isOpen={isRatingModalOpen}
+          onClose={handleCloseRatingModal}
+          userAddress={mockUserAddress}
+          onRatingSubmitted={handleRatingSubmitted}
+        />
+      )}
     </div>
   )
 }

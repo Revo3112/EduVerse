@@ -1,31 +1,81 @@
 import localforage from 'localforage';
 
-// Configure storage instances
-const textDataStore = localforage.createInstance({
-  name: 'EduVerse',
-  storeName: 'courseDrafts',
-  description: 'Course draft text data'
-});
+// Storage mode enum
+enum StorageMode {
+  LOCALFORAGE = 'localforage',
+  LOCALSTORAGE = 'localStorage',
+  DISABLED = 'disabled'
+}
 
-const fileDataStore = localforage.createInstance({
-  name: 'EduVerse',
-  storeName: 'courseFiles',
-  description: 'Course draft file data'
-});
+// Storage instances - will be initialized later
+let textDataStore: LocalForage | null = null;
+let fileDataStore: LocalForage | null = null;
+let currentStorageMode: StorageMode = StorageMode.DISABLED;
 
-// Configure preferred drivers (IndexedDB first for large files)
-textDataStore.setDriver([
-  localforage.INDEXEDDB,
-  localforage.WEBSQL,
-  localforage.LOCALSTORAGE
-]);
+// Initialize storage with proper error handling
+async function initializeStorage(): Promise<StorageMode> {
+  try {
+    // Try to initialize LocalForage instances
+    const textStore = localforage.createInstance({
+      name: 'EduVerse',
+      storeName: 'courseDrafts',
+      description: 'Course draft text data'
+    });
 
-fileDataStore.setDriver([
-  localforage.INDEXEDDB,
-  localforage.WEBSQL
-]); // Don't use localStorage for files
+    const fileStore = localforage.createInstance({
+      name: 'EduVerse',
+      storeName: 'courseFiles',
+      description: 'Course draft file data'
+    });
 
-export interface DraftFormData {
+    // Configure drivers with fallback
+    await textStore.setDriver([
+      localforage.INDEXEDDB,
+      localforage.WEBSQL,
+      localforage.LOCALSTORAGE
+    ]);
+
+    await fileStore.setDriver([
+      localforage.INDEXEDDB,
+      localforage.WEBSQL
+    ]);
+
+    // Test if the stores are ready
+    await Promise.all([
+      textStore.ready(),
+      fileStore.ready()
+    ]);
+
+    // Test basic operations
+    await textStore.setItem('test', 'test');
+    await textStore.removeItem('test');
+
+    // If we get here, LocalForage is working
+    textDataStore = textStore;
+    fileDataStore = fileStore;
+    currentStorageMode = StorageMode.LOCALFORAGE;
+
+    console.log('✅ LocalForage initialized successfully');
+    return StorageMode.LOCALFORAGE;
+
+  } catch (error) {
+    console.warn('⚠️ LocalForage failed, falling back to localStorage:', error);
+
+    // Test if localStorage is available
+    try {
+      const testKey = 'eduverse_storage_test';
+      localStorage.setItem(testKey, 'test');
+      localStorage.removeItem(testKey);
+      currentStorageMode = StorageMode.LOCALSTORAGE;
+      console.log('✅ localStorage fallback initialized');
+      return StorageMode.LOCALSTORAGE;
+    } catch (localStorageError) {
+      console.error('❌ No storage method available:', localStorageError);
+      currentStorageMode = StorageMode.DISABLED;
+      return StorageMode.DISABLED;
+    }
+  }
+}export interface DraftFormData {
   title: string;
   description: string;
   creatorName: string;
@@ -67,6 +117,35 @@ export interface FileReference {
 class DraftStorageService {
   private readonly DRAFT_KEY = 'currentCourseDraft';
   private readonly FILE_PREFIX = 'file_';
+  private isInitialized = false;
+
+  /**
+   * Initialize storage with proper error handling
+   */
+  async initialize(): Promise<StorageMode> {
+    if (this.isInitialized) {
+      return currentStorageMode;
+    }
+
+    const mode = await initializeStorage();
+    this.isInitialized = true;
+    return mode;
+  }
+
+  /**
+   * Check if storage is available
+   */
+  async isSupported(): Promise<boolean> {
+    const mode = await this.initialize();
+    return mode !== StorageMode.DISABLED;
+  }
+
+  /**
+   * Get current storage mode
+   */
+  getStorageMode(): StorageMode {
+    return currentStorageMode;
+  }
 
   /**
    * Generate unique file ID
@@ -76,27 +155,46 @@ class DraftStorageService {
   }
 
   /**
-   * Store a file and return its reference ID
+   * Store a file with fallback handling
    */
   async storeFile(file: File): Promise<string> {
+    const mode = await this.initialize();
     const fileId = this.generateFileId();
 
     try {
-      // Store the actual file as blob
-      await fileDataStore.setItem(fileId, file);
+      if (mode === StorageMode.LOCALFORAGE && fileDataStore) {
+        // Store the actual file as blob
+        await fileDataStore.setItem(fileId, file);
 
-      // Store file metadata for reference
-      const fileRef: FileReference = {
-        id: fileId,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        lastModified: file.lastModified
-      };
+        // Store file metadata for reference
+        const fileRef: FileReference = {
+          id: fileId,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          lastModified: file.lastModified
+        };
 
-      await fileDataStore.setItem(`${fileId}_meta`, fileRef);
+        await fileDataStore.setItem(`${fileId}_meta`, fileRef);
+        return fileId;
 
-      return fileId;
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        // For localStorage, we can't store large files, so we'll just store metadata
+        const fileRef: FileReference = {
+          id: fileId,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          lastModified: file.lastModified
+        };
+
+        localStorage.setItem(`eduverse_file_${fileId}`, JSON.stringify(fileRef));
+        console.warn('⚠️ File content not stored due to localStorage limitations. Only metadata saved.');
+        return fileId;
+
+      } else {
+        throw new Error('No storage method available');
+      }
     } catch (error) {
       console.error('Failed to store file:', error);
       throw new Error('Failed to store file');
@@ -107,9 +205,19 @@ class DraftStorageService {
    * Retrieve a file by its ID
    */
   async getFile(fileId: string): Promise<File | null> {
+    const mode = await this.initialize();
+
     try {
-      const file = await fileDataStore.getItem<File>(fileId);
-      return file;
+      if (mode === StorageMode.LOCALFORAGE && fileDataStore) {
+        const file = await fileDataStore.getItem<File>(fileId);
+        return file;
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        // localStorage can't store files, return null
+        console.warn('⚠️ File content not available in localStorage mode');
+        return null;
+      } else {
+        return null;
+      }
     } catch (error) {
       console.error('Failed to retrieve file:', error);
       return null;
@@ -120,9 +228,18 @@ class DraftStorageService {
    * Get file metadata
    */
   async getFileMetadata(fileId: string): Promise<FileReference | null> {
+    const mode = await this.initialize();
+
     try {
-      const metadata = await fileDataStore.getItem<FileReference>(`${fileId}_meta`);
-      return metadata;
+      if (mode === StorageMode.LOCALFORAGE && fileDataStore) {
+        const metadata = await fileDataStore.getItem<FileReference>(`${fileId}_meta`);
+        return metadata;
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        const stored = localStorage.getItem(`eduverse_file_${fileId}`);
+        return stored ? JSON.parse(stored) : null;
+      } else {
+        return null;
+      }
     } catch (error) {
       console.error('Failed to retrieve file metadata:', error);
       return null;
@@ -148,20 +265,28 @@ class DraftStorageService {
    * Delete a file by ID
    */
   async deleteFile(fileId: string): Promise<void> {
+    const mode = await this.initialize();
+
     try {
-      await Promise.all([
-        fileDataStore.removeItem(fileId),
-        fileDataStore.removeItem(`${fileId}_meta`)
-      ]);
+      if (mode === StorageMode.LOCALFORAGE && fileDataStore) {
+        await Promise.all([
+          fileDataStore.removeItem(fileId),
+          fileDataStore.removeItem(`${fileId}_meta`)
+        ]);
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        localStorage.removeItem(`eduverse_file_${fileId}`);
+      }
     } catch (error) {
       console.error('Failed to delete file:', error);
     }
   }
 
   /**
-   * Save draft data (text only, fast operation)
+   * Save draft data with fallback handling
    */
   async saveDraftData(formData: DraftFormData, sections: DraftSection[]): Promise<void> {
+    const mode = await this.initialize();
+
     try {
       const draftData: DraftData = {
         formData,
@@ -170,7 +295,13 @@ class DraftStorageService {
         lastModified: Date.now()
       };
 
-      await textDataStore.setItem(this.DRAFT_KEY, draftData);
+      if (mode === StorageMode.LOCALFORAGE && textDataStore) {
+        await textDataStore.setItem(this.DRAFT_KEY, draftData);
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        localStorage.setItem(`eduverse_${this.DRAFT_KEY}`, JSON.stringify(draftData));
+      } else {
+        throw new Error('No storage method available');
+      }
     } catch (error) {
       console.error('Failed to save draft data:', error);
       throw new Error('Failed to save draft');
@@ -181,9 +312,18 @@ class DraftStorageService {
    * Load draft data
    */
   async loadDraftData(): Promise<DraftData | null> {
+    const mode = await this.initialize();
+
     try {
-      const draftData = await textDataStore.getItem<DraftData>(this.DRAFT_KEY);
-      return draftData;
+      if (mode === StorageMode.LOCALFORAGE && textDataStore) {
+        const draftData = await textDataStore.getItem<DraftData>(this.DRAFT_KEY);
+        return draftData;
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        const stored = localStorage.getItem(`eduverse_${this.DRAFT_KEY}`);
+        return stored ? JSON.parse(stored) : null;
+      } else {
+        return null;
+      }
     } catch (error) {
       console.error('Failed to load draft data:', error);
       return null;
@@ -194,6 +334,8 @@ class DraftStorageService {
    * Clear all draft data and associated files
    */
   async clearDraft(): Promise<void> {
+    const mode = await this.initialize();
+
     try {
       // Get draft data to find file IDs
       const draftData = await this.loadDraftData();
@@ -217,7 +359,11 @@ class DraftStorageService {
       }
 
       // Clear draft data
-      await textDataStore.removeItem(this.DRAFT_KEY);
+      if (mode === StorageMode.LOCALFORAGE && textDataStore) {
+        await textDataStore.removeItem(this.DRAFT_KEY);
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        localStorage.removeItem(`eduverse_${this.DRAFT_KEY}`);
+      }
     } catch (error) {
       console.error('Failed to clear draft:', error);
     }
@@ -230,85 +376,129 @@ class DraftStorageService {
     textDataKeys: number;
     fileDataKeys: number;
     estimatedSize: string;
+    storageMode: StorageMode;
   }> {
-    try {
-      const [textKeys, fileKeys] = await Promise.all([
-        textDataStore.keys(),
-        fileDataStore.keys()
-      ]);
+    const mode = await this.initialize();
 
-      return {
-        textDataKeys: textKeys.length,
-        fileDataKeys: fileKeys.length,
-        estimatedSize: 'Unknown' // Browser doesn't expose actual storage usage
-      };
+    try {
+      if (mode === StorageMode.LOCALFORAGE && textDataStore && fileDataStore) {
+        const [textKeys, fileKeys] = await Promise.all([
+          textDataStore.keys(),
+          fileDataStore.keys()
+        ]);
+
+        return {
+          textDataKeys: textKeys.length,
+          fileDataKeys: fileKeys.length,
+          estimatedSize: 'Unknown',
+          storageMode: mode
+        };
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        let count = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('eduverse_')) {
+            count++;
+          }
+        }
+
+        return {
+          textDataKeys: count,
+          fileDataKeys: 0,
+          estimatedSize: 'Limited',
+          storageMode: mode
+        };
+      } else {
+        return {
+          textDataKeys: 0,
+          fileDataKeys: 0,
+          estimatedSize: 'Disabled',
+          storageMode: mode
+        };
+      }
     } catch (error) {
       console.error('Failed to get storage stats:', error);
       return {
         textDataKeys: 0,
         fileDataKeys: 0,
-        estimatedSize: 'Error'
+        estimatedSize: 'Error',
+        storageMode: mode
       };
     }
   }
 
   /**
-   * Check if drafts are supported
+   * Check if drafts are supported (updated)
    */
-  async isSupported(): Promise<boolean> {
+  async isReady(): Promise<boolean> {
+    const mode = await this.initialize();
+
     try {
-      await textDataStore.ready();
-      await fileDataStore.ready();
-      return true;
+      if (mode === StorageMode.LOCALFORAGE && textDataStore && fileDataStore) {
+        await Promise.all([
+          textDataStore.ready(),
+          fileDataStore.ready()
+        ]);
+        return true;
+      } else if (mode === StorageMode.LOCALSTORAGE) {
+        return true;
+      } else {
+        return false;
+      }
     } catch (error) {
-      console.error('Draft storage not supported:', error);
+      console.error('Storage not ready:', error);
       return false;
     }
   }
 
   /**
-   * Clean up orphaned files (files without associated draft data)
+   * Clean up orphaned files
    */
   async cleanupOrphanedFiles(): Promise<number> {
+    const mode = await this.initialize();
+
     try {
       const draftData = await this.loadDraftData();
-      const allFileKeys = await fileDataStore.keys();
 
-      // Filter only actual file keys (not metadata)
-      const fileKeys = allFileKeys.filter(key =>
-        key.startsWith(this.FILE_PREFIX) && !key.endsWith('_meta')
-      );
+      if (mode === StorageMode.LOCALFORAGE && fileDataStore) {
+        const allFileKeys = await fileDataStore.keys();
 
-      if (!draftData) {
-        // No draft data, all files are orphaned
-        await Promise.all(fileKeys.map(fileId => this.deleteFile(fileId)));
-        return fileKeys.length;
-      }
+        // Filter only actual file keys (not metadata)
+        const fileKeys = allFileKeys.filter(key =>
+          key.startsWith(this.FILE_PREFIX) && !key.endsWith('_meta')
+        );
 
-      // Collect active file IDs
-      const activeFileIds = new Set<string>();
-      if (draftData.formData.thumbnailFileId) {
-        activeFileIds.add(draftData.formData.thumbnailFileId);
-      }
-      draftData.sections.forEach(section => {
-        if (section.fileId) {
-          activeFileIds.add(section.fileId);
+        if (!draftData) {
+          // No draft data, all files are orphaned
+          await Promise.all(fileKeys.map(fileId => this.deleteFile(fileId)));
+          return fileKeys.length;
         }
-      });
 
-      // Delete orphaned files
-      const orphanedFiles = fileKeys.filter(fileId => !activeFileIds.has(fileId));
-      await Promise.all(orphanedFiles.map(fileId => this.deleteFile(fileId)));
+        // Collect active file IDs
+        const activeFileIds = new Set<string>();
+        if (draftData.formData.thumbnailFileId) {
+          activeFileIds.add(draftData.formData.thumbnailFileId);
+        }
+        draftData.sections.forEach(section => {
+          if (section.fileId) {
+            activeFileIds.add(section.fileId);
+          }
+        });
 
-      return orphanedFiles.length;
+        // Delete orphaned files
+        const orphanedFiles = fileKeys.filter(fileId => !activeFileIds.has(fileId));
+        await Promise.all(orphanedFiles.map(fileId => this.deleteFile(fileId)));
+
+        return orphanedFiles.length;
+      } else {
+        return 0;
+      }
     } catch (error) {
       console.error('Failed to cleanup orphaned files:', error);
       return 0;
     }
   }
-}
-
-// Export singleton instance
+}// Export singleton instance
 export const draftStorage = new DraftStorageService();
 
 // Export for debugging

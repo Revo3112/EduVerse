@@ -1,7 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Rating, RatingButton } from "@/components/ui/rating";
+import { useCourseRating } from "@/hooks/useRating";
 import { Course, getCategoryName, getDifficultyName, weiToEth } from "@/lib/mock-data";
+import { formatRatingDisplay } from "@/lib/rating-utils";
 import { BookOpen, Clock, Star, User } from "lucide-react";
 import dynamic from 'next/dynamic';
 import { memo, useCallback, useMemo, useState } from 'react';
@@ -63,6 +66,9 @@ const getCategoryColor = (categoryName: string): string => {
 
 export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Fetch course rating data
+  const { data: ratingData, isLoading: isRatingLoading } = useCourseRating(course.id);
 
   // Memoize expensive calculations
   const courseData = useMemo(() => ({
@@ -142,8 +148,28 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
           {/* Course Metadata */}
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
-              <Star className="h-4 w-4 text-yellow-400 fill-current" />
-              <span>4.8</span>
+              {isRatingLoading ? (
+                <div className="flex items-center gap-1">
+                  <Star className="h-4 w-4 text-gray-300 animate-pulse" />
+                  <span className="animate-pulse">Loading...</span>
+                </div>
+              ) : ratingData && ratingData.totalRatings > 0 ? (
+                <div className="flex items-center gap-1">
+                  <Rating value={ratingData.averageRating} readOnly className="gap-0">
+                    {Array.from({ length: 5 }, (_, i) => (
+                      <RatingButton key={i} size={16} />
+                    ))}
+                  </Rating>
+                  <span className="ml-1">
+                    {formatRatingDisplay(ratingData.averageRating, true, ratingData.totalRatings)}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Star className="h-4 w-4 text-gray-300" />
+                  <span>No ratings yet</span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <Clock className="h-4 w-4" />
