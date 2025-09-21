@@ -417,6 +417,8 @@ export const mockUserCertificate: Certificate = {
 };
 
 
+
+
 // Kelas Mock Database untuk simulasi interaksi backend/blockchain di frontend
 export class MockEduVerseDatabase {
   getCourse(courseId: bigint): ExtendedCourse | null {
