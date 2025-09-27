@@ -11,7 +11,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { validateMantaNetwork } = require("./core/system");
+const { validateMantaNetwork, PROJECT_ROOT, PATHS } = require("./core/system");
 
 class ExportSystem {
   constructor() {
@@ -24,16 +24,16 @@ class ExportSystem {
       ],
       paths: {
         mobile: {
-          abi: path.join(__dirname, "../EduVerseApp/src/constants/abi"),
-          env: path.join(__dirname, "../EduVerseApp/.env"),
-          envContracts: path.join(__dirname, "../EduVerseApp/.env.contracts"),
+          abi: PATHS.mobileAbi,
+          env: PATHS.mobileEnv,
+          envContracts: path.join(PROJECT_ROOT, "EduVerseApp/.env.contracts"),
         },
         frontend: {
-          abi: path.join(__dirname, "../eduweb/abis"),
-          env: path.join(__dirname, "../eduweb/.env.local"),
+          abi: PATHS.frontendAbi,
+          env: path.join(PROJECT_ROOT, "eduweb/.env.local"),
         },
-        artifacts: path.join(__dirname, "../artifacts/contracts"),
-        deployedContracts: path.join(__dirname, "../deployed-contracts.json"),
+        artifacts: PATHS.artifacts,
+        deployedContracts: PATHS.deployedContracts,
       },
     };
   }
@@ -118,8 +118,9 @@ class ExportSystem {
           continue;
         }
 
-        const artifact = require(artifactPath);
-        const abiContent = JSON.stringify(artifact.abi, null, 2);
+        // Use fs.readFileSync instead of require() to avoid caching issues
+        const artifactData = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+        const abiContent = JSON.stringify(artifactData.abi, null, 2);
 
         // Export to selected targets
         targets.forEach(targetPath => {

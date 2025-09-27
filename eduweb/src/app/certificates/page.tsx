@@ -160,6 +160,32 @@ const getDifficultyName = (difficulty: CourseDifficulty): string => {
   return CourseDifficulty[difficulty]
 }
 
+// Helper function to get category color that supports light/dark mode
+const getCategoryColor = (categoryName: string): string => {
+  const colors: Record<string, string> = {
+    Programming: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+    Design: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+    Business: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+    Marketing: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
+    DataScience: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300',
+    Finance: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300',
+    Healthcare: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
+    Language: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300',
+    Arts: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300',
+    Mathematics: 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-300',
+    Science: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300',
+    Engineering: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
+    Technology: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300',
+    Education: 'bg-lime-100 text-lime-800 dark:bg-lime-900 dark:text-lime-300',
+    Psychology: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
+    Culinary: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
+    PersonalDevelopment: 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300',
+    Legal: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
+    Sports: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+  };
+  return colors[categoryName] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+}
+
 //================================================================//
 // *** TIMELINE ITEM COMPONENT FOR CERTIFICATES *** //
 //================================================================//
@@ -175,8 +201,8 @@ const TimelineItem: React.FC<TimelineItemProps> = ({ course, isLast, onClick }) 
     <div className="relative flex">
       {/* Column 1: Completion Date */}
       <div className="w-28 flex-shrink-0 text-right pr-8 pt-1">
-        <p className="font-semibold text-white">{course.completedDate}</p>
-        <p className="text-sm text-gray-400">{course.completedDay}</p>
+        <p className="font-semibold text-foreground">{course.completedDate}</p>
+        <p className="text-sm text-muted-foreground">{course.completedDay}</p>
       </div>
 
       {/* Column 2: Timeline Dot and Connecting Line */}
@@ -192,14 +218,14 @@ const TimelineItem: React.FC<TimelineItemProps> = ({ course, isLast, onClick }) 
             }}
           />
         )}
-        <div className="relative z-10 h-3 w-3 mt-[7px] rounded-full bg-green-500 border-2 border-[#121212]" />
+        <div className="relative z-10 h-3 w-3 mt-[7px] rounded-full bg-green-500 border-2 border-background" />
       </div>
 
       {/* Column 3: Certificate Content Card */}
       <div className="flex-1 pb-10 pl-8">
         <Card
           onClick={onClick}
-          className="bg-[#1C1C1C] border border-gray-800 shadow-md transition-all hover:border-gray-700 cursor-pointer"
+          className="bg-card border-border shadow-md transition-all hover:border-muted-foreground cursor-pointer"
         >
           <CardContent className="p-4">
             <div className="flex items-start justify-between gap-4">
@@ -207,23 +233,27 @@ const TimelineItem: React.FC<TimelineItemProps> = ({ course, isLast, onClick }) 
               <div className="flex-1">
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
-                    <Badge className="bg-green-900/50 text-green-300 border border-green-700/50 text-xs font-semibold px-2.5 py-0.5">
+                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 border-green-300 dark:border-green-700/50 text-xs font-semibold px-2.5 py-0.5">
                       <CheckCircle className="w-3 h-3 mr-1" />
                       Completed
                     </Badge>
                   </div>
-                  <h3 className="text-md font-bold text-white leading-tight">{course.title}</h3>
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <h3 className="text-md font-bold text-foreground leading-tight">{course.title}</h3>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <BookOpen className="w-4 h-4" />
                     <span>By {course.creator.name}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <Trophy className="w-4 h-4" />
-                    <span>{getCategoryName(course.category)} • {getDifficultyName(course.difficulty)}</span>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Trophy className="w-4 h-4 text-muted-foreground" />
+                    <Badge variant="outline" className={getCategoryColor(getCategoryName(course.category))}>
+                      {getCategoryName(course.category)}
+                    </Badge>
+                    <span className="text-muted-foreground">•</span>
+                    <span className="text-muted-foreground">{getDifficultyName(course.difficulty)}</span>
                   </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-gray-400">
+                  <div className="text-sm text-muted-foreground">
                     {course.completedSections}/{course.totalSections} sections completed
                   </div>
                 </div>
@@ -262,11 +292,11 @@ export default function CertificateTimelinePage() {
 
   return (
     <>
-      <div className="bg-[#121212] min-h-screen p-4 sm:p-6 md:p-8">
+      <div className="bg-background min-h-screen p-4 sm:p-6 md:p-8">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white">Certificates</h1>
-            <p className="text-gray-400">Your completed courses and earned certificates timeline.</p>
+            <h1 className="text-3xl font-bold text-foreground">Certificates</h1>
+            <p className="text-muted-foreground">Your completed courses and earned certificates timeline.</p>
           </div>
 
           <div className="relative flex flex-col">
@@ -285,12 +315,12 @@ export default function CertificateTimelinePage() {
 
       {/* Drawer for course details */}
       <Sheet open={!!selectedCourse} onOpenChange={(isOpen) => !isOpen && handleDrawerClose()}>
-        <SheetContent className="w-full sm:max-w-lg bg-[#181818] border-l border-gray-800 text-white p-0">
+        <SheetContent className="w-full sm:max-w-lg bg-background border-l border-border text-foreground p-0">
           {selectedCourse && (
             <>
-              <SheetHeader className="p-6 border-b border-gray-800">
-                <SheetTitle className="text-white text-xl">{selectedCourse.title}</SheetTitle>
-                <SheetDescription className="text-gray-400">
+              <SheetHeader className="p-6 border-b border-border">
+                <SheetTitle className="text-foreground text-xl">{selectedCourse.title}</SheetTitle>
+                <SheetDescription className="text-muted-foreground">
                   Completed on {selectedCourse.completedDate} • {getCategoryName(selectedCourse.category)}
                 </SheetDescription>
               </SheetHeader>
@@ -306,32 +336,32 @@ export default function CertificateTimelinePage() {
                 </div>
 
                 <div>
-                  <h3 className="font-semibold mb-2">About this course</h3>
-                  <p className="text-gray-300 text-sm leading-relaxed">{selectedCourse.description}</p>
+                  <h3 className="font-semibold mb-2 text-foreground">About this course</h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed">{selectedCourse.description}</p>
                 </div>
 
                 <div>
-                  <h3 className="font-semibold mb-2">Instructor</h3>
+                  <h3 className="font-semibold mb-2 text-foreground">Instructor</h3>
                   <div className="flex items-center gap-3">
                     <Avatar className="w-8 h-8">
                       <AvatarImage src={selectedCourse.creator.avatar} />
                       <AvatarFallback>{selectedCourse.creator.name.charAt(0)}</AvatarFallback>
                     </Avatar>
-                    <span className="text-sm text-gray-300">{selectedCourse.creator.name}</span>
+                    <span className="text-sm text-muted-foreground">{selectedCourse.creator.name}</span>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="font-semibold mb-3">Completed Sections</h3>
+                  <h3 className="font-semibold mb-3 text-foreground">Completed Sections</h3>
                   <div className="space-y-2">
                     {selectedCourse.sections.map((section) => (
-                      <div key={section.id} className="flex items-center justify-between p-3 bg-[#2A2A2A] rounded-lg">
+                      <div key={section.id} className="flex items-center justify-between p-3 bg-secondary rounded-lg">
                         <div className="flex items-center gap-3">
                           <CheckCircle className="w-4 h-4 text-green-400" />
-                          <span className="text-sm text-gray-200">{section.title}</span>
+                          <span className="text-sm text-foreground">{section.title}</span>
                         </div>
                         {section.completedAt && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-muted-foreground">
                             {new Date(section.completedAt).toLocaleDateString()}
                           </span>
                         )}
@@ -339,10 +369,10 @@ export default function CertificateTimelinePage() {
                     ))}
                   </div>
 
-                  <div className="mt-4 p-3 bg-green-900/20 border border-green-700/30 rounded-lg">
+                  <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/30 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-green-400" />
-                      <span className="text-sm text-green-300 font-medium">
+                      <Trophy className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      <span className="text-sm text-green-700 dark:text-green-300 font-medium">
                         Course completed with {selectedCourse.completedSections}/{selectedCourse.totalSections} sections
                       </span>
                     </div>

@@ -3,7 +3,7 @@
  * Handles all testing-related operations
  */
 
-const { Logger, executeCommand, getNetworkInfo, colors, fileExists, validateMantaNetwork } = require('../../core/system');
+const { Logger, executeCommand, getNetworkInfo, fileExists, validateMantaNetwork } = require('../../core/system');
 
 class TestingManager {
   constructor() {

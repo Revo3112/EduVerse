@@ -1,5 +1,6 @@
 const { ethers } = require("hardhat");
 const fs = require("fs");
+const { PATHS } = require("./core/system");
 
 // Fungsi pembantu untuk menangani transaksi dengan logging yang lebih baik
 async function sendTransaction(txPromise, description) {
@@ -20,7 +21,7 @@ async function main() {
 
     // Muat alamat kontrak yang sudah di-deploy
     const addresses = JSON.parse(
-      fs.readFileSync("deployed-contracts.json", "utf8")
+      fs.readFileSync(PATHS.deployedContracts, "utf8")
     );
 
     // Di testnet, kita akan menggunakan akun yang sama untuk semua peran

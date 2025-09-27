@@ -1,28 +1,37 @@
 /**
  * Complete Deployment Script for EduVerse Platform
- * Deploys all contracts and automatically exports ABIs
+ * Deploys all contracts to Manta Pacific Testnet and exports ABIs
  */
 
 const { ethers, network } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 const { ExportSystem } = require("./export-system");
+const { PATHS } = require("./core/system");
 
 async function deployContract(contractName, ...args) {
   console.log(`\n🚀 Deploying ${contractName}...`);
   const ContractFactory = await ethers.getContractFactory(contractName);
   const contract = await ContractFactory.deploy(...args);
+
+  console.log("⏳ Waiting for deployment transaction...");
   await contract.waitForDeployment();
-  console.log(`✅ ${contractName} deployed to: ${contract.target}`);
+
+  const address = await contract.getAddress();
+  console.log(`✅ ${contractName} deployed successfully to: ${address}`);
+  console.log(`🔍 Verify contract with:`);
+  console.log(`   npx hardhat verify --network mantaPacificTestnet ${address}`);
+
   return contract;
 }
 
 async function main() {
-  console.log("🚀 Starting Complete EduVerse Platform Deployment...");
+  console.log("🚀 Starting EduVerse Platform Deployment to Manta Pacific Testnet...");
 
   const [deployer] = await ethers.getSigners();
-  console.log(`📝 Deploying contracts with address: ${deployer.address}`);
+  console.log(`📝 Deploying with account: ${deployer.address}`);
   console.log(`💰 Account balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
+  console.log(`🌐 Network: ${network.name} (Chain ID: ${network.config.chainId})`);
 
   try {
     // Deploy all contracts
@@ -59,8 +68,14 @@ async function main() {
       deployDate: new Date().toISOString(),
     };
 
-    fs.writeFileSync("deployed-contracts.json", JSON.stringify(addresses, null, 2));
-    console.log("\n💾 Contract addresses saved to deployed-contracts.json");
+    // Ensure directory exists before writing
+    const deployedContractsDir = path.dirname(PATHS.deployedContracts);
+    if (!fs.existsSync(deployedContractsDir)) {
+      fs.mkdirSync(deployedContractsDir, { recursive: true });
+    }
+
+    fs.writeFileSync(PATHS.deployedContracts, JSON.stringify(addresses, null, 2));
+    console.log(`\n💾 Contract addresses saved to ${PATHS.deployedContracts}`);
 
     // Auto-export ABIs and update environments using unified system
     const exportSystem = new ExportSystem();

@@ -3,9 +3,8 @@
  * Handles all verification-related operations
  */
 
-const { Logger, executeCommand, getNetworkInfo, colors, fileExists, readJsonFile } = require('../../core/system');
+const { Logger, executeCommand, getNetworkInfo, fileExists, readJsonFile } = require('../../core/system');
 const fs = require('fs');
-const path = require('path');
 
 class VerificationManager {
   constructor() {

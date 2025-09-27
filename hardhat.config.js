@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
+require("hardhat/config");
 
 /** @type import('hardhat/config').HardhatUserConfig */
 
@@ -17,10 +18,6 @@ module.exports = {
     },
   },
   networks: {
-    localhost: {
-      url: "http://127.0.0.1:8545",
-      chainId: 31337,
-    },
     mantaPacificTestnet: {
       url: "https://pacific-rpc.sepolia-testnet.manta.network/http",
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],

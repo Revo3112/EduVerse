@@ -10,11 +10,11 @@ EduVerse adalah **ekosistem pendidikan Web3 multi-platform** dengan arsitektur p
 ## � Development Environment & AI Requirements
 
 ### **CRITICAL ENVIRONMENT SPECIFICATIONS**
-- **Operating System**: Windows 11
+- **Operating System**: Linux
 - **IDE**: Visual Studio Code with GitHub Copilot
-- **Terminal**: PowerShell (Windows PowerShell v5.1) - **MANDATORY**
+- **Terminal**: bash - **MANDATORY**
 - **Node.js**: Latest LTS version
-- **Git**: Git for Windows with PowerShell integration
+- **Git**: Git for Linux
 
 ### **MANDATORY AI AGENT REQUIREMENTS**
 
@@ -24,13 +24,13 @@ EduVerse adalah **ekosistem pendidikan Web3 multi-platform** dengan arsitektur p
 - **REQUIRED** store all important findings, solutions, and patterns using MCP memory tools
 - **ESSENTIAL** create relationships between related concepts for knowledge graph integrity
 
-#### **💡 PowerShell Command Requirements**
-- **ALL** terminal commands must be PowerShell-compatible
-- **NEVER** use bash/Linux syntax - always Windows PowerShell
-- Use `;` for command chaining: `cd eduweb; npm run dev`
-- Use `Get-ChildItem` instead of `ls`, `Remove-Item` instead of `rm`
-- Use Windows path separators: `\` not `/`
-- Example: `Get-Process node; Stop-Process -Name node -Force`
+#### **💡 bash Command Requirements**
+- **ALL** terminal commands must be bash-compatible
+- **ALWAYS** use Linux/bash syntax for file operations
+- Use `&&` for command chaining: `cd eduweb && npm run dev`
+- Use standard Unix commands: `ls`, `rm`, `cp`, `mv`
+- Use forward slashes for paths: `/` not `\`
+- Example: `ps aux | grep node; pkill node`
 
 #### **🔍 VS Code Integration**
 - Leverage GitHub Copilot for code suggestions
@@ -76,9 +76,9 @@ npm run portal → [Menu Number] → [Submenu Number]
 ```
 
 ### **Portal Menu Structure (8 Main Sections)**
-1. 🚀 **Deployment Operations** (6 sub-options)
-   - Deploy Complete System, Local Network, Separated (Reuse)
-   - Check Prerequisites, Show Status, Clean Deployment
+1. 🚀 **Deployment Operations** (4 sub-options)
+   - Deploy Complete System, Check Prerequisites
+   - Show Deployment Status, Clean Deployment
 2. 🔍 **Verification Operations** (6 sub-options)
    - Complete Verification, Blockchain Verification, Comprehensive
    - ABI Consistency Check, Quick Check, Show Status
@@ -523,25 +523,25 @@ NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS=0x...
 ## 🚀 Advanced Development Workflows
 
 ### **Daily Development Routine**
-```powershell
+```bash
 # 1. Check MCP memory first (MANDATORY)
 # Always run: mcp_memory_read_graph and mcp_memory_search_nodes
 
 # 2. Quick health check
-npm run portal; # Navigate to 6 → 1
+npm run portal  # Navigate to 6 → 1
 
-# 3. If contracts changed (PowerShell command chaining)
-npm run portal; # Navigate to 1 → 1 → 2 → 1 → 4 → 1
+# 3. If contracts changed (bash command chaining)
+npm run portal  # Navigate to 1 → 1 → 2 → 1 → 4 → 1
 
 # 4. Test changes
-npm run portal; # Navigate to 3 → 2
+npm run portal  # Navigate to 3 → 2
 
 # 5. Before committing
-npm run portal; # Navigate to 7 → 6
+npm run portal  # Navigate to 7 → 6
 
-# PowerShell-specific commands for file operations:
-Get-ChildItem deployed-contracts.json    # Check contract file
-Get-Content .env | Select-String "CHAIN" # Verify environment
+# bash-specific commands for file operations:
+ls -la deployed-contracts.json    # Check contract file
+grep "CHAIN" .env                 # Verify environment
 ```
 
 ### **Contract Change Workflow**
@@ -713,21 +713,23 @@ Contract helper functions
 | ABI Mismatches | Contract call failures | Run `→ 4 → 1` to resync ABIs |
 | Test Failures | Tests don't run | Check `→ 3 → 6` prerequisites |
 
-### **PowerShell-Specific Commands**
-```powershell
-# File operations (Windows PowerShell)
-Get-ChildItem *.json                    # List JSON files
-Get-Content deployed-contracts.json     # View contract addresses
-Remove-Item .env.backup -Force          # Delete backup files
-Test-Path "deployed-contracts.json"     # Check file existence
+### **bash-Specific Commands**
+```bash
+# File operations (Linux bash)
+ls *.json                               # List JSON files
+cat deployed-contracts.json             # View contract addresses
+rm -f .env.backup                       # Delete backup files
+test -f "deployed-contracts.json"       # Check file existence
 
 # Process management
-Get-Process node                         # Check running Node processes
-Stop-Process -Name node -Force          # Kill Node processes
-Start-Process -FilePath "npm" -ArgumentList "run", "portal" # Start portal
+ps aux | grep node                       # Check running Node processes
+pkill node                              # Kill Node processes
+npm run portal &                        # Start portal in background
 
 # Network troubleshooting
-Test-NetConnection -ComputerName "pacific-rpc.sepolia-testnet.manta.network" -Port 443
+ping pacific-rpc.sepolia-testnet.manta.network
+curl -I https://pacific-rpc.sepolia-testnet.manta.network
+```
 Invoke-WebRequest -Uri "https://pacific-rpc.sepolia-testnet.manta.network/http" -Method POST
 ```
 

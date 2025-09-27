@@ -3,7 +3,7 @@
  * Handles all deployment-related operations
  */
 
-const { Logger, executeCommand, getNetworkInfo, ensureDirectory, validateMantaNetwork } = require('../../core/system');
+const { Logger, executeCommand, getNetworkInfo, ensureDirectory, validateMantaNetwork, PATHS } = require('../../core/system');
 const { ExportSystem } = require('../../export-system');
 const fs = require('fs');
 const path = require('path');
@@ -40,50 +40,6 @@ class DeploymentManager {
 
     } catch (error) {
       Logger.error(`Deployment failed: ${error.message}`);
-      return false;
-    }
-  }
-
-  /**
-   * Deploy to localhost for development
-   */
-  async deployLocal() {
-    Logger.header("Local Development Deployment");
-
-    try {
-      await this.compile();
-      await executeCommand(
-        'npx hardhat run scripts/deploy.js --network localhost',
-        'Deploying to localhost'
-      );
-
-      Logger.success("Local deployment completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`Local deployment failed: ${error.message}`);
-      return false;
-    }
-  }
-
-  /**
-   * Deploy with separated approach (reuse existing contracts)
-   */
-  async deploySeparated() {
-    Logger.header("Separated Deployment (Reuse Existing)");
-
-    try {
-      await this.compile();
-      await executeCommand(
-        'npx hardhat run scripts/deploy.js --network mantaPacificTestnet',
-        'Deploying with separated approach'
-      );
-
-      Logger.success("Separated deployment completed!");
-      return true;
-
-    } catch (error) {
-      Logger.error(`Separated deployment failed: ${error.message}`);
       return false;
     }
   }
@@ -173,7 +129,7 @@ class DeploymentManager {
    */
   getDeploymentStatus() {
     const status = {
-      hasDeployedContracts: fs.existsSync('deployed-contracts.json'),
+      hasDeployedContracts: fs.existsSync(PATHS.deployedContracts),
       hasCompiledArtifacts: fs.existsSync('artifacts'),
       hasMobileABIs: fs.existsSync('EduVerseApp/src/constants/abi'),
       hasFrontendABIs: fs.existsSync('eduweb/abis'),

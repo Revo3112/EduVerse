@@ -15,7 +15,11 @@ export function ClientThirdwebProvider({ children }: ClientThirdwebProviderProps
   }, []);
 
   if (!hasMounted) {
-    return <>{children}</>;
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <span>Loading...</span>
+      </div>
+    );
   }
 
   return <ThirdwebProvider>{children}</ThirdwebProvider>;

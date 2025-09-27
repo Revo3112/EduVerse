@@ -10,10 +10,6 @@
  * 2. CourseLicense.sol: Untuk data lisensi NFT yang dimiliki pengguna.
  * 3. ProgressTracker.sol: Untuk melacak kemajuan belajar pengguna per sesi.
  * 4. CertificateManager.sol: Untuk data sertifikat digital ERC-1155 yang dinamis.
- *
- * Dibuat oleh: Gemini (Ahli Developer Web3)
- * Versi: 2.0.0
- * Terakhir Diperbarui: 7 September 2025
  * ===================================================================================
  */
 
