@@ -27,7 +27,7 @@ import {
   Users,
   Wallet
 } from "lucide-react"
-import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 
 // ==================== EXACT SMART CONTRACT TYPES ====================
 
@@ -1052,6 +1052,56 @@ export default function AnalyticsPage() {
     }))
   }, [transactions])
 
+  // --- Fixed scroll behavior for live feed ---
+  // Keep a ref to the scroll container so we can preserve the user's
+  // scroll position when new transactions are prepended. If the user
+  // is at the top (wants to follow new items), auto-scroll to show newest.
+  const feedContainerRef = useRef<HTMLDivElement | null>(null)
+  const prevScrollHeightRef = useRef<number>(0)
+  const isUserAtTopRef = useRef<boolean>(true)
+
+  // Update isUserAtTopRef on user scroll
+  const onFeedScroll = useCallback(() => {
+    const el = feedContainerRef.current
+    if (!el) return
+    // Consider user 'at top' if within 48px from the top
+    isUserAtTopRef.current = el.scrollTop <= 48
+  }, [])
+
+  // Initialize previous scrollHeight on mount
+  useEffect(() => {
+    const el = feedContainerRef.current
+    if (el) prevScrollHeightRef.current = el.scrollHeight
+  }, [])
+
+  // After DOM updates from transactions, adjust scroll to preserve view
+  useLayoutEffect(() => {
+    const el = feedContainerRef.current
+    if (!el) return
+
+    const newScrollHeight = el.scrollHeight
+
+    // If this is the first time, just scroll to top to show newest
+    if (prevScrollHeightRef.current === 0) {
+      el.scrollTop = 0
+      prevScrollHeightRef.current = newScrollHeight
+      return
+    }
+
+    const delta = newScrollHeight - prevScrollHeightRef.current
+
+    if (isUserAtTopRef.current) {
+      // User wants live updates: always show newest (top)
+      el.scrollTo({ top: 0, behavior: 'auto' })
+    } else {
+      // Preserve user's viewport by increasing scrollTop by the height delta
+      // caused by items prepended to the top.
+      el.scrollTop = el.scrollTop + delta
+    }
+
+    prevScrollHeightRef.current = el.scrollHeight
+  }, [transactions])
+
   return (
     <AnalyticsContainer>
       <div className="space-y-6">
@@ -1196,13 +1246,13 @@ export default function AnalyticsPage() {
             <TabsTrigger value="performance">Performance</TabsTrigger>
           </TabsList>
 
-          {/* Live Transaction Feed */}
+          {/* Live Transaction Feed - FIXED SCROLL */}
           <TabsContent value="live-feed" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Live Blockchain Events */}
-              <div className="lg:col-span-2">
-                <Card className="h-full">
-                  <CardHeader>
+            <div className="flex flex-col lg:flex-row gap-6">
+              {/* Kolom Kiri: Live Blockchain Events (2/3 Lebar) */}
+              <div className="w-full lg:w-2/3">
+                <Card className="flex flex-col h-[600px]">
+                  <CardHeader className="flex-shrink-0">
                     <CardTitle className="flex items-center justify-between">
                       <div className="flex items-center">
                         <Activity className="h-5 w-5 mr-2" />
@@ -1214,30 +1264,28 @@ export default function AnalyticsPage() {
                       Real-time events from EduVerse smart contracts on Manta Pacific
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-0">
-                    <div className="max-h-96 overflow-y-auto">
-                      {transactions.length === 0 ? (
-                        <div className="flex items-center justify-center p-8 text-muted-foreground">
-                          Monitoring blockchain for transactions...
-                        </div>
-                      ) : (
-                        transactions.map((transaction) => (
-                          <TransactionRow key={transaction.id} transaction={transaction} />
-                        ))
-                      )}
-                    </div>
+                  <CardContent ref={feedContainerRef} onScroll={onFeedScroll} className="flex-1 overflow-y-auto p-0 min-h-0">
+                    {transactions.length === 0 ? (
+                      <div className="flex items-center justify-center p-8 text-muted-foreground h-full">
+                        Monitoring blockchain for transactions...
+                      </div>
+                    ) : (
+                      transactions.map((transaction) => (
+                        <TransactionRow key={transaction.id} transaction={transaction} />
+                      ))
+                    )}
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Activity Distribution: two cards, each exactly 384px high */}
-              <div className="space-y-4">
-                <Card className="h-96 flex flex-col">
+              {/* Kolom Kanan: Dua Card (1/3 Lebar) */}
+              <div className="w-full lg:w-1/3 flex flex-col gap-6">
+                <Card className="flex-1 flex flex-col">
                   <CardHeader className="flex-shrink-0">
                     <CardTitle>Contract Activity</CardTitle>
                     <CardDescription>Transaction distribution by contract</CardDescription>
                   </CardHeader>
-                  <CardContent className="flex-1 overflow-y-auto">
+                  <CardContent className="flex-1 overflow-y-auto min-h-0">
                     <div className="space-y-3">
                       {contractActivity.map(({ contract, count }) => (
                         <div key={contract} className="flex items-center justify-between">
@@ -1249,20 +1297,20 @@ export default function AnalyticsPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="h-96 flex flex-col">
+                <Card className="flex-1 flex flex-col">
                   <CardHeader className="flex-shrink-0">
                     <CardTitle>Transaction Types</CardTitle>
                     <CardDescription>Most frequent activities</CardDescription>
                   </CardHeader>
-                  <CardContent className="flex-1 overflow-y-auto">
-                    <div className="space-y-3">
+                  <CardContent className="flex-1 overflow-y-auto p-6 min-h-0">
+                    <div className="space-y-3 pr-2">
                       {transactionTypeDistribution.map(({ type, count, percentage }) => (
-                        <div key={type} className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="capitalize truncate">
+                        <div key={type} className="space-y-2">
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="capitalize truncate font-medium">
                               {type.replace(/_/g, ' ')}
                             </span>
-                            <span>{count}</span>
+                            <span className="text-muted-foreground ml-2 flex-shrink-0">{count}</span>
                           </div>
                           <Progress value={percentage} className="h-2" />
                         </div>
