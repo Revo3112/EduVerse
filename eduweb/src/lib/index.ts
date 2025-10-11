@@ -1,11 +1,11 @@
-// Thirdweb Configuration Exports
+// Thirdweb Configuration Exports - Client Side Only
 export { client } from "../app/client";
+
+// NOTE: serverClient is NOT exported here to prevent client-side imports
+// Import it directly from "@/lib/server-client" in API routes only
+
 export { chain, mantaPacificTestnet } from "./chains";
 export {
-  courseFactory,
-  courseLicense,
-  progressTracker,
-  certificateManager,
-  getEduVerseContract,
-  CONTRACT_ADDRESSES
+  certificateManager, CONTRACT_ADDRESSES, courseFactory,
+  courseLicense, getEduVerseContract, progressTracker
 } from "./contracts";

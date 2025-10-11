@@ -32,54 +32,83 @@ interface NavigationItem {
   description: string
 }
 
-const navigationItems: NavigationItem[] = [
+interface NavigationGroup {
+  groupTitle: string
+  items: NavigationItem[]
+}
+
+const navigationGroups: NavigationGroup[] = [
+  // Public - Accessible to everyone
   {
-    title: "Dashboard",
-    url: "/dashboard",
-    icon: Home,
-    description: "Your learning & teaching hub"
+    groupTitle: "Public",
+    items: [
+      {
+        title: "Dashboard",
+        url: "/dashboard",
+        icon: Home,
+        description: "Your learning & teaching hub"
+      },
+      {
+        title: "Browse Courses",
+        url: "/courses",
+        icon: BookOpen,
+        description: "Discover new knowledge"
+      },
+      {
+        title: "Analytics",
+        url: "/analytics",
+        icon: BarChart3,
+        description: "Real-time platform analytics"
+      }
+    ]
   },
+  // Student - For learners
   {
-    title: "Browse Courses",
-    url: "/courses",
-    icon: BookOpen,
-    description: "Discover new knowledge"
+    groupTitle: "Student",
+    items: [
+      {
+        title: "My Learning",
+        url: "/learning",
+        icon: GraduationCap,
+        description: "Track progress & achievements"
+      },
+      {
+        title: "Certificates",
+        url: "/certificates",
+        icon: Award,
+        description: "Your earned credentials"
+      }
+    ]
   },
+  // Instructor - For course creators
   {
-    title: "My Learning",
-    url: "/learning",
-    icon: GraduationCap,
-    description: "Track progress & achievements"
+    groupTitle: "Instructor",
+    items: [
+      {
+        title: "Create Course",
+        url: "/create",
+        icon: PlusCircle,
+        description: "Share your expertise"
+      },
+      {
+        title: "My Courses",
+        url: "/myCourse",
+        icon: BookOpen,
+        description: "Manage your content"
+      }
+    ]
   },
+  // Account - Personal settings
   {
-    title: "Create Course",
-    url: "/create",
-    icon: PlusCircle,
-    description: "Share your expertise"
-  },
-  {
-    title: "My Courses",
-    url: "/myCourse",
-    icon: BookOpen,
-    description: "Manage your content"
-  },
-  {
-    title: "Analytics",
-    url: "/analytics",
-    icon: BarChart3,
-    description: "Real-time platform analytics"
-  },
-  {
-    title: "Certificates",
-    url: "/certificates",
-    icon: Award,
-    description: "Your earned credentials"
-  },
-  {
-    title: "Profile",
-    url: "/profile",
-    icon: User,
-    description: "Manage your account"
+    groupTitle: "Account",
+    items: [
+      {
+        title: "Profile",
+        url: "/profile",
+        icon: User,
+        description: "Manage your account"
+      }
+    ]
   }
 ]
 
@@ -195,41 +224,53 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
 
             {/* Navigation */}
             <div className="flex-1 overflow-hidden p-2">
-              <div className="h-full overflow-y-auto space-y-1">
-                {navigationItems.map((item) => {
-                  const isActive = pathname === item.url
-                  const Icon = item.icon
+              <div className="h-full overflow-y-auto space-y-4">
+                {navigationGroups.map((group) => (
+                  <div key={group.groupTitle} className="space-y-1">
+                    {/* Group Title */}
+                    <div className="px-3 py-1.5">
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        {group.groupTitle}
+                      </h3>
+                    </div>
 
-                  return (
-                    <Tooltip key={item.title}>
-                      <TooltipTrigger asChild>
-                        <Link
-                          href={item.url}
-                          className={cn(
-                            "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-sm",
-                            isActive
-                              ? "bg-primary/10 text-primary font-medium shadow-sm"
-                              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                          )}
-                        >
-                          <Icon className="w-4 h-4 flex-shrink-0" />
-                          <span className="flex-1">{item.title}</span>
-                          {isActive && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="w-2 h-2 bg-primary rounded-full"
-                            />
-                          )}
-                        </Link>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="font-medium">
-                        <p>{item.title}</p>
-                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )
-                })}
+                    {/* Group Items */}
+                    {group.items.map((item) => {
+                      const isActive = pathname === item.url
+                      const Icon = item.icon
+
+                      return (
+                        <Tooltip key={item.title}>
+                          <TooltipTrigger asChild>
+                            <Link
+                              href={item.url}
+                              className={cn(
+                                "flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-sm",
+                                isActive
+                                  ? "bg-primary/10 text-primary font-medium shadow-sm"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                              )}
+                            >
+                              <Icon className="w-4 h-4 flex-shrink-0" />
+                              <span className="flex-1">{item.title}</span>
+                              {isActive && (
+                                <motion.div
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  className="w-2 h-2 bg-primary rounded-full"
+                                />
+                              )}
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="font-medium">
+                            <p>{item.title}</p>
+                            <p className="text-xs text-muted-foreground">{item.description}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -326,42 +367,54 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
 
                   {/* Navigation */}
                   <div className="flex-1 p-4 overflow-hidden">
-                    <div className="h-full overflow-y-auto space-y-1">
-                      {navigationItems.map((item) => {
-                        const isActive = pathname === item.url
-                        const Icon = item.icon
+                    <div className="h-full overflow-y-auto space-y-4">
+                      {navigationGroups.map((group) => (
+                        <div key={group.groupTitle} className="space-y-1">
+                          {/* Group Title */}
+                          <div className="px-3 py-1.5">
+                            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                              {group.groupTitle}
+                            </h3>
+                          </div>
 
-                        return (
-                          <Tooltip key={item.title}>
-                            <TooltipTrigger asChild>
-                              <Link
-                                href={item.url}
-                                onClick={closeHoverSidebar}
-                                className={cn(
-                                  "flex items-center space-x-3 w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-sm",
-                                  isActive
-                                    ? "bg-primary/10 text-primary font-medium shadow-sm"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                                )}
-                              >
-                                <Icon className="w-4 h-4 flex-shrink-0" />
-                                <span className="flex-1">{item.title}</span>
-                                {isActive && (
-                                  <motion.div
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    className="w-2 h-2 bg-primary rounded-full"
-                                  />
-                                )}
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="font-medium">
-                              <p>{item.title}</p>
-                              <p className="text-xs text-muted-foreground">{item.description}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        )
-                      })}
+                          {/* Group Items */}
+                          {group.items.map((item) => {
+                            const isActive = pathname === item.url
+                            const Icon = item.icon
+
+                            return (
+                              <Tooltip key={item.title}>
+                                <TooltipTrigger asChild>
+                                  <Link
+                                    href={item.url}
+                                    onClick={closeHoverSidebar}
+                                    className={cn(
+                                      "flex items-center space-x-3 w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-sm",
+                                      isActive
+                                        ? "bg-primary/10 text-primary font-medium shadow-sm"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                                    )}
+                                  >
+                                    <Icon className="w-4 h-4 flex-shrink-0" />
+                                    <span className="flex-1">{item.title}</span>
+                                    {isActive && (
+                                      <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        className="w-2 h-2 bg-primary rounded-full"
+                                      />
+                                    )}
+                                  </Link>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="font-medium">
+                                  <p>{item.title}</p>
+                                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )
+                          })}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

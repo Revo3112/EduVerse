@@ -66,6 +66,11 @@ interface SectionAddedEventData {
   title: string             // string title
 }
 
+interface SectionUpdatedEventData {
+  courseId: number          // uint256 indexed courseId
+  sectionId: number         // uint256 indexed sectionId
+}
+
 interface SectionDeletedEventData {
   courseId: number          // uint256 indexed courseId
   sectionId: number         // uint256 indexed sectionId
@@ -177,6 +182,7 @@ interface CertificatePaymentRecordedEventData {
 // Union type untuk semua event data
 type TransactionEventData =
   | CourseCreatedEventData | CourseUpdatedEventData | SectionAddedEventData
+  | SectionUpdatedEventData
   | SectionDeletedEventData | SectionMovedEventData | BatchSectionsAddedEventData
   | SectionsSwappedEventData | SectionsBatchReorderedEventData
   | CourseRatedEventData | RatingUpdatedEventData | RatingDeletedEventData | RatingRemovedEventData
@@ -192,8 +198,8 @@ type TransactionEventData =
 
 interface SectionsSwappedEventData {
   courseId: number; // uint256 indexed courseId
-  sectionIdA: number; // uint256 indexed sectionIdA
-  sectionIdB: number; // uint256 indexed sectionIdB
+  indexA: number;   // uint256 indexA - ARRAY POSITION, not section ID!
+  indexB: number;   // uint256 indexB - ARRAY POSITION, not section ID!
 }
 
 interface SectionsBatchReorderedEventData {
@@ -279,12 +285,12 @@ interface BlockchainTransactionEvent {
 
   // Derived info for analytics
   transactionType:
-  | 'course_created' | 'course_updated' | 'section_added' | 'section_deleted'
-  | 'section_moved' | 'batch_sections_added' | 'course_rated' | 'rating_updated'
-  | 'rating_deleted' | 'license_minted' | 'license_renewed' | 'section_completed'
-  | 'course_completed' | 'progress_reset' | 'certificate_minted'
-  | 'course_added_to_certificate' | 'certificate_updated' | 'certificate_revoked'
-  | 'certificate_payment_recorded'
+  | 'course_created' | 'course_updated' | 'section_added' | 'section_updated'
+  | 'section_deleted' | 'section_moved' | 'batch_sections_added' | 'sections_swapped'
+  | 'sections_batch_reordered' | 'course_rated' | 'rating_updated' | 'rating_deleted'
+  | 'license_minted' | 'license_renewed' | 'section_completed' | 'course_completed'
+  | 'progress_reset' | 'certificate_minted' | 'course_added_to_certificate'
+  | 'certificate_updated' | 'certificate_revoked' | 'certificate_payment_recorded'
 }
 
 // ==================== REAL CONTRACT CONSTANTS ====================
@@ -298,8 +304,8 @@ const DEPLOYED_CONTRACTS = {
   CertificateManager: '0x0000000000000000000000000000000000000000'
 } as const
 
-// Smart contract limits (from actual contracts)
-const CONTRACT_LIMITS = {
+// Smart contract limits (from actual contracts) - Used for validation
+const _CONTRACT_LIMITS = {
   MAX_SECTIONS_PER_COURSE: 1000,           // CourseFactory anti-DoS
   MAX_PRICE_ETH: '1.000000',               // CourseFactory.MAX_PRICE_ETH
   MAX_CERTIFICATE_PRICE: '0.002000',       // CertificateManager.MAX_CERTIFICATE_PRICE
@@ -307,6 +313,28 @@ const CONTRACT_LIMITS = {
   MAX_DURATION_MONTHS: 12,                 // CourseLicense.MAX_DURATION_MONTHS
   SECONDS_PER_MONTH: 2592000                // CourseLicense.SECONDS_PER_MONTH (30 days)
 } as const
+
+// CRITICAL: Platform fee percentages from actual smart contracts
+// CourseLicense.sol line 42: platformFeePercentage = 200 (2%)
+// CertificateManager.sol line 775: platformFee = (totalAmount * 1000) / 10000 (10%)
+// CertificateManager.sol line 805: platformFee = (totalAmount * 200) / 10000 (2%)
+const PLATFORM_FEE_BASIS_POINTS = {
+  LICENSE: 200,           // 2% for license mint/renewal (CourseLicense.sol)
+  CERTIFICATE_MINT: 1000, // 10% for initial certificate minting (CertificateManager.sol line 775)
+  CERTIFICATE_ADD: 200    // 2% for adding courses to certificate (CertificateManager.sol line 805)
+} as const
+
+// Helper function to calculate exact platform fees matching smart contracts
+const calculatePlatformFee = (
+  totalAmount: number,
+  feeType: keyof typeof PLATFORM_FEE_BASIS_POINTS
+): { platformFee: number; creatorPayout: number } => {
+  const basisPoints = PLATFORM_FEE_BASIS_POINTS[feeType]
+  const platformFee = (totalAmount * basisPoints) / 10000
+  const creatorPayout = totalAmount - platformFee
+
+  return { platformFee, creatorPayout }
+}
 
 // ==================== ANALYTICS METRICS ====================
 
@@ -442,10 +470,17 @@ const generateMockBlockchainTransaction = (): BlockchainTransactionEvent => {
     { type: 'license_renewed', weight: 5, contract: 'CourseLicense', event: 'LicenseRenewed' },
     { type: 'course_added_to_certificate', weight: 4, contract: 'CertificateManager', event: 'CourseAddedToCertificate' },
     { type: 'course_updated', weight: 3, contract: 'CourseFactory', event: 'CourseUpdated' },
+    { type: 'section_updated', weight: 3, contract: 'CourseFactory', event: 'SectionUpdated' },
     { type: 'certificate_updated', weight: 2, contract: 'CertificateManager', event: 'CertificateUpdated' },
     { type: 'rating_updated', weight: 2, contract: 'CourseFactory', event: 'RatingUpdated' },
     { type: 'section_moved', weight: 2, contract: 'CourseFactory', event: 'SectionMoved' },
-    { type: 'batch_sections_added', weight: 1, contract: 'CourseFactory', event: 'BatchSectionsAdded' }
+    { type: 'batch_sections_added', weight: 1, contract: 'CourseFactory', event: 'BatchSectionsAdded' },
+    { type: 'section_deleted', weight: 1, contract: 'CourseFactory', event: 'SectionDeleted' },
+    { type: 'sections_swapped', weight: 1, contract: 'CourseFactory', event: 'SectionsSwapped' },
+    { type: 'sections_batch_reordered', weight: 1, contract: 'CourseFactory', event: 'SectionsBatchReordered' },
+    { type: 'rating_deleted', weight: 1, contract: 'CourseFactory', event: 'RatingDeleted' },
+    { type: 'progress_reset', weight: 1, contract: 'ProgressTracker', event: 'ProgressReset' },
+    { type: 'certificate_revoked', weight: 1, contract: 'CertificateManager', event: 'CertificateRevoked' }
   ]
 
   // Weighted selection
@@ -478,13 +513,13 @@ const generateMockBlockchainTransaction = (): BlockchainTransactionEvent => {
     to: DEPLOYED_CONTRACTS[selectedType.contract as keyof typeof DEPLOYED_CONTRACTS] || generateRealisticAddress(),
     value: getTransactionValue(selectedType.type),
 
-    contractName: selectedType.contract as any,
+    contractName: selectedType.contract as BlockchainTransactionEvent['contractName'],
     contractAddress: DEPLOYED_CONTRACTS[selectedType.contract as keyof typeof DEPLOYED_CONTRACTS] || generateRealisticAddress(),
     eventName: selectedType.event,
     eventSignature: generateRealisticHash().substr(0, 10), // First 4 bytes
 
     eventData: generateEventData(selectedType.type),
-    transactionType: selectedType.type as any
+    transactionType: selectedType.type as BlockchainTransactionEvent['transactionType']
   }
 }
 
@@ -529,6 +564,12 @@ const generateEventData = (transactionType: string): TransactionEventData => {
         sectionId: Math.floor(Math.random() * 100),
         title: `Section ${Math.floor(Math.random() * 50) + 1}: Advanced Concepts`
       } as SectionAddedEventData
+
+    case 'section_updated':
+      return {
+        courseId,
+        sectionId: Math.floor(Math.random() * 100)
+      } as SectionUpdatedEventData
 
     case 'section_completed':
       return {
@@ -620,6 +661,33 @@ const generateEventData = (transactionType: string): TransactionEventData => {
         sectionIds: Array.from({ length: Math.floor(Math.random() * 10) + 1 }, (_, i) => i + 1)
       } as BatchSectionsAddedEventData
 
+    case 'sections_swapped':
+      const indexA = Math.floor(Math.random() * 20)
+      const indexB = Math.floor(Math.random() * 20)
+      return {
+        courseId,
+        indexA,  // CORRECT - These are array positions
+        indexB   // CORRECT - Not section IDs!
+      } as SectionsSwappedEventData
+
+    case 'sections_batch_reordered':
+      return {
+        courseId,
+        newOrder: Array.from({ length: Math.floor(Math.random() * 10) + 3 }, (_, i) => i)
+      } as SectionsBatchReorderedEventData
+
+    case 'progress_reset':
+      return {
+        student: userAddress,
+        courseId
+      } as ProgressResetEventData
+
+    case 'certificate_revoked':
+      return {
+        tokenId: Math.floor(Math.random() * 5000) + 1,
+        reason: 'Academic dishonesty detected'
+      } as CertificateRevokedEventData
+
     default:
       return {}
   }
@@ -649,6 +717,8 @@ const TransactionTypeIcon = memo<{
       return <Edit {...iconProps} className={cn(iconProps.className, colorClass)} />
     case 'section_added':
       return <Plus {...iconProps} className={cn(iconProps.className, colorClass)} />
+    case 'section_updated':
+      return <Edit {...iconProps} className={cn(iconProps.className, colorClass)} />
     case 'section_deleted':
       return <Trash2 {...iconProps} className={cn(iconProps.className, colorClass)} />
     case 'section_moved':
@@ -675,6 +745,11 @@ const TransactionTypeIcon = memo<{
     case 'rating_updated':
     case 'rating_deleted':
       return <Star {...iconProps} className={cn(iconProps.className, colorClass)} />
+    case 'sections_swapped':
+    case 'sections_batch_reordered':
+      return <ArrowUpDown {...iconProps} className={cn(iconProps.className, colorClass)} />
+    case 'progress_reset':
+      return <RefreshCw {...iconProps} className={cn(iconProps.className, "text-orange-500")} />
     default:
       return <Activity {...iconProps} className={colorClass} />
   }
@@ -694,11 +769,15 @@ const TransactionRow = memo<{ transaction: BlockchainTransactionEvent }>(({ tran
   }, [])
 
   const getTransactionDetails = useCallback((tx: BlockchainTransactionEvent) => {
-    const data = tx.eventData as any
+    const data = tx.eventData as Record<string, number | string>
 
     switch (tx.transactionType) {
       case 'course_created':
-        return `"${data.title}" by ${data.creatorName} (${COURSE_CATEGORIES_NAMES[data.category]})`
+        return `"${data.title}" by ${data.creatorName} (${COURSE_CATEGORIES_NAMES[data.category as number]})`
+      case 'section_added':
+        return `"${data.title}" added to course #${data.courseId}`
+      case 'section_updated':
+        return `Section #${data.sectionId} updated in course #${data.courseId}`
       case 'section_completed':
         return `Course #${data.courseId}, Section #${data.sectionId}`
       case 'license_minted':
@@ -706,9 +785,19 @@ const TransactionRow = memo<{ transaction: BlockchainTransactionEvent }>(({ tran
       case 'certificate_minted':
         return `Certificate for ${data.recipientName} (Token #${data.tokenId})`
       case 'course_rated':
-        return `${data.rating} stars for course #${data.courseId} (avg: ${(data.newAverageRating / 10000).toFixed(1)})`
+        return `${data.rating} stars for course #${data.courseId} (avg: ${(Number(data.newAverageRating) / 10000).toFixed(1)})`
       case 'course_added_to_certificate':
         return `Course #${data.courseId} added to certificate #${data.tokenId}`
+      case 'section_deleted':
+        return `Section #${data.sectionId} deleted from course #${data.courseId}`
+      case 'sections_swapped':
+        return `Sections swapped at positions ${data.indexA} ↔ ${data.indexB} in course #${data.courseId}`
+      case 'sections_batch_reordered':
+        return `${Array.isArray(data.newOrder) ? data.newOrder.length : 0} sections reordered in course #${data.courseId}`
+      case 'progress_reset':
+        return `Progress reset for course #${data.courseId}`
+      case 'certificate_revoked':
+        return `Certificate #${data.tokenId} revoked: ${data.reason}`
       default:
         return tx.eventName
     }
@@ -854,7 +943,7 @@ export default function AnalyticsPage() {
   })
 
   const [isLive, setIsLive] = useState(true)
-  const [selectedTimeframe, setSelectedTimeframe] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
+  const _selectedTimeframe = useState<'1h' | '24h' | '7d' | '30d'>('24h')
 
   // Real-time blockchain event simulation
   useEffect(() => {
@@ -911,34 +1000,45 @@ export default function AnalyticsPage() {
             updated.totalLicensesMinted += 1
             updated.activeLicenses += 1
             const licenseRevenue = parseFloat(newTransaction.value)
+            const { platformFee: licensePlatformFee, creatorPayout: licenseCreatorPayout } =
+              calculatePlatformFee(licenseRevenue, 'LICENSE')  // 2% platform, 98% creator
+
             updated.totalLicenseRevenue = (parseFloat(updated.totalLicenseRevenue) + licenseRevenue).toFixed(6)
-            // 90% creator, 10% platform
-            updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + licenseRevenue * 0.9).toFixed(6)
-            updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + licenseRevenue * 0.1).toFixed(6)
+            updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + licenseCreatorPayout).toFixed(6)
+            updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + licensePlatformFee).toFixed(6)
             break
 
           case 'license_renewed':
             updated.totalLicensesRenewed += 1
             const renewalRevenue = parseFloat(newTransaction.value)
+            const { platformFee: renewalPlatformFee, creatorPayout: renewalCreatorPayout } =
+              calculatePlatformFee(renewalRevenue, 'LICENSE')  // 2% platform, 98% creator
+
             updated.totalLicenseRevenue = (parseFloat(updated.totalLicenseRevenue) + renewalRevenue).toFixed(6)
-            updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + renewalRevenue * 0.9).toFixed(6)
-            updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + renewalRevenue * 0.1).toFixed(6)
+            updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + renewalCreatorPayout).toFixed(6)
+            updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + renewalPlatformFee).toFixed(6)
             break
 
           case 'certificate_minted':
             updated.totalCertificateHolders += 1 // One certificate per user
             const certRevenue = parseFloat(newTransaction.value)
+            const { platformFee: certPlatformFee, creatorPayout: certCreatorPayout } =
+              calculatePlatformFee(certRevenue, 'CERTIFICATE_MINT')  // 10% platform, 90% creator
+
             updated.totalCertificateRevenue = (parseFloat(updated.totalCertificateRevenue) + certRevenue).toFixed(6)
-            updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + certRevenue * 0.9).toFixed(6)
-            updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + certRevenue * 0.1).toFixed(6)
+            updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + certCreatorPayout).toFixed(6)
+            updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + certPlatformFee).toFixed(6)
             break
 
           case 'course_added_to_certificate':
             updated.totalCourseAdditions += 1
             const additionRevenue = parseFloat(newTransaction.value)
+            const { platformFee: additionPlatformFee, creatorPayout: additionCreatorPayout } =
+              calculatePlatformFee(additionRevenue, 'CERTIFICATE_ADD')  // 2% platform, 98% recipient
+
             updated.totalCertificateRevenue = (parseFloat(updated.totalCertificateRevenue) + additionRevenue).toFixed(6)
-            updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + additionRevenue * 0.9).toFixed(6)
-            updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + additionRevenue * 0.1).toFixed(6)
+            updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + additionCreatorPayout).toFixed(6)
+            updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + additionPlatformFee).toFixed(6)
             break
 
           case 'certificate_updated':
@@ -1496,7 +1596,7 @@ export default function AnalyticsPage() {
               <CardHeader>
                 <CardTitle>Revolutionary Certificate Model</CardTitle>
                 <CardDescription>
-                  EduVerse implements "One Certificate Per User" - a groundbreaking approach
+                  EduVerse implements &quot;One Certificate Per User&quot; - a groundbreaking approach
                 </CardDescription>
               </CardHeader>
               <CardContent>

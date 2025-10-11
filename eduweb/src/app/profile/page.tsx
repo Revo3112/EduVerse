@@ -1,56 +1,39 @@
 /**
  * ===================================================================================
- * EduVerse Profile Page - Thirdweb Integration Version
+ * EduVerse Profile Page - 100% Smart Contract Compliant
  * ===================================================================================
  *
- * ✅ THIRDWEB WEB3 FEATURES:
- * - Real Thirdweb wallet connection using useActiveAccount
- * - Integrated with existing ConnectButton component
- * - Proper wallet disconnect functionality
- * - Demo data with blockchain-ready structure
- * - Full responsive design and professional styling
- * - Loading states and error handling
- * - Ready for smart contract integration
+ * ✅ FULLY ALIGNED WITH SMART CONTRACTS:
+ * - CourseFactory.sol - Course and Section structures
+ * - CourseLicense.sol - License structure with durationLicense (NOT licenseType)
+ * - ProgressTracker.sol - Progress tracking with aggregate stats
+ * - CertificateManager.sol - One certificate per user model
  *
- * 🎨 DEMO HIGHLIGHTS:
- * - Mock user with 5 completed courses
- * - 2 created courses as instructor
- * - Active course licenses
- * - Blockchain certificate with lifetime status
- * - Professional activity timeline
- * - Real Web3 wallet connection
+ * ⚠️ SMART CONTRACT LIMITATIONS:
+ * - ❌ No function to get list of active licenses per student
+ * - ❌ No function to get array of completed course IDs
+ * - ✅ Only aggregate stats available (totalSectionsCompleted, totalCoursesCompleted)
+ * - ✅ Courses created by user available via creatorsCourses mapping
+ * - ✅ Certificate details available via userCertificates mapping
  *
- * 🔧 WEB3 COMPONENTS:
- * - useActiveAccount(): Real Thirdweb wallet connection
- * - useActiveWallet(): Access to wallet instance
- * - ConnectButton: Full-featured wallet connection UI
- * - Sample learning data ready for blockchain integration
- * - Teaching dashboard with course stats
- * - Certificate details and verification
- * - Activity feed with realistic timestamps
+ * 🔧 CORRECTED TYPE INTERFACES:
+ * - Course: Added thumbnailCID, creatorName (were missing)
+ * - CourseSection: Added id, courseId, duration; Fixed contentHash->contentCID
+ * - License: Fixed licenseType->durationLicense (critical fix)
+ * - Certificate: 100% matches CertificateManager.sol
  *
- * 📱 UI FEATURES:
- * - 4 main tabs: Learning, Teaching, Activity, Web3 Identity
- * - Dark/Light mode support
- * - Mobile responsive design
- * - Professional gradients and animations
- * - Toast notifications for interactions
- * - Loading skeletons and error states
- * - Real wallet connection status
+ * � TODO - THIRDWEB INTEGRATION:
+ * - Replace useUserProfile with real useReadContract calls
+ * - Implement ProgressTracker.getTotalSectionsCompleted()
+ * - Implement ProgressTracker.getCompletedCoursesCount()
+ * - Implement CourseFactory.getCreatorCourses() + getCourse()
+ * - Implement CertificateManager.userCertificates() + getCertificate()
  *
- * 🚀 READY FOR:
- * - Real wallet demonstrations
- * - Smart contract integration
- * - Blockchain data loading
- * - UI/UX testing and feedback
- * - Production deployment
- *
- * 🔗 INTEGRATION NOTES:
- * - Uses existing Thirdweb infrastructure
- * - Compatible with ConnectButton component
- * - Demo data structure matches smart contract types
- * - Ready to replace mock data with useReadContract calls
- * - Follows existing code patterns in the project
+ * � FEATURES REQUIRING SUBQUERY:
+ * - List of all active licenses (need to index LicenseMinted events)
+ * - List of completed course IDs (need to index CourseCompleted events)
+ * - Detailed course progress history
+ * - Activity timeline with all actions
  *
  * ===================================================================================
  */
@@ -88,33 +71,64 @@ import {
 import { memo, useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
-// Types for smart contract data structures (Frontend Demo Version)
-interface ExtendedCourse {
+// Types for smart contract data structures (100% Smart Contract Compliant)
+// ================================================================================
+// These interfaces match the Solidity structs EXACTLY as defined in smart contracts
+// ================================================================================
+
+/**
+ * Course struct from CourseFactory.sol
+ * CRITICAL FIELDS ADDED: thumbnailCID, creatorName (were missing in original)
+ */
+interface Course {
   id: bigint
   title: string
   description: string
-  creator: string // Changed from Address to string
+  thumbnailCID: string         // ADDED: Matches CourseFactory.sol line 44
+  creator: `0x${string}`        // Address type for web3 compatibility
+  creatorName: string           // ADDED: Matches CourseFactory.sol line 46
   category: number
   difficulty: number
   pricePerMonth: bigint
   totalSections: number
   isActive: boolean
   createdAt: bigint
+}
+
+/**
+ * CourseSection struct from CourseFactory.sol
+ * CRITICAL FIELDS ADDED: id, courseId, duration (were missing)
+ * CRITICAL FIX: contentHash → contentCID (typo fixed)
+ */
+interface CourseSection {
+  id: bigint                    // ADDED: Matches CourseFactory.sol line 51
+  courseId: bigint              // ADDED: Matches CourseFactory.sol line 52
+  orderId: number
+  title: string
+  contentCID: string            // FIXED: Was "contentHash", correct is "contentCID" (line 55)
+  duration: number              // ADDED: Matches CourseFactory.sol line 56
+}
+
+/**
+ * Extended Course interface for frontend display
+ * Combines Course with additional computed/fetched data
+ */
+interface ExtendedCourse extends Course {
   rating: {
     totalRatings: bigint
     averageRating: bigint
   }
-  sections: {
-    orderId: number
-    title: string
-    contentHash: string
-  }[]
+  sections: CourseSection[]
 }
 
+/**
+ * Certificate struct from CertificateManager.sol
+ * Note: One certificate per user model (userCertificates mapping)
+ */
 interface Certificate {
   tokenId: bigint
   recipientName: string
-  recipientAddress: string // Changed from Address to string
+  recipientAddress: `0x${string}`  // Address type for web3
   platformName: string
   completedCourses: bigint[]
   totalCoursesCompleted: bigint
@@ -124,17 +138,25 @@ interface Certificate {
   lastUpdated: bigint
   isValid: boolean
   lifetimeFlag: boolean
-  baseRoute?: string
+  baseRoute?: string            // Optional frontend field
 }
 
+/**
+ * License struct from CourseLicense.sol
+ * CRITICAL FIX: licenseType → durationLicense (field name was wrong)
+ */
 interface License {
   courseId: bigint
-  student: string // Changed from Address to string
-  licenseType: number
+  student: `0x${string}`        // Address type for web3
+  durationLicense: number       // FIXED: Was "licenseType", correct is "durationLicense" (CourseLicense.sol line 32)
   expiryTimestamp: bigint
   isActive: boolean
 }
 
+/**
+ * Section progress tracking from ProgressTracker.sol
+ * Used for tracking individual section completion
+ */
 interface SectionProgress {
   courseId: bigint
   sectionId: number
@@ -205,6 +227,7 @@ const useUserProfile = (address: string): UserProfileData => {
 
     try {
       // Demo data for frontend showcase
+      // NOTE: This data structure now matches smart contracts 100%
       const demoProfile: UserProfileData = {
         address,
         totalSectionsCompleted: 24,
@@ -214,7 +237,9 @@ const useUserProfile = (address: string): UserProfileData => {
             id: BigInt(1),
             title: "Web3 Development Fundamentals",
             description: "Learn the basics of blockchain development with Solidity and React",
-            creator: address,
+            thumbnailCID: "QmThumbnailHash1",  // ADDED: Matches CourseFactory.sol
+            creator: address as `0x${string}`,  // Fixed type
+            creatorName: "John Doe",            // ADDED: Matches CourseFactory.sol
             category: 0, // Programming
             difficulty: 1, // Intermediate
             pricePerMonth: BigInt("50000000000000000"), // 0.05 ETH
@@ -226,15 +251,31 @@ const useUserProfile = (address: string): UserProfileData => {
               averageRating: BigInt(47000) // 4.7 stars (out of 5, scaled by 10000)
             },
             sections: [
-              { orderId: 1, title: "Introduction to Web3", contentHash: "QmHash1" },
-              { orderId: 2, title: "Smart Contract Basics", contentHash: "QmHash2" }
+              {
+                id: BigInt(1),                  // ADDED: Required field
+                courseId: BigInt(1),            // ADDED: Required field
+                orderId: 1,
+                title: "Introduction to Web3",
+                contentCID: "QmHash1",          // FIXED: Was contentHash
+                duration: 3600                  // ADDED: Duration in seconds
+              },
+              {
+                id: BigInt(2),                  // ADDED: Required field
+                courseId: BigInt(1),            // ADDED: Required field
+                orderId: 2,
+                title: "Smart Contract Basics",
+                contentCID: "QmHash2",          // FIXED: Was contentHash
+                duration: 4500                  // ADDED: Duration in seconds
+              }
             ]
           },
           {
             id: BigInt(2),
             title: "DeFi Protocol Design",
             description: "Advanced course on designing decentralized finance protocols",
-            creator: address,
+            thumbnailCID: "QmThumbnailHash2",  // ADDED: Matches CourseFactory.sol
+            creator: address as `0x${string}`,  // Fixed type
+            creatorName: "John Doe",            // ADDED: Matches CourseFactory.sol
             category: 5, // Finance
             difficulty: 3, // Expert
             pricePerMonth: BigInt("100000000000000000"), // 0.1 ETH
@@ -246,23 +287,37 @@ const useUserProfile = (address: string): UserProfileData => {
               averageRating: BigInt(48500) // 4.85 stars
             },
             sections: [
-              { orderId: 1, title: "DeFi Fundamentals", contentHash: "QmHash3" },
-              { orderId: 2, title: "Liquidity Pools", contentHash: "QmHash4" }
+              {
+                id: BigInt(3),                  // ADDED: Required field
+                courseId: BigInt(2),            // ADDED: Required field
+                orderId: 1,
+                title: "DeFi Fundamentals",
+                contentCID: "QmHash3",          // FIXED: Was contentHash
+                duration: 5400                  // ADDED: Duration in seconds
+              },
+              {
+                id: BigInt(4),                  // ADDED: Required field
+                courseId: BigInt(2),            // ADDED: Required field
+                orderId: 2,
+                title: "Liquidity Pools",
+                contentCID: "QmHash4",          // FIXED: Was contentHash
+                duration: 6000                  // ADDED: Duration in seconds
+              }
             ]
           }
         ],
         activeLicenses: [
           {
             courseId: BigInt(3),
-            student: address,
-            licenseType: 1,
+            student: address as `0x${string}`,  // Fixed type
+            durationLicense: 30,                // FIXED: Was licenseType, now durationLicense in days
             expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + 2592000), // 30 days from now
             isActive: true
           },
           {
             courseId: BigInt(4),
-            student: address,
-            licenseType: 1,
+            student: address as `0x${string}`,  // Fixed type
+            durationLicense: 30,                // FIXED: Was licenseType, now durationLicense in days
             expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + 1296000), // 15 days from now
             isActive: true
           }
@@ -270,7 +325,7 @@ const useUserProfile = (address: string): UserProfileData => {
         certificate: {
           tokenId: BigInt(42),
           recipientName: "Web3 Developer",
-          recipientAddress: address,
+          recipientAddress: address as `0x${string}`, // Fixed type
           platformName: "EduVerse",
           completedCourses: [BigInt(1), BigInt(2), BigInt(3), BigInt(4), BigInt(5)],
           totalCoursesCompleted: BigInt(5),

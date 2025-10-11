@@ -25,7 +25,7 @@ import {
   Zap
 } from "lucide-react";
 import Image from "next/image";
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 // Type definitions - Updated to work with storage service
 interface FormData {
@@ -146,11 +146,10 @@ const FILE_CONFIGS: Record<'video' | 'document' | 'image', FileConfig> = {
 
 export default function CreateCoursePage() {
   const { ethToIDR } = useEthPrice();
-  const [activeStep, setActiveStep] = useState<number>(0);
+  const [activeStep] = useState<number>(0);
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>({});
   const [showPreview, setShowPreview] = useState<boolean>(false);
-  const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
   // Draft storage states
   const [isDraftSupported, setIsDraftSupported] = useState<boolean>(false);
