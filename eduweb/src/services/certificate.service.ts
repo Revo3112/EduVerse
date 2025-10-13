@@ -36,7 +36,7 @@ const NAME_POSITION = {
 const DESCRIPTION_POSITION = {
   x: CANVAS_WIDTH / 2,
   y: 2210,
-  fontSize: 85,
+  fontSize: 89,
   fontFamily: 'Arial',
   color: '#4A4A4A',
   align: 'center' as const,
@@ -45,37 +45,9 @@ const DESCRIPTION_POSITION = {
 };
 
 const QR_POSITION = {
-  x: 5562,
-  y: 3437,
-  size: 390,
-};
-
-const DATE_POSITION = {
-  x: CANVAS_WIDTH / 2,
-  y: 3125,
-  fontSize: 71,
-  fontFamily: 'Arial',
-  color: '#666666',
-  align: 'center' as const,
-};
-
-const COURSE_NAME_POSITION = {
-  x: CANVAS_WIDTH / 2,
-  y: 2700,
-  fontSize: 110,
-  fontFamily: 'Arial',
-  fontWeight: 'bold',
-  color: '#333333',
-  align: 'center' as const,
-};
-
-const INSTRUCTOR_POSITION = {
-  x: CANVAS_WIDTH / 2,
-  y: 3437,
-  fontSize: 71,
-  fontFamily: 'Arial',
-  color: '#666666',
-  align: 'center' as const,
+  x: 4200,
+  y: 2800,
+  size: 1000,
 };
 
 async function generateQRCode(certificateId: string): Promise<Buffer> {
@@ -184,10 +156,11 @@ export async function generateAndUploadCertificate(
     const nameMetrics = drawRecipientName(ctx, data.studentName, NAME_POSITION);
     console.log(`[Certificate Service] Name rendered (fontSize: ${nameMetrics.fontSize}px, scaled: ${nameMetrics.scaled})`);
 
+    // Description paragraph
     ctx.font = `${DESCRIPTION_POSITION.fontSize}px ${DESCRIPTION_POSITION.fontFamily}`;
     ctx.fillStyle = DESCRIPTION_POSITION.color;
     ctx.textAlign = DESCRIPTION_POSITION.align;
-    const description = `has successfully completed`;
+    const description = `This evolving Certificate of Completion is awarded to ${data.studentName} for learning completed on Eduverse. It represents all verified courses completed`;
     wrapText(
       ctx,
       description,
@@ -196,23 +169,6 @@ export async function generateAndUploadCertificate(
       DESCRIPTION_POSITION.maxWidth,
       DESCRIPTION_POSITION.lineHeight
     );
-
-    ctx.font = `${COURSE_NAME_POSITION.fontWeight} ${COURSE_NAME_POSITION.fontSize}px ${COURSE_NAME_POSITION.fontFamily}`;
-    ctx.fillStyle = COURSE_NAME_POSITION.color;
-    ctx.textAlign = COURSE_NAME_POSITION.align;
-    ctx.fillText(data.courseName, COURSE_NAME_POSITION.x, COURSE_NAME_POSITION.y);
-
-    ctx.font = `${DATE_POSITION.fontSize}px ${DATE_POSITION.fontFamily}`;
-    ctx.fillStyle = DATE_POSITION.color;
-    ctx.textAlign = DATE_POSITION.align;
-    const dateText = `Completed: ${data.completionDate}`;
-    ctx.fillText(dateText, DATE_POSITION.x, DATE_POSITION.y);
-
-    ctx.font = `${INSTRUCTOR_POSITION.fontSize}px ${INSTRUCTOR_POSITION.fontFamily}`;
-    ctx.fillStyle = INSTRUCTOR_POSITION.color;
-    ctx.textAlign = INSTRUCTOR_POSITION.align;
-    const instructorText = `Instructor: ${data.instructorName}`;
-    ctx.fillText(instructorText, INSTRUCTOR_POSITION.x, INSTRUCTOR_POSITION.y);
 
     console.log('[Certificate Service] Generating QR code...');
     const qrCodeBuffer = await generateQRCode(data.certificateId);
