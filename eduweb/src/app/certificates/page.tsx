@@ -1,11 +1,11 @@
 "use client"
 
+import { ThumbnailImage } from '@/components/ThumbnailImage'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { BookOpen, CheckCircle, Trophy } from 'lucide-react'
-import Image from 'next/image'
 import React, { useCallback, useState } from 'react'
 
 // Course Section Interface - matches ProgressTracker contract
@@ -76,7 +76,7 @@ const mockCompletedCourses: CompletedCourse[] = [
     courseId: 101,
     title: "Blockchain Development Fundamentals",
     description: "Master the fundamentals of blockchain technology, smart contract development, and decentralized application (dApp) creation. Learn Solidity programming, Web3 integration, and best practices for secure smart contract development.",
-    thumbnailCID: "https://img.freepik.com/free-vector/gradient-metaverse-background_23-2149263788.jpg",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
     isCompleted: true,
     completedAt: "2024-09-19T20:00:00Z",
     completedDate: "Sep 19",
@@ -102,7 +102,7 @@ const mockCompletedCourses: CompletedCourse[] = [
     courseId: 102,
     title: "React & TypeScript Mastery",
     description: "Deep dive into modern React development with TypeScript. Learn advanced patterns, performance optimization, testing strategies, and build production-ready applications with confidence.",
-    thumbnailCID: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?q=80&w=1000&auto=format&fit=crop",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
     isCompleted: true,
     completedAt: "2024-09-13T14:00:00Z",
     completedDate: "Sep 13",
@@ -127,7 +127,7 @@ const mockCompletedCourses: CompletedCourse[] = [
     courseId: 103,
     title: "UI/UX Design Principles",
     description: "Learn modern UI/UX design principles, user research methods, prototyping, and create engaging user experiences. Master design tools and develop a strong design thinking mindset.",
-    thumbnailCID: "https://img.particlenews.com/image.php?url=0p6g2P_0l78923n00",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
     isCompleted: true,
     completedAt: "2024-09-12T20:00:00Z",
     completedDate: "Sep 12",
@@ -260,14 +260,15 @@ const TimelineItem: React.FC<TimelineItemProps> = ({ course, isLast, onClick }) 
               </div>
 
               {/* Right Column: Course Thumbnail */}
-              <div className="relative w-24 h-24 flex-shrink-0">
-                <Image
-                  src={course.thumbnailCID}
+              <div className="relative w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-muted">
+                <ThumbnailImage
+                  cid={course.thumbnailCID}
                   alt={course.title}
-                  layout="fill"
-                  objectFit="cover"
-                  className="rounded-md"
-                  unoptimized
+                  fallback={
+                    <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                      <BookOpen className="w-6 h-6 text-white/70" />
+                    </div>
+                  }
                 />
               </div>
             </div>
@@ -325,13 +326,15 @@ export default function CertificateTimelinePage() {
                 </SheetDescription>
               </SheetHeader>
               <div className="p-6 space-y-6">
-                <div className="relative w-full h-48 rounded-lg overflow-hidden">
-                  <Image
-                    src={selectedCourse.thumbnailCID}
+                <div className="relative w-full h-48 rounded-lg overflow-hidden bg-muted">
+                  <ThumbnailImage
+                    cid={selectedCourse.thumbnailCID}
                     alt={selectedCourse.title}
-                    layout="fill"
-                    objectFit="cover"
-                    unoptimized
+                    fallback={
+                      <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                        <BookOpen className="w-12 h-12 text-white/70" />
+                      </div>
+                    }
                   />
                 </div>
 

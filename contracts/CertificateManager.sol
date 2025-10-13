@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
@@ -15,15 +15,20 @@ import "./CourseLicense.sol";
  * @dev Digital certificate management using ERC-1155 with revolutionary "One Certificate Per User" model
  * @notice NEW BUSINESS LOGIC: Each user gets exactly ONE lifetime certificate that grows with their learning journey
  * @notice Compliant with OpenZeppelin Contracts 5.0 and 2025 best practices
+ *
+ * FEE STRUCTURE:
+ * - First Certificate Mint: 10% platform fee, 90% to course creator
+ * - Course Additions: 2% platform fee, 98% to course creator
+ *
+ * RATIONALE:
+ * - Higher fee for initial certificate mint (10%) covers NFT creation and verification setup
+ * - Lower fee for additions (2%) incentivizes continuous learning and certificate growth
+ * - Aligns with license fee structure (2%) for consistency
+ *
  * @custom:security-contact security@eduverse.com
  */
-contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable {
+contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     using Strings for uint256;
-
-    // ==================== ROLES ====================
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant UPDATER_ROLE = keccak256("UPDATER_ROLE");
 
     // ==================== CUSTOM ERRORS ====================
     error InvalidPaymentReceiptHash();
@@ -129,7 +134,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         address _platformWallet,
         string memory _initialURI,
         string memory _platformName
-    ) ERC1155(_initialURI) {
+    ) ERC1155(_initialURI) Ownable(msg.sender) {
         if (_courseFactory == address(0)) revert InvalidAddress(_courseFactory);
         if (_progressTracker == address(0)) revert InvalidAddress(_progressTracker);
         if (_courseLicense == address(0)) revert InvalidAddress(_courseLicense);
@@ -139,13 +144,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         progressTracker = ProgressTracker(_progressTracker);
         courseLicense = CourseLicense(_courseLicense);
         platformWallet = _platformWallet;
-        defaultPlatformName = _platformName;    // ✅ FIXED: Now using the constructor parameter
-
-        // Setup roles
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(MINTER_ROLE, msg.sender);
-        _grantRole(PAUSER_ROLE, msg.sender);
-        _grantRole(UPDATER_ROLE, msg.sender);
+        defaultPlatformName = _platformName;
     }
 
     // ==================== MODIFIERS ====================
@@ -276,7 +275,8 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         // Mint the NFT (soulbound)
         _mint(msg.sender, tokenId, 1, "");
 
-        // Process payment with correct distribution (90% creator + 10% platform)
+        // Process payment with 10% platform fee for first certificate mint (90% creator + 10% platform)
+        // Note: First certificate uses 10% fee, subsequent additions use 2% fee
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
         _processCertificatePayment(course.creator, certificatePrice);
 
@@ -329,9 +329,10 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         // Track course existence
         certificateCourseExists[tokenId][courseId] = true;
 
-        // Process payment with correct distribution (90% creator + 10% platform)
+        // Process payment with 2% platform fee for course additions (98% creator + 2% platform)
+        // Note: First certificate uses 10% fee, subsequent additions use 2% fee
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
-        _processCertificatePayment(course.creator, additionPrice);
+        _processPayment(course.creator, additionPrice);
 
         emit CourseAddedToCertificate(msg.sender, tokenId, courseId, ipfsCID, paymentReceiptHash);
         emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
@@ -614,7 +615,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
      * @dev Sets default certificate fee for new certificate minting (admin only)
      * @param newFee New fee amount
      */
-    function setDefaultCertificateFee(uint256 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setDefaultCertificateFee(uint256 newFee) external onlyOwner {
         if (newFee == 0) revert ZeroAmount();
         if (newFee > MAX_CERTIFICATE_PRICE) revert ExceedsMaxPrice();
         defaultCertificateFee = newFee;
@@ -624,7 +625,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
      * @dev Sets default course addition fee for adding courses to existing certificates (admin only)
      * @param newFee New fee amount (should be lower than certificate fee)
      */
-    function setDefaultCourseAdditionFee(uint256 newFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setDefaultCourseAdditionFee(uint256 newFee) external onlyOwner {
         if (newFee == 0) revert ZeroAmount();
         if (newFee > MAX_CERTIFICATE_PRICE) revert ExceedsMaxPrice();
         defaultCourseAdditionFee = newFee;
@@ -635,7 +636,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
      * @dev Sets platform wallet (admin only)
      * @param newWallet New wallet address
      */
-    function setPlatformWallet(address newWallet) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setPlatformWallet(address newWallet) external onlyOwner {
         if (newWallet == address(0)) revert InvalidAddress(newWallet);
         platformWallet = newWallet;
     }
@@ -644,7 +645,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
      * @dev Sets default platform name (admin only)
      * @param newPlatformName New platform name
      */
-    function setDefaultPlatformName(string calldata newPlatformName) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setDefaultPlatformName(string calldata newPlatformName) external onlyOwner {
         if (bytes(newPlatformName).length == 0 || bytes(newPlatformName).length > 100) {
             revert InvalidStringLength("platformName", 100);
         }
@@ -683,7 +684,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
     }
 
     /**
-     * @dev Sets custom token URI
+     * @dev Sets custom token URI for a certificate (admin only)
      * @param tokenId Token ID
      * @param tokenURI Custom URI
      */
@@ -692,14 +693,14 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         string calldata tokenURI
     )
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyOwner
     {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
         _tokenURIs[tokenId] = tokenURI;
     }
 
     /**
-     * @dev Updates base route for QR code generation
+     * @dev Updates base route for QR code generation (admin only)
      * @param tokenId Certificate token ID
      * @param newBaseRoute New base route
      */
@@ -708,7 +709,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         string calldata newBaseRoute
     )
         external
-        onlyRole(UPDATER_ROLE)
+        onlyOwner
         validStringLength(newBaseRoute, 200, "baseRoute")
     {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
@@ -719,7 +720,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
     }
 
     /**
-     * @dev Revokes a certificate
+     * @dev Revokes a certificate (admin only)
      * @param tokenId Certificate to revoke
      * @param reason Reason for revocation
      */
@@ -728,7 +729,7 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
         string calldata reason
     )
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyOwner
     {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
 
@@ -737,16 +738,16 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
     }
 
     /**
-     * @dev Pauses contract operations
+     * @dev Pauses contract operations (emergency only)
      */
-    function pause() external onlyRole(PAUSER_ROLE) {
+    function pause() external onlyOwner {
         _pause();
     }
 
     /**
      * @dev Unpauses contract operations
      */
-    function unpause() external onlyRole(PAUSER_ROLE) {
+    function unpause() external onlyOwner {
         _unpause();
     }
 
@@ -858,11 +859,12 @@ contract CertificateManager is ERC1155, AccessControl, ReentrancyGuard, Pausable
 
     /**
      * @dev Interface support check
+     * @notice Supports ERC1155 interface only
      */
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC1155, AccessControl)
+        override(ERC1155)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);

@@ -305,14 +305,14 @@ const DEPLOYED_CONTRACTS = {
 } as const
 
 // Smart contract limits (from actual contracts) - Used for validation
-const _CONTRACT_LIMITS = {
-  MAX_SECTIONS_PER_COURSE: 1000,           // CourseFactory anti-DoS
-  MAX_PRICE_ETH: '1.000000',               // CourseFactory.MAX_PRICE_ETH
-  MAX_CERTIFICATE_PRICE: '0.002000',       // CertificateManager.MAX_CERTIFICATE_PRICE
-  RATING_COOLDOWN_HOURS: 24,               // CourseFactory.RATING_COOLDOWN
-  MAX_DURATION_MONTHS: 12,                 // CourseLicense.MAX_DURATION_MONTHS
-  SECONDS_PER_MONTH: 2592000                // CourseLicense.SECONDS_PER_MONTH (30 days)
-} as const
+// const _CONTRACT_LIMITS = {
+//   MAX_SECTIONS_PER_COURSE: 1000,           // CourseFactory anti-DoS
+//   MAX_PRICE_ETH: '1.000000',               // CourseFactory.MAX_PRICE_ETH
+//   MAX_CERTIFICATE_PRICE: '0.002000',       // CertificateManager.MAX_CERTIFICATE_PRICE
+//   RATING_COOLDOWN_HOURS: 24,               // CourseFactory.RATING_COOLDOWN
+//   MAX_DURATION_MONTHS: 12,                 // CourseLicense.MAX_DURATION_MONTHS
+//   SECONDS_PER_MONTH: 2592000                // CourseLicense.SECONDS_PER_MONTH (30 days)
+// } as const
 
 // CRITICAL: Platform fee percentages from actual smart contracts
 // CourseLicense.sol line 42: platformFeePercentage = 200 (2%)
@@ -943,7 +943,7 @@ export default function AnalyticsPage() {
   })
 
   const [isLive, setIsLive] = useState(true)
-  const _selectedTimeframe = useState<'1h' | '24h' | '7d' | '30d'>('24h')
+  // const _selectedTimeframe = useState<'1h' | '24h' | '7d' | '30d'>('24h')
 
   // Real-time blockchain event simulation
   useEffect(() => {

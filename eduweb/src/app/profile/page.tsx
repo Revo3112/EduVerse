@@ -237,7 +237,7 @@ const useUserProfile = (address: string): UserProfileData => {
             id: BigInt(1),
             title: "Web3 Development Fundamentals",
             description: "Learn the basics of blockchain development with Solidity and React",
-            thumbnailCID: "QmThumbnailHash1",  // ADDED: Matches CourseFactory.sol
+            thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
             creator: address as `0x${string}`,  // Fixed type
             creatorName: "John Doe",            // ADDED: Matches CourseFactory.sol
             category: 0, // Programming
@@ -273,7 +273,7 @@ const useUserProfile = (address: string): UserProfileData => {
             id: BigInt(2),
             title: "DeFi Protocol Design",
             description: "Advanced course on designing decentralized finance protocols",
-            thumbnailCID: "QmThumbnailHash2",  // ADDED: Matches CourseFactory.sol
+            thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
             creator: address as `0x${string}`,  // Fixed type
             creatorName: "John Doe",            // ADDED: Matches CourseFactory.sol
             category: 5, // Finance

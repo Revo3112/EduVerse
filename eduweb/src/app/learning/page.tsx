@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { ContentContainer } from "@/components/PageContainer";
+import { ThumbnailImage } from "@/components/ThumbnailImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Import rating components
 import { RatingModal } from '@/components/RatingModal';
+
+// Import certificate modal
+import { GetCertificateModal } from '@/components/GetCertificateModal';
 
 // Import data dan tipe dari file mock-data
 import {
@@ -36,6 +40,14 @@ export default function LearningPage() {
   // Rating Modal State
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
   const [selectedCourseForRating, setSelectedCourseForRating] = useState<Course | null>(null);
+
+  // Certificate Modal State
+  const [isCertificateModalOpen, setIsCertificateModalOpen] = useState(false);
+  const [selectedCourseForCertificate, setSelectedCourseForCertificate] = useState<{
+    id: bigint;
+    title: string;
+    price: bigint;
+  } | null>(null);
 
   // Mock user address - in production, this would come from wallet connection
   const mockUserAddress = mockUserCertificate.recipientAddress;
@@ -74,6 +86,7 @@ export default function LearningPage() {
       return {
         id: Number(course.id),
         title: course.title,
+        thumbnailCID: course.thumbnailCID,
         instructor: course.creatorName,
         progress: progress,
         totalSections: course.totalSections,
@@ -137,6 +150,30 @@ export default function LearningPage() {
   const handleRatingSubmitted = () => {
     // In production, this would trigger a refetch of course ratings
     console.log('Rating submitted successfully');
+  };
+
+  // Certificate Modal Handlers
+  const handleOpenCertificateModal = (courseId: number) => {
+    const originalCourse = mockCourses.find(course => Number(course.id) === courseId);
+    if (originalCourse) {
+      setSelectedCourseForCertificate({
+        id: originalCourse.id,
+        title: originalCourse.title,
+        price: BigInt(100000000000000), // 0.0001 ETH (0.1 Matic on Polygon)
+      });
+      setIsCertificateModalOpen(true);
+    }
+  };
+
+  const handleCloseCertificateModal = () => {
+    setIsCertificateModalOpen(false);
+    setSelectedCourseForCertificate(null);
+  };
+
+  const handleCertificateSuccess = () => {
+    // In production, this would trigger a refetch of certificates
+    console.log('Certificate minted successfully');
+    // Could also refresh learning data to show updated certificate status
   };
 
   const formatLearningTime = (seconds: number): string => {
@@ -261,8 +298,16 @@ export default function LearningPage() {
             {learningData.inProgressCourses.map((course) => (
               <Card key={course.id} className="group hover:shadow-lg transition-all duration-300 border border-border bg-card h-full flex flex-col">
                 <CardHeader className="space-y-4">
-                  <div className="relative aspect-video w-full overflow-hidden rounded-md bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                    <BookOpen className="w-12 h-12 text-white/70" />
+                  <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+                    <ThumbnailImage
+                      cid={course.thumbnailCID}
+                      alt={course.title}
+                      fallback={
+                        <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                          <BookOpen className="w-12 h-12 text-white/70" />
+                        </div>
+                      }
+                    />
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -333,16 +378,23 @@ export default function LearningPage() {
             {learningData.historyCourses.map((course) => (
               <Card key={course.id} className="group hover:shadow-lg transition-all duration-300 border border-border bg-card h-full flex flex-col">
                 <CardHeader className="space-y-4">
-                  <div className={`relative aspect-video w-full overflow-hidden rounded-md ${
-                    course.status === 'Completed'
-                      ? 'bg-gradient-to-br from-green-500 to-emerald-600'
-                      : 'bg-gradient-to-br from-gray-500 to-gray-600'
-                  } flex items-center justify-center`}>
-                    {course.status === 'Completed' ? (
-                      <Trophy className="w-12 h-12 text-white/70" />
-                    ) : (
-                      <Clock className="w-12 h-12 text-white/70" />
-                    )}
+                  <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+                    <ThumbnailImage
+                      cid={course.thumbnailCID}
+                      alt={course.title}
+                      fallback={
+                        <div className={`w-full h-full ${course.status === 'Completed'
+                            ? 'bg-gradient-to-br from-green-500 to-emerald-600'
+                            : 'bg-gradient-to-br from-gray-500 to-gray-600'
+                          } flex items-center justify-center`}>
+                          {course.status === 'Completed' ? (
+                            <Trophy className="w-12 h-12 text-white/70" />
+                          ) : (
+                            <Clock className="w-12 h-12 text-white/70" />
+                          )}
+                        </div>
+                      }
+                    />
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -399,14 +451,25 @@ export default function LearningPage() {
                           ✓ Certificate earned: {course.certificateId}
                         </p>
                         <div className="space-y-2">
-                          <Button
-                            variant="outline"
-                            className="w-full"
-                            onClick={() => handleViewCertificate()}
-                          >
-                            <Award className="w-4 h-4 mr-2" />
-                            View Certificate
-                          </Button>
+                          {/* Show either "Get Certificate" or "View Certificate" based on whether they have one */}
+                          {course.certificateId ? (
+                            <Button
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => handleViewCertificate()}
+                            >
+                              <Award className="w-4 h-4 mr-2" />
+                              View Certificate
+                            </Button>
+                          ) : (
+                            <Button
+                              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                              onClick={() => handleOpenCertificateModal(course.id)}
+                            >
+                              <Award className="w-4 h-4 mr-2" />
+                              Get Certificate
+                            </Button>
+                          )}
 
                           <Button
                             variant="outline"
@@ -460,6 +523,18 @@ export default function LearningPage() {
           onClose={handleCloseRatingModal}
           userAddress={mockUserAddress}
           onRatingSubmitted={handleRatingSubmitted}
+        />
+      )}
+
+      {/* Certificate Modal */}
+      {selectedCourseForCertificate && (
+        <GetCertificateModal
+          isOpen={isCertificateModalOpen}
+          onClose={handleCloseCertificateModal}
+          courseId={selectedCourseForCertificate.id}
+          courseTitle={selectedCourseForCertificate.title}
+          certificatePrice={selectedCourseForCertificate.price}
+          onSuccess={handleCertificateSuccess}
         />
       )}
     </ContentContainer>

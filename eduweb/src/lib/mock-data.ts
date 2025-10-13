@@ -260,11 +260,11 @@ const createMockEnrichedSections = (courseId: bigint, sectionCount: number): Enr
       courseId: courseId,
       title: sectionTitles[index % sectionTitles.length],
       description: sectionDescriptions[index % sectionDescriptions.length],
-      contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli",
+      contentCID: "bafybeigbxztbxewqyddso76boh27p3ptlnnqz3rwwmg5pg2juoulb5t3tq",
       duration: BigInt(1800 + Math.floor(Math.random() * 1200)), // 30-50 menit
       orderId: sectionId,
       videoMetadata: {
-        thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
+        thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
         qualityOptions: [
           { resolution: "1080p", bitrate: 4000, size: 720 }, { resolution: "720p", bitrate: 2500, size: 450 },
           { resolution: "480p", bitrate: 1200, size: 280 }
@@ -290,7 +290,7 @@ export const mockCourses: ExtendedCourse[] = [
     id: BigInt(1),
     title: "Dasar-Dasar Blockchain untuk Pemula",
     description: "Pelajari konsep inti teknologi blockchain, cryptocurrency, dan sistem terdesentralisasi. Sempurna untuk pendatang baru di Web3.",
-    thumbnailCID: "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
     creator: "0x742e8A4C2a9b4f7A76B25e5B8F6a8f9E8A9b4c5D",
     creatorName: "Dr. Sarah Johnson",
     isActive: true,
@@ -320,7 +320,7 @@ export const mockCourses: ExtendedCourse[] = [
     id: BigInt(2),
     title: "Pengembangan Smart Contract Solidity Tingkat Lanjut",
     description: "Kuasai pola Solidity tingkat lanjut, praktik terbaik keamanan, dan teknik optimisasi gas. Bangun smart contract siap produksi.",
-    thumbnailCID: "QmUNLLsPACCz1vLxQVkXqqLX5R1X9RVxrK7F2z4B8xCmv8",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
     creator: "0x1a2B3c4D5e6F7890aB1c2D3e4F567890aB1c2D3e",
     creatorName: "Alex Chen",
     isActive: true,
@@ -348,7 +348,7 @@ export const mockCourses: ExtendedCourse[] = [
     id: BigInt(3),
     title: "Arsitektur dan Pengembangan Protokol DeFi",
     description: "Rancang dan bangun protokol keuangan terdesentralisasi dari awal. Pelajari tentang AMM, protokol pinjaman, dan strategi yield farming.",
-    thumbnailCID: "QmPvP4z9FJiXpKvP2zq8x7Y6B5a1B2c3D4e5F6g7H8i9J",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
     creator: "0x9F8e7D6c5B4a3921F8e7D6c5B4a39218F7e6D5c4",
     creatorName: "Maria Rodriguez",
     isActive: false, // Contoh kursus tidak aktif

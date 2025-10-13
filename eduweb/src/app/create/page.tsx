@@ -1,8 +1,10 @@
 "use client";
 
+import { CourseUploadProgress, UploadStage, type FileUploadStatus } from '@/components/CourseUploadProgress';
 import { FormContainer } from "@/components/PageContainer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { draftStorage, type DraftFormData, type DraftSection } from '@/lib/draftStorage';
+import { prepareCreateCourseTransaction } from '@/services/courseContract.service';
 import {
   AlertCircle,
   BookOpen,
@@ -26,6 +28,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import React, { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { useActiveAccount, useSendTransaction } from 'thirdweb/react';
 
 // Type definitions - Updated to work with storage service
 interface FormData {
@@ -146,10 +150,22 @@ const FILE_CONFIGS: Record<'video' | 'document' | 'image', FileConfig> = {
 
 export default function CreateCoursePage() {
   const { ethToIDR } = useEthPrice();
+
+  // Thirdweb hooks
+  const activeAccount = useActiveAccount();
+  const { mutate: sendTransaction, isPending: isSendingTx } = useSendTransaction();
+
   const [activeStep] = useState<number>(0);
   const [isPublishing, setIsPublishing] = useState<boolean>(false);
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({});
+  const [uploadProgress] = useState<UploadProgress>({});
   const [showPreview, setShowPreview] = useState<boolean>(false);
+
+  // Upload progress modal states
+  const [uploadStage, setUploadStage] = useState<UploadStage>(UploadStage.IDLE);
+  const [thumbnailUploadStatus, setThumbnailUploadStatus] = useState<FileUploadStatus | undefined>();
+  const [videoUploadStatuses, setVideoUploadStatuses] = useState<FileUploadStatus[]>([]);
+  const [currentVideoIndex] = useState<number>(0);
+  const [uploadError, setUploadError] = useState<string | undefined>();
 
   // Draft storage states
   const [isDraftSupported, setIsDraftSupported] = useState<boolean>(false);
@@ -684,6 +700,7 @@ export default function CreateCoursePage() {
   // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedSection(index);
+    setIsDraggingOver(true);
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -706,82 +723,240 @@ export default function CreateCoursePage() {
     setIsDraggingOver(false);
   };
 
-  // Simulate IPFS upload
-  const simulateIPFSUpload = async (file: File, onProgress: (progress: number) => void): Promise<string> => {
-    return new Promise((resolve) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 30;
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(interval);
-          resolve(`Qm${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`);
+  /**
+   * Upload course assets to IPFS via API endpoint
+   * Returns plain CIDs compatible with smart contract storage
+   */
+  const uploadCourseAssetsToIPFS = async (): Promise<{
+    thumbnailCID: string;
+    videoCIDs: { sectionId: string; cid: string; filename: string }[];
+  }> => {
+    try {
+      // Step 1: Validate thumbnail exists
+      if (!formData.thumbnailFile) {
+        throw new Error('Thumbnail is required for publishing');
+      }
+
+      // Initialize upload statuses
+      setUploadStage(UploadStage.UPLOADING_THUMBNAIL);
+      setThumbnailUploadStatus({
+        filename: formData.thumbnailFile.name,
+        progress: 0,
+        status: 'uploading',
+      });
+
+      // Prepare FormData for API request
+      const uploadFormData = new FormData();
+      uploadFormData.append('courseId', `draft-${Date.now()}`);
+      uploadFormData.append('courseName', formData.title || 'Untitled Course');
+      uploadFormData.append('thumbnail', formData.thumbnailFile);
+
+      // Add all section videos
+      const videoSections = sections.filter(s => s.file !== null);
+      const initialVideoStatuses: FileUploadStatus[] = videoSections.map(section => ({
+        filename: section.file?.name || section.title,
+        progress: 0,
+        status: 'pending',
+      }));
+      setVideoUploadStatuses(initialVideoStatuses);
+
+      videoSections.forEach((section) => {
+        if (section.file) {
+          uploadFormData.append('videos', section.file);
+          uploadFormData.append('sectionIds', section.id);
         }
-        onProgress(progress);
-      }, 500);
-    });
+      });
+
+      // Upload to Pinata via API
+      console.log('[Create Course] Uploading assets to Pinata...');
+      const response = await fetch('/api/course/upload-assets-pinata', {
+        method: 'POST',
+        body: uploadFormData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload assets to IPFS');
+      }
+
+      const result = await response.json();
+      console.log('[Create Course] Upload successful:', result);
+
+      // Update thumbnail status
+      setThumbnailUploadStatus({
+        filename: formData.thumbnailFile.name,
+        progress: 100,
+        status: 'completed',
+        cid: result.thumbnailCID,
+      });
+
+      // Update video statuses
+      setUploadStage(UploadStage.UPLOADING_VIDEOS);
+      const updatedVideoStatuses = videoSections.map((section, idx) => ({
+        filename: section.file?.name || section.title,
+        progress: 100,
+        status: 'completed' as const,
+        cid: result.videos[idx].cid,
+      }));
+      setVideoUploadStatuses(updatedVideoStatuses);
+
+      // Map video CIDs back to sections
+      const videoCIDs = videoSections.map((section, idx) => ({
+        sectionId: section.id,
+        cid: result.videos[idx].cid,
+        duration: result.videos[idx].duration || 0, // ✅ Capture duration from API
+        filename: section.file?.name || section.title,
+      }));
+
+      // ✅ Update section objects with actual durations from video extraction
+      videoSections.forEach((section, idx) => {
+        const duration = result.videos[idx].duration || 0;
+        section.duration = duration;
+        console.log(`[Create Course] Section "${section.title}" duration: ${duration}s (${Math.floor(duration / 60)}m ${duration % 60}s)`);
+      });
+
+      setUploadStage(UploadStage.FINALIZING);
+
+      return {
+        thumbnailCID: result.thumbnailCID,
+        videoCIDs,
+      };
+    } catch (error) {
+      console.error('IPFS upload error:', error);
+      setUploadStage(UploadStage.ERROR);
+      setUploadError(error instanceof Error ? error.message : 'Unknown error occurred');
+      throw error;
+    }
   };
 
-  // Publish course
+  // Publish course with real IPFS upload
   const publishCourse = async () => {
     setIsPublishing(true);
+    setUploadStage(UploadStage.UPLOADING_THUMBNAIL);
+    setUploadError(undefined);
 
     try {
-      // Step 1: Upload thumbnail
-      if (!formData.thumbnailFile) {
-        alert('Please select a thumbnail image');
+      // Validate required fields
+      if (!formData.title || !formData.description || !formData.thumbnailFile) {
+        toast.error('Missing required fields', {
+          description: 'Please fill in title, description, and upload a thumbnail',
+        });
         return;
       }
 
-      setUploadProgress({ thumbnail: 0 });
-      const thumbnailCID = await simulateIPFSUpload(
-        formData.thumbnailFile,
-        (progress: number) => setUploadProgress(prev => ({ ...prev, thumbnail: progress }))
-      );
-
-      // Step 2: Upload section files
-      const sectionCIDs = [];
-      for (let i = 0; i < sections.length; i++) {
-        const section = sections[i];
-        if (!section.file) continue;
-
-        setUploadProgress(prev => ({ ...prev, [`section_${i}`]: 0 }));
-
-        const cid = await simulateIPFSUpload(
-          section.file,
-          (progress: number) => setUploadProgress(prev => ({ ...prev, [`section_${i}`]: progress }))
-        );
-
-        sectionCIDs.push({ ...section, contentCID: cid });
+      if (sections.length === 0) {
+        toast.error('No content sections', {
+          description: 'Please add at least one content section',
+        });
+        return;
       }
 
-      // Step 3: Create course on blockchain (simulated)
-      console.log('Creating course with:', {
-        ...formData,
-        thumbnailCID,
-        sections: sectionCIDs
+      // Upload assets to IPFS
+      toast.info('Uploading course assets...', {
+        description: 'Please wait while we upload your course to IPFS',
       });
 
-      // Clear draft after successful publish
-      await clearDraft();
+      const { thumbnailCID, videoCIDs } = await uploadCourseAssetsToIPFS();
 
-      alert('Course published successfully! 🎉');
+      // Mark upload as complete
+      setUploadStage(UploadStage.COMPLETE);
+
+      // Log CIDs for next step (blockchain transaction)
+      console.log('✅ Course assets uploaded successfully!');
+      console.log('Thumbnail CID:', thumbnailCID);
+      console.log('Video CIDs:', videoCIDs);
+
+      const courseData = {
+        title: formData.title,
+        description: formData.description,
+        thumbnailCID, // Plain CID for smart contract
+        creatorName: formData.creatorName,
+        pricePerMonth: formData.pricePerMonth,
+        category: formData.category,
+        difficulty: formData.difficulty,
+        sections: sections.map((section) => ({
+          title: section.title,
+          description: section.description,
+          duration: section.duration,
+          contentCID: videoCIDs.find(v => v.sectionId === section.id)?.cid || '',
+        })),
+      };
+
+      console.log('Ready for blockchain transaction with:', courseData);
+
+      // Step 2: Publish to blockchain
+      toast.info('Publishing to blockchain...', {
+        description: 'Please confirm the transaction in your wallet',
+      });
+
+      // Check wallet connection
+      if (!activeAccount) {
+        toast.error('Wallet not connected', {
+          description: 'Please connect your wallet to publish',
+        });
+        return;
+      }
+
+      // Prepare blockchain transaction
+      try {
+        const transaction = prepareCreateCourseTransaction({
+          metadata: {
+            title: formData.title,
+            description: formData.description,
+            thumbnailCID,
+            creatorName: formData.creatorName,
+            category: formData.category,
+            difficulty: formData.difficulty,
+          },
+          sections: courseData.sections,
+          pricePerMonth: formData.pricePerMonth,
+        });
+
+        // Send transaction using Thirdweb
+        sendTransaction(transaction, {
+          onSuccess: async (result) => {
+            console.log('✅ Course published to blockchain!');
+            console.log('Transaction:', result);
+
+            // Clear draft after successful upload
+            await clearDraft();
+
+            toast.success('Course published successfully! 🎉', {
+              description: 'Your course is now on the blockchain',
+              duration: 5000,
+            });
+          },
+          onError: (error) => {
+            console.error('Blockchain publishing failed:', error);
+            toast.error('Failed to publish course', {
+              description: error.message || 'Please try again',
+            });
+          },
+        });
+      } catch (error) {
+        console.error('Failed to prepare transaction:', error);
+        toast.error('Failed to prepare transaction', {
+          description: error instanceof Error ? error.message : 'Please try again',
+        });
+        return;
+      }
 
     } catch (error) {
       console.error('Publishing failed:', error);
-      alert('Failed to publish course. Please try again.');
+      toast.error('Failed to publish course', {
+        description: error instanceof Error ? error.message : 'Please try again',
+      });
     } finally {
       setIsPublishing(false);
-      setUploadProgress({});
     }
   };
 
   // Format file size
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  };
+  // const _formatFileSize = (bytes: number): string => {
+  //   if (bytes < 1024) return bytes + ' B';
+  //   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  //   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  // };
 
   // Format duration
   const formatDuration = (seconds: number): string => {
@@ -827,6 +1002,28 @@ export default function CreateCoursePage() {
                 </h1>
                 <p className="text-sm text-muted-foreground">Share your knowledge with the world</p>
               </div>
+            </div>
+
+            {/* Draft Save Status */}
+            <div className="flex items-center gap-2">
+              {draftSaveStatus === 'saving' && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Saving...
+                </span>
+              )}
+              {draftSaveStatus === 'saved' && lastSavedAt && (
+                <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  Saved {new Date(lastSavedAt).toLocaleTimeString()}
+                </span>
+              )}
+              {draftSaveStatus === 'error' && (
+                <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Save failed
+                </span>
+              )}
             </div>
 
             {/* Progress Steps */}
@@ -959,6 +1156,12 @@ export default function CreateCoursePage() {
                         <span className="text-xs text-muted-foreground mt-1">PNG, JPG up to 10MB</span>
                       </label>
                     )}
+                    {errors.thumbnail && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {errors.thumbnail}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1030,7 +1233,7 @@ export default function CreateCoursePage() {
               <CardContent className="p-6 space-y-6">
                 {/* Sections List */}
                 {sections.length > 0 && (
-                  <div className="space-y-3">
+                  <div className={`space-y-3 ${isDraggingOver ? 'bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-2 border-2 border-dashed border-blue-400' : ''}`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-semibold text-foreground">
                         {sections.length} Section{sections.length !== 1 ? 's' : ''} • {formatDuration(totalDuration)}
@@ -1326,10 +1529,10 @@ export default function CreateCoursePage() {
 
                   <button
                     onClick={publishCourse}
-                    disabled={isPublishing || !formData.title || !formData.description || !formData.thumbnailFile || sections.length === 0}
+                    disabled={isPublishing || isSendingTx || !formData.title || !formData.description || !formData.thumbnailFile || sections.length === 0}
                     className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    {isPublishing ? (
+                    {isPublishing || isSendingTx ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Publishing...
@@ -1512,6 +1715,23 @@ export default function CreateCoursePage() {
           </div>
         </div>
       )}
+
+      {/* Upload Progress Modal */}
+      <CourseUploadProgress
+        isOpen={isPublishing && uploadStage !== UploadStage.IDLE}
+        stage={uploadStage}
+        thumbnailStatus={thumbnailUploadStatus}
+        videoStatuses={videoUploadStatuses}
+        currentVideoIndex={currentVideoIndex}
+        totalVideos={sections.filter(s => s.file !== null).length}
+        onClose={() => {
+          if (uploadStage === UploadStage.COMPLETE || uploadStage === UploadStage.ERROR) {
+            setUploadStage(UploadStage.IDLE);
+            setIsPublishing(false);
+          }
+        }}
+        error={uploadError}
+      />
     </div>
   );
 }

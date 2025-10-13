@@ -1,0 +1,541 @@
+/**
+ * @fileoverview Course Smart Contract Service
+ * @description Handles blockchain interactions with CourseFactory contract
+ * @author EduVerse Platform
+ * @date 2025-01-13
+ *
+ * This service provides functions to interact with the CourseFactory smart contract:
+ * - createCourse(): Create a new course on blockchain
+ * - addCourseSection(): Add sections with video CID and duration
+ * - getCourseDetails(): Retrieve course information
+ * - getSectionDetails(): Retrieve section information with duration
+ *
+ * Smart Contract Integration:
+ * - CourseFactory.sol with duration support in SectionAdded events
+ * - Events emit contentCID and duration for Goldsky indexer
+ * - Duration validated in range 60-10800 seconds (1 minute - 3 hours)
+ */
+
+import { BrowserProvider, Contract, parseEther, formatUnits } from 'ethers';
+
+// ============================================================================
+// WINDOW ETHEREUM TYPE
+// ============================================================================
+
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string; params?: any[] }) => Promise<any>;
+      on?: (event: string, callback: (...args: any[]) => void) => void;
+      removeListener?: (event: string, callback: (...args: any[]) => void) => void;
+    };
+  }
+}
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface CourseMetadata {
+  title: string;
+  description: string;
+  thumbnailCID: string; // Plain CID without ipfs:// prefix
+  creatorName: string;
+  category: string;
+  difficulty: string;
+}
+
+export interface SectionData {
+  title: string;
+  description: string;
+  contentCID: string; // Video CID from Pinata
+  duration: number; // Duration in seconds (60-10800)
+}
+
+export interface CreateCourseParams {
+  metadata: CourseMetadata;
+  sections: SectionData[];
+  pricePerMonth: string; // Price in ETH (e.g., "0.01")
+}
+
+export interface TransactionResult {
+  success: boolean;
+  transactionHash?: string;
+  courseId?: number;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export interface SectionAddResult {
+  success: boolean;
+  transactionHash?: string;
+  sectionId?: number;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+// ============================================================================
+// CONTRACT CONFIGURATION
+// ============================================================================
+
+// Note: ABI will be imported from generated files after contract deployment
+// For now, defining minimal ABI for the functions we need
+const COURSE_FACTORY_ABI = [
+  // createCourse function
+  'function createCourse(string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, string category, string difficulty) returns (uint256)',
+  
+  // addCourseSection function with duration
+  'function addCourseSection(uint256 courseId, string title, string contentCID, uint256 duration) returns (uint256)',
+  
+  // Batch add sections
+  'function addCourseSectionsBatch(uint256 courseId, tuple(string title, string contentCID, uint256 duration)[] sections) returns (uint256[] memory)',
+  
+  // View functions
+  'function getCourse(uint256 courseId) view returns (tuple(string title, string description, string thumbnailCID, address creator, string creatorName, uint256 pricePerMonth, string category, string difficulty, bool isActive, uint256 totalRevenue, uint256 createdAt))',
+  'function getCourseSection(uint256 courseId, uint256 sectionId) view returns (tuple(string title, string contentCID, uint256 duration, bool isActive))',
+  
+  // Events
+  'event CourseCreated(uint256 indexed courseId, address indexed creator, string title, uint256 pricePerMonth)',
+  'event SectionAdded(uint256 indexed courseId, uint256 indexed sectionId, string title, string contentCID, uint256 duration)',
+];
+
+// Contract address - will be set after deployment
+// TODO: Update this after deploying to testnet/mainnet
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS || '';
+
+// ============================================================================
+// PROVIDER & CONTRACT INITIALIZATION
+// ============================================================================
+
+/**
+ * Get Web3 provider from browser wallet (MetaMask, etc.)
+ */
+async function getProvider(): Promise<BrowserProvider | null> {
+  if (typeof window === 'undefined' || !window.ethereum) {
+    console.error('[Contract Service] No Web3 provider found');
+    return null;
+  }
+
+  try {
+    const provider = new BrowserProvider(window.ethereum);
+    return provider;
+  } catch (error) {
+    console.error('[Contract Service] Failed to initialize provider:', error);
+    return null;
+  }
+}
+
+/**
+ * Get contract instance with signer
+ */
+async function getContractWithSigner(): Promise<Contract | null> {
+  if (!CONTRACT_ADDRESS) {
+    console.error('[Contract Service] Contract address not configured');
+    return null;
+  }
+
+  const provider = await getProvider();
+  if (!provider) return null;
+
+  try {
+    const signer = await provider.getSigner();
+    const contract = new Contract(CONTRACT_ADDRESS, COURSE_FACTORY_ABI, signer);
+    return contract;
+  } catch (error) {
+    console.error('[Contract Service] Failed to get contract:', error);
+    return null;
+  }
+}
+
+/**
+ * Get contract instance for read-only operations
+ */
+async function getContract(): Promise<Contract | null> {
+  if (!CONTRACT_ADDRESS) {
+    console.error('[Contract Service] Contract address not configured');
+    return null;
+  }
+
+  const provider = await getProvider();
+  if (!provider) return null;
+
+  try {
+    const contract = new Contract(CONTRACT_ADDRESS, COURSE_FACTORY_ABI, provider);
+    return contract;
+  } catch (error) {
+    console.error('[Contract Service] Failed to get contract:', error);
+    return null;
+  }
+}
+
+// ============================================================================
+// VALIDATION HELPERS
+// ============================================================================
+
+/**
+ * Validate section duration meets smart contract requirements
+ */
+function validateDuration(duration: number): { valid: boolean; error?: string } {
+  if (duration < 60) {
+    return { valid: false, error: 'Duration must be at least 60 seconds (1 minute)' };
+  }
+  if (duration > 10800) {
+    return { valid: false, error: 'Duration must not exceed 10800 seconds (3 hours)' };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validate all sections have valid durations
+ */
+function validateSections(sections: SectionData[]): { valid: boolean; error?: string } {
+  if (sections.length === 0) {
+    return { valid: false, error: 'At least one section is required' };
+  }
+
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i];
+    
+    if (!section.title || section.title.trim().length === 0) {
+      return { valid: false, error: `Section ${i + 1}: Title is required` };
+    }
+    
+    if (!section.contentCID || section.contentCID.trim().length === 0) {
+      return { valid: false, error: `Section ${i + 1}: Content CID is required` };
+    }
+    
+    const durationCheck = validateDuration(section.duration);
+    if (!durationCheck.valid) {
+      return { valid: false, error: `Section ${i + 1}: ${durationCheck.error}` };
+    }
+  }
+
+  return { valid: true };
+}
+
+// ============================================================================
+// MAIN CONTRACT FUNCTIONS
+// ============================================================================
+
+/**
+ * Create a new course on the blockchain
+ * This creates the course and adds all sections in batch
+ */
+export async function createCourse(
+  params: CreateCourseParams
+): Promise<TransactionResult> {
+  console.log('[Contract Service] ========================================');
+  console.log('[Contract Service] Creating course on blockchain...');
+  console.log('[Contract Service] Title:', params.metadata.title);
+  console.log('[Contract Service] Sections:', params.sections.length);
+  console.log('[Contract Service] Price:', params.pricePerMonth, 'ETH');
+
+  try {
+    // Validate sections
+    const validation = validateSections(params.sections);
+    if (!validation.valid) {
+      return {
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: validation.error || 'Invalid section data',
+        },
+      };
+    }
+
+    // Get contract with signer
+    const contract = await getContractWithSigner();
+    if (!contract) {
+      return {
+        success: false,
+        error: {
+          code: 'NO_CONTRACT',
+          message: 'Failed to connect to smart contract',
+        },
+      };
+    }
+
+    // Convert price to wei
+    const priceInWei = parseEther(params.pricePerMonth);
+
+    // Step 1: Create course
+    console.log('[Contract Service] Step 1: Creating course...');
+    const createTx = await contract.createCourse(
+      params.metadata.title,
+      params.metadata.description,
+      params.metadata.thumbnailCID,
+      params.metadata.creatorName,
+      priceInWei,
+      params.metadata.category,
+      params.metadata.difficulty
+    );
+
+    console.log('[Contract Service] Transaction sent:', createTx.hash);
+    console.log('[Contract Service] Waiting for confirmation...');
+
+    const createReceipt = await createTx.wait();
+    console.log('[Contract Service] ✅ Course created successfully');
+    console.log('[Contract Service] Block:', createReceipt.blockNumber);
+
+    // Extract courseId from event
+    const courseCreatedEvent = createReceipt.logs.find(
+      (log: any) => {
+        try {
+          const parsed = contract.interface.parseLog(log);
+          return parsed?.name === 'CourseCreated';
+        } catch {
+          return false;
+        }
+      }
+    );
+
+    let courseId: number;
+    if (courseCreatedEvent) {
+      const parsed = contract.interface.parseLog(courseCreatedEvent);
+      courseId = Number(parsed?.args[0]);
+      console.log('[Contract Service] Course ID:', courseId);
+    } else {
+      console.error('[Contract Service] Failed to extract course ID from event');
+      return {
+        success: false,
+        error: {
+          code: 'NO_COURSE_ID',
+          message: 'Course created but failed to get course ID',
+        },
+      };
+    }
+
+    // Step 2: Add sections in batch
+    console.log('[Contract Service] Step 2: Adding sections...');
+    const sectionStructs = params.sections.map(section => ({
+      title: section.title,
+      contentCID: section.contentCID,
+      duration: section.duration,
+    }));
+
+    const addSectionsTx = await contract.addCourseSectionsBatch(
+      courseId,
+      sectionStructs
+    );
+
+    console.log('[Contract Service] Sections transaction sent:', addSectionsTx.hash);
+    console.log('[Contract Service] Waiting for confirmation...');
+
+    const sectionsReceipt = await addSectionsTx.wait();
+    console.log('[Contract Service] ✅ Sections added successfully');
+    console.log('[Contract Service] Block:', sectionsReceipt.blockNumber);
+
+    // Log all section durations for verification
+    params.sections.forEach((section, i) => {
+      console.log(`[Contract Service]   Section ${i + 1}: "${section.title}" - ${section.duration}s (${Math.floor(section.duration / 60)}m ${section.duration % 60}s)`);
+    });
+
+    console.log('[Contract Service] ========================================');
+    console.log('[Contract Service] 🎉 Course published successfully!');
+    console.log('[Contract Service] Course ID:', courseId);
+    console.log('[Contract Service] Transaction Hash:', createReceipt.hash);
+
+    return {
+      success: true,
+      transactionHash: createReceipt.hash,
+      courseId,
+    };
+
+  } catch (error: any) {
+    console.error('[Contract Service] ========================================');
+    console.error('[Contract Service] Failed to create course:', error);
+
+    return {
+      success: false,
+      error: {
+        code: error.code || 'TRANSACTION_FAILED',
+        message: error.message || 'Failed to create course on blockchain',
+      },
+    };
+  }
+}
+
+/**
+ * Add a single section to an existing course
+ * Use this for adding sections after course creation
+ */
+export async function addCourseSection(
+  courseId: number,
+  section: SectionData
+): Promise<SectionAddResult> {
+  console.log('[Contract Service] Adding section to course', courseId);
+  console.log('[Contract Service] Section:', section.title);
+  console.log('[Contract Service] Duration:', section.duration, 'seconds');
+
+  try {
+    // Validate duration
+    const validation = validateDuration(section.duration);
+    if (!validation.valid) {
+      return {
+        success: false,
+        error: {
+          code: 'INVALID_DURATION',
+          message: validation.error || 'Invalid section duration',
+        },
+      };
+    }
+
+    // Get contract with signer
+    const contract = await getContractWithSigner();
+    if (!contract) {
+      return {
+        success: false,
+        error: {
+          code: 'NO_CONTRACT',
+          message: 'Failed to connect to smart contract',
+        },
+      };
+    }
+
+    // Add section
+    const tx = await contract.addCourseSection(
+      courseId,
+      section.title,
+      section.contentCID,
+      section.duration
+    );
+
+    console.log('[Contract Service] Transaction sent:', tx.hash);
+    const receipt = await tx.wait();
+    console.log('[Contract Service] ✅ Section added successfully');
+
+    // Extract sectionId from event
+    const sectionAddedEvent = receipt.logs.find((log: any) => {
+      try {
+        const parsed = contract.interface.parseLog(log);
+        return parsed?.name === 'SectionAdded';
+      } catch {
+        return false;
+      }
+    });
+
+    let sectionId: number | undefined;
+    if (sectionAddedEvent) {
+      const parsed = contract.interface.parseLog(sectionAddedEvent);
+      sectionId = Number(parsed?.args[1]);
+      console.log('[Contract Service] Section ID:', sectionId);
+    }
+
+    return {
+      success: true,
+      transactionHash: receipt.hash,
+      sectionId,
+    };
+
+  } catch (error: any) {
+    console.error('[Contract Service] Failed to add section:', error);
+
+    return {
+      success: false,
+      error: {
+        code: error.code || 'TRANSACTION_FAILED',
+        message: error.message || 'Failed to add section to blockchain',
+      },
+    };
+  }
+}
+
+// ============================================================================
+// READ FUNCTIONS
+// ============================================================================
+
+/**
+ * Get course details from blockchain
+ */
+export async function getCourseDetails(courseId: number) {
+  try {
+    const contract = await getContract();
+    if (!contract) return null;
+
+    const course = await contract.getCourse(courseId);
+    return {
+      title: course.title,
+      description: course.description,
+      thumbnailCID: course.thumbnailCID,
+      creator: course.creator,
+      creatorName: course.creatorName,
+      pricePerMonth: formatUnits(course.pricePerMonth, 'ether'),
+      category: course.category,
+      difficulty: course.difficulty,
+      isActive: course.isActive,
+      totalRevenue: formatUnits(course.totalRevenue, 'ether'),
+      createdAt: new Date(Number(course.createdAt) * 1000),
+    };
+  } catch (error) {
+    console.error('[Contract Service] Failed to get course:', error);
+    return null;
+  }
+}
+
+/**
+ * Get section details including duration
+ */
+export async function getSectionDetails(courseId: number, sectionId: number) {
+  try {
+    const contract = await getContract();
+    if (!contract) return null;
+
+    const section = await contract.getCourseSection(courseId, sectionId);
+    return {
+      title: section.title,
+      contentCID: section.contentCID,
+      duration: Number(section.duration),
+      isActive: section.isActive,
+    };
+  } catch (error) {
+    console.error('[Contract Service] Failed to get section:', error);
+    return null;
+  }
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Format duration to human-readable string
+ */
+export function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+/**
+ * Check if Web3 provider is available
+ */
+export function isWeb3Available(): boolean {
+  return typeof window !== 'undefined' && !!window.ethereum;
+}
+
+/**
+ * Request account access from wallet
+ */
+export async function requestAccounts(): Promise<string[]> {
+  if (!isWeb3Available() || !window.ethereum) {
+    throw new Error('Web3 provider not available');
+  }
+
+  try {
+    const accounts = await window.ethereum.request({
+      method: 'eth_requestAccounts',
+    });
+    return accounts;
+  } catch (error) {
+    console.error('[Contract Service] Failed to request accounts:', error);
+    throw error;
+  }
+}

@@ -47,6 +47,12 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/ipfs/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'copper-far-firefly-220.mypinata.cloud',
+        port: '',
+        pathname: '/files/**',
+      },
     ],
   },
 

@@ -19,6 +19,7 @@ import {
     ChevronRight,
     Clock,
     FileText,
+  Loader2,
     Maximize,
     Minimize,
     Pause,
@@ -34,6 +35,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
+import { formatTimeUntilExpiry, getSignedUrlForCID, isSignedUrlExpired } from "@/lib/ipfs-helpers";
 import {
     EnrichedCourseSection,
     ExtendedCourse,
@@ -78,7 +80,68 @@ function VideoPlayer({ section, onProgressUpdate }: VpProps) {
   const [show, setShow] = useState(true);
   const [loading, setLoading] = useState(true);
 
-  const src = `https://copper-far-firefly-220.mypinata.cloud/ipfs/${section.contentCID}`;
+  // Signed URL state
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<number>(0);
+  const [fetchingUrl, setFetchingUrl] = useState(true);
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  // Fetch signed URL for private IPFS content
+  useEffect(() => {
+    async function fetchSignedUrl() {
+      if (!section.contentCID) {
+        setUrlError('No content CID available');
+        setFetchingUrl(false);
+        return;
+      }
+
+      try {
+        setFetchingUrl(true);
+        setUrlError(null);
+        console.log('[Video Player] Fetching signed URL for CID:', section.contentCID);
+
+        const result = await getSignedUrlForCID(section.contentCID, 7200); // 2 hours
+        setSignedUrl(result.signedUrl);
+        setExpiresAt(result.expiresAt);
+        console.log('[Video Player] Signed URL fetched successfully');
+      } catch (error) {
+        console.error('[Video Player] Error fetching signed URL:', error);
+        setUrlError(error instanceof Error ? error.message : 'Failed to load video');
+      } finally {
+        setFetchingUrl(false);
+      }
+    }
+
+    fetchSignedUrl();
+  }, [section.contentCID]);
+
+  // Auto-refresh URL before expiry
+  useEffect(() => {
+    if (!signedUrl || !expiresAt) return;
+
+    const checkInterval = setInterval(() => {
+      const timeUntilExpiry = expiresAt - Date.now();
+
+      // Refresh 1 minute before expiry
+      if (timeUntilExpiry > 0 && timeUntilExpiry < 60000) {
+        console.log('[Video Player] Signed URL expiring soon, refreshing...');
+        getSignedUrlForCID(section.contentCID, 7200)
+          .then(result => {
+            setSignedUrl(result.signedUrl);
+            setExpiresAt(result.expiresAt);
+            console.log('[Video Player] Signed URL refreshed');
+          })
+          .catch(error => {
+            console.error('[Video Player] Error refreshing URL:', error);
+            setUrlError('Failed to refresh video URL');
+          });
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(checkInterval);
+  }, [signedUrl, expiresAt, section.contentCID]);
+
+  const src = signedUrl || undefined;
 
   useEffect(() => {
     const v = videoRef.current;
@@ -159,13 +222,61 @@ function VideoPlayer({ section, onProgressUpdate }: VpProps) {
     >
       <div className={`relative ${fs ? "h-full" : "aspect-video"}`}>
         <video ref={videoRef} src={src} className={`w-full ${fs ? "h-full" : "h-full"} object-cover`} preload="metadata" />
-        {loading && (
+
+        {/* Fetching Signed URL */}
+        {fetchingUrl && (
+          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white">
+            <Loader2 className="h-10 w-10 animate-spin mb-3" />
+            <p className="text-sm">Loading secure video link...</p>
+            <p className="text-xs text-gray-400 mt-1">Generating signed URL</p>
+          </div>
+        )}
+
+        {/* URL Error */}
+        {urlError && !fetchingUrl && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white p-6">
+            <AlertCircle className="h-12 w-12 text-red-500 mb-3" />
+            <p className="text-lg font-semibold mb-2">Failed to Load Video</p>
+            <p className="text-sm text-gray-300 text-center mb-4">{urlError}</p>
+            <Button
+              onClick={async () => {
+                setFetchingUrl(true);
+                setUrlError(null);
+                try {
+                  const result = await getSignedUrlForCID(section.contentCID, 7200);
+                  setSignedUrl(result.signedUrl);
+                  setExpiresAt(result.expiresAt);
+                } catch (error) {
+                  setUrlError(error instanceof Error ? error.message : 'Failed to load video');
+                } finally {
+                  setFetchingUrl(false);
+                }
+              }}
+              variant="secondary"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {/* Video Loading */}
+        {loading && !fetchingUrl && !urlError && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white">
             <RefreshCw className="h-8 w-8 animate-spin mb-2" />
             <p className="text-sm">Loading video…</p>
           </div>
         )}
-        {!loading && (
+
+        {/* URL Expiry Warning */}
+        {!fetchingUrl && !urlError && expiresAt > 0 && isSignedUrlExpired(expiresAt) && (
+          <div className="absolute top-4 right-4 bg-red-500/90 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+            <AlertCircle className="h-5 w-5" />
+            <span className="text-sm font-medium">Video URL expired - refreshing...</span>
+          </div>
+        )}
+
+        {!loading && !fetchingUrl && !urlError && (
           <div onClick={togglePlay} className="absolute inset-0 flex items-center justify-center cursor-pointer">
             <Button
               size="lg"
@@ -176,7 +287,8 @@ function VideoPlayer({ section, onProgressUpdate }: VpProps) {
             </Button>
           </div>
         )}
-        {show && !loading && (
+
+        {show && !loading && !fetchingUrl && !urlError && (
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/70 to-transparent p-4">
             <div className="h-2 bg-white/30 rounded cursor-pointer relative group" onClick={(e) => seek((e.nativeEvent.offsetX / e.currentTarget.clientWidth) * dur)}>
               <div className="h-full bg-red-500 rounded" style={{ width: `${pct}%` }} />
@@ -200,9 +312,16 @@ function VideoPlayer({ section, onProgressUpdate }: VpProps) {
                   <input type="range" min={0} max={1} step={0.1} value={muted ? 0 : vol} onChange={(e) => setVolume(parseFloat(e.target.value))} className="w-20 accent-red-500" />
                 </div>
                 <div className="text-sm font-mono">{fmtTime(time)} / {fmtTime(dur)}</div>
+
+                {/* URL Expiry Timer */}
+                {expiresAt > 0 && (
+                  <div className="ml-3 px-3 py-1 bg-white/10 rounded-full text-xs font-medium flex items-center gap-2">
+                    <Clock className="h-3 w-3" />
+                    <span>URL: {formatTimeUntilExpiry(expiresAt)}</span>
+                  </div>
+                )}
               </div>
-              <Button size="sm" variant="ghost" onClick={toggleFs} className="text-white hover:bg-white/20 p-2">
-                {fs ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+              <Button size="sm" variant="ghost" onClick={toggleFs} className="text-white hover:bg-white/20 p-2">{fs ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
               </Button>
             </div>
           </div>

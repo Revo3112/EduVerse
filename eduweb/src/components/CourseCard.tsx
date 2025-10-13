@@ -3,11 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rating, RatingButton } from "@/components/ui/rating";
 import { useCourseRating } from "@/hooks/useRating";
+import { getSignedUrlForCID } from "@/lib/ipfs-helpers";
 import { Course, getCategoryName, getDifficultyName, weiToEth } from "@/lib/mock-data";
 import { formatRatingDisplay } from "@/lib/rating-utils";
-import { BookOpen, Clock, Star, User } from "lucide-react";
+import { BookOpen, Clock, ImageIcon, Loader2, Star, User } from "lucide-react";
 import dynamic from 'next/dynamic';
-import { memo, useCallback, useMemo, useState } from 'react';
+import Image from 'next/image';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
 // Lazy load EnrollModal to improve initial page load
 const EnrollModal = dynamic(() => import("@/components/EnrollModal"), {
@@ -66,9 +68,42 @@ const getCategoryColor = (categoryName: string): string => {
 
 export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [thumbnailLoading, setThumbnailLoading] = useState(true);
+  const [thumbnailError, setThumbnailError] = useState(false);
 
   // Fetch course rating data
   const { data: ratingData, isLoading: isRatingLoading } = useCourseRating(course.id);
+
+  // Fetch signed URL for thumbnail
+  useEffect(() => {
+    async function fetchThumbnailUrl() {
+      // HARDCODED CID untuk development - belum connect ke backend
+      const HARDCODED_THUMBNAIL_CID = 'bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku';
+
+      // Gunakan hardcoded CID atau fallback ke course.thumbnailCID jika ada
+      const cidToUse = HARDCODED_THUMBNAIL_CID || course.thumbnailCID;
+
+      if (!cidToUse) {
+        setThumbnailLoading(false);
+        return;
+      }
+
+      try {
+        setThumbnailLoading(true);
+        setThumbnailError(false);
+        const result = await getSignedUrlForCID(cidToUse, 3600); // 1 hour expiry
+        setThumbnailUrl(result.signedUrl);
+      } catch (error) {
+        console.error('Failed to load thumbnail:', error);
+        setThumbnailError(true);
+      } finally {
+        setThumbnailLoading(false);
+      }
+    }
+
+    fetchThumbnailUrl();
+  }, [course.thumbnailCID]);
 
   // Memoize expensive calculations
   const courseData = useMemo(() => ({
@@ -103,16 +138,49 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
   return (
     <Card className="group hover:shadow-lg transition-shadow duration-300 border-0 shadow-md h-full flex flex-col overflow-hidden p-0">
       {/* IPFS Course Image - Truly Full Width with Zero Gap */}
-      <div className="relative h-48 w-full bg-gradient-to-br from-primary/10 to-secondary/10">
-        <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-          <div className="text-center">
-            <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p className="text-sm font-medium opacity-75">{course.title}</p>
-            <p className="text-xs opacity-60 mt-1">IPFS: {course.thumbnailCID.slice(0, 12)}...</p>
+      <div className="relative h-48 w-full bg-gradient-to-br from-primary/10 to-secondary/10 overflow-hidden">
+        {thumbnailLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-10">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        </div>
+        )}
+
+        {!thumbnailLoading && thumbnailError && (
+          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p className="text-sm font-medium opacity-75">{course.title}</p>
+              <p className="text-xs opacity-60 mt-1">IPFS: {course.thumbnailCID.slice(0, 12)}...</p>
+            </div>
+          </div>
+        )}
+
+        {!thumbnailLoading && !thumbnailError && thumbnailUrl && (
+          <div className="relative w-full h-full">
+            <Image
+              src={thumbnailUrl}
+              alt={course.title}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              onError={() => setThumbnailError(true)}
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              priority={false}
+            />
+          </div>
+        )}
+
+        {!thumbnailLoading && !thumbnailError && !thumbnailUrl && (
+          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p className="text-sm font-medium opacity-75">{course.title}</p>
+              <p className="text-xs opacity-60 mt-1">No thumbnail available</p>
+            </div>
+          </div>
+        )}
+
         {/* Category and Difficulty Badges - Overlay on Image */}
-        <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
+        <div className="absolute top-3 left-3 right-3 flex items-start justify-between z-20">
           <Badge
             className={`${categoryColorClass} border-0 shadow-sm`}
           >
