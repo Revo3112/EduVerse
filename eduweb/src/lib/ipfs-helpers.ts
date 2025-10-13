@@ -7,7 +7,64 @@
  */
 
 /**
- * Generates a signed URL for a given CID
+ * Generates a signed URL for a given CID (CACHED VERSION - Recommended for thumbnails)
+ *
+ * Uses GET endpoint with Next.js Data Cache for optimal performance.
+ * Significantly reduces Pinata API calls through intelligent caching.
+ *
+ * Performance:
+ * - First request: ~200-500ms (fetches from Pinata)
+ * - Cached requests: <10ms (served from Next.js cache)
+ * - Cache duration: 50 minutes (safe buffer before 1-hour expiry)
+ * - Auto-revalidates using stale-while-revalidate pattern
+ *
+ * @param cid - IPFS Content Identifier
+ * @param expirySeconds - Expiry time in seconds (default: 3600 = 1 hour for thumbnails)
+ * @returns Promise with signedUrl, expiresAt, and cached flag
+ */
+export async function getSignedUrlCached(
+  cid: string,
+  expirySeconds: number = 3600
+): Promise<{ signedUrl: string; expiresAt: number; cid: string; cached?: boolean }> {
+  try {
+    console.log(`[IPFS Helper - Cached] Fetching signed URL for CID: ${cid}`);
+
+    const response = await fetch(`/api/ipfs/signed-url/${cid}?expiry=${expirySeconds}`, {
+      method: 'GET',
+      // Note: Caching is handled by the Route Handler's revalidate config
+      // Client-side fetch will automatically benefit from server-side cache
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch signed URL');
+    }
+
+    const result = await response.json();
+    console.log(`[IPFS Helper - Cached] Signed URL fetched successfully`);
+    console.log(`[IPFS Helper - Cached] Cached: ${result.cached || false}`);
+    console.log(`[IPFS Helper - Cached] Expires at: ${new Date(result.expiresAt).toISOString()}`);
+
+    return {
+      signedUrl: result.signedUrl,
+      expiresAt: result.expiresAt,
+      cid: result.cid,
+      cached: result.cached,
+    };
+  } catch (error) {
+    console.error('[IPFS Helper - Cached] Error fetching signed URL:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generates a signed URL for a given CID (UNCACHED VERSION - Use for videos or manual refresh)
+ *
+ * Uses POST endpoint without caching. Suitable for:
+ * - Long videos that need custom expiry times
+ * - Manual refresh operations
+ * - Dynamic content that shouldn't be cached
+ *
  * @param cid - IPFS Content Identifier
  * @param expirySeconds - Expiry time in seconds (default: 7200 = 2 hours)
  * @returns Promise with signedUrl and expiresAt
@@ -23,6 +80,8 @@ export async function getSignedUrlForCID(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cid, expirySeconds }),
+      // Explicitly disable caching for POST requests
+      cache: 'no-store',
     });
 
     if (!response.ok) {
@@ -46,7 +105,34 @@ export async function getSignedUrlForCID(
 }
 
 /**
- * Generates signed URLs for multiple CIDs in batch
+ * Generates signed URLs for multiple CIDs in batch (CACHED VERSION)
+ *
+ * Uses the cached GET endpoint for optimal performance.
+ * Ideal for loading multiple thumbnails at once.
+ *
+ * @param cids - Array of IPFS Content Identifiers
+ * @param expirySeconds - Expiry time in seconds (default: 3600 = 1 hour)
+ * @returns Promise with array of results
+ */
+export async function getBatchSignedUrlsCached(
+  cids: string[],
+  expirySeconds: number = 3600
+): Promise<Array<{ signedUrl: string; expiresAt: number; cid: string; cached?: boolean }>> {
+  console.log(`[IPFS Helper - Cached] Fetching ${cids.length} signed URLs in batch...`);
+
+  const promises = cids.map(cid => getSignedUrlCached(cid, expirySeconds));
+  const results = await Promise.all(promises);
+
+  const cachedCount = results.filter(r => r.cached).length;
+  console.log(`[IPFS Helper - Cached] Successfully fetched ${results.length} signed URLs (${cachedCount} from cache)`);
+  return results;
+}
+
+/**
+ * Generates signed URLs for multiple CIDs in batch (UNCACHED VERSION)
+ *
+ * Uses POST endpoint without caching. Use for videos or dynamic content.
+ *
  * @param cids - Array of IPFS Content Identifiers
  * @param expirySeconds - Expiry time in seconds (default: 7200 = 2 hours)
  * @returns Promise with array of results

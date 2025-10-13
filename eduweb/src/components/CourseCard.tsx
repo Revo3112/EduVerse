@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rating, RatingButton } from "@/components/ui/rating";
 import { useCourseRating } from "@/hooks/useRating";
-import { getSignedUrlForCID } from "@/lib/ipfs-helpers";
+import { getSignedUrlCached } from "@/lib/ipfs-helpers";
 import { Course, getCategoryName, getDifficultyName, weiToEth } from "@/lib/mock-data";
 import { formatRatingDisplay } from "@/lib/rating-utils";
 import { BookOpen, Clock, ImageIcon, Loader2, Star, User } from "lucide-react";
@@ -92,7 +92,7 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
       try {
         setThumbnailLoading(true);
         setThumbnailError(false);
-        const result = await getSignedUrlForCID(cidToUse, 3600); // 1 hour expiry
+        const result = await getSignedUrlCached(cidToUse, 3600); // 1 hour expiry with cache
         setThumbnailUrl(result.signedUrl);
       } catch (error) {
         console.error('Failed to load thumbnail:', error);

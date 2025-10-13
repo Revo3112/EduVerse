@@ -295,8 +295,8 @@ export const mockCourses: ExtendedCourse[] = [
     creatorName: "Dr. Sarah Johnson",
     isActive: true,
     category: CourseCategory.Programming,
-    difficulty: CourseDifficulty.Beginner,
     pricePerMonth: BigInt("1000000000000000"), // 0.001 ETH
+    difficulty: CourseDifficulty.Beginner,
     createdAt: BigInt(1703836800), // 1 Jan 2024
     totalSections: 10,
     sections: createMockEnrichedSections(BigInt(1), 10),

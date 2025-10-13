@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { getSignedUrlForCID } from '@/lib/ipfs-helpers';
+import { getSignedUrlCached } from '@/lib/ipfs-helpers';
 import { CATEGORY_NAMES, DIFFICULTY_NAMES, LearningCourseData } from '@/types/learning';
 import { Award, BookOpen, Calendar, ImageIcon, Loader2 } from 'lucide-react';
 import Image from 'next/image';
@@ -72,7 +72,7 @@ export function LearningCourseCard({
       try {
         setThumbnailLoading(true);
         setThumbnailError(false);
-        const result = await getSignedUrlForCID(course.thumbnailCID, 3600); // 1 hour expiry
+        const result = await getSignedUrlCached(course.thumbnailCID, 3600); // 1 hour expiry with cache
         setThumbnailUrl(result.signedUrl);
       } catch (error) {
         console.error('Failed to load thumbnail:', error);
