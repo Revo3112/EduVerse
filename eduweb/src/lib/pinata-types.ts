@@ -316,17 +316,32 @@ export interface BatchVideoResult {
 
 /**
  * Certificate data for generation
+ * @description Supports both traditional and blockchain-based certificates
+ * @blockchain Compatible with CertificateManager.sol ERC-1155 structure
  */
 export interface CertificateData {
-  certificateId: string;
-  studentName: string;
-  courseName: string;
-  completionDate: string; // ISO 8601 format
-  instructorName: string;
-  courseId: string;
-  walletAddress?: string; // Optional blockchain wallet address
-  blockchainTxHash?: string;
-  credentialUrl?: string;
+  // ===== LEGACY FIELDS (for display purposes) =====
+  certificateId: string; // Generated ID for internal tracking (e.g., "cert-COURSE-001-timestamp-random")
+  studentName: string; // Display name for recipient
+  courseName: string; // Primary course name (for single course certificates)
+  completionDate: string; // ISO 8601 format (human-readable)
+  instructorName: string; // Instructor display name
+  courseId: string; // Primary course ID (for single course certificates)
+  walletAddress?: string; // DEPRECATED: Use recipientAddress instead
+  blockchainTxHash?: string; // Transaction hash when minting on blockchain
+  credentialUrl?: string; // Legacy credential verification URL
+
+  // ===== BLOCKCHAIN FIELDS (CertificateManager.sol compatibility) =====
+  tokenId?: number; // ERC-1155 token ID from blockchain (uint256)
+  recipientAddress?: string; // Blockchain wallet address (address type in Solidity)
+  completedCourses?: number[]; // Array of completed course IDs (uint256[] in Solidity)
+  issuedAt?: number; // Unix timestamp when certificate was first issued (uint256)
+  lastUpdated?: number; // Unix timestamp of last course addition (uint256)
+  paymentReceiptHash?: string; // Keccak256 hash of payment receipt (bytes32, stored as hex string)
+  platformName?: string; // Platform name (e.g., "EduVerse Academy")
+  baseRoute?: string; // QR code base route for verification URL
+  isValid?: boolean; // Certificate validity status (can be revoked)
+  lifetimeFlag?: boolean; // Always true for lifetime certificates
 }
 
 /**

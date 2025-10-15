@@ -1,0 +1,225 @@
+# Goldsky GraphQL Schema for EduVerse Certificate System
+# This schema indexes CertificateManager.sol events for efficient querying
+#
+# Business Logic Implementation:
+# - One Certificate Per User model (grows with each course)
+# - First mint: 10% fee, subsequent additions: 2% fee
+# - Certificates are soulbound (non-transferable)
+# - Can query by tokenId OR recipientAddress
+
+type Certificate @entity {
+  # Core identifiers
+  id: ID! # tokenId as string
+  tokenId: BigInt!
+  owner: Bytes! # recipientAddress
+
+  # Certificate details (from Certificate struct)
+  platformName: String!
+  recipientName: String!
+  recipientAddress: Bytes!
+  lifetimeFlag: Boolean!
+  isValid: Boolean! # For revocation tracking
+  ipfsCID: String! # Updated on each course addition
+  baseRoute: String!
+
+  # Timestamps
+  issuedAt: BigInt! # Unix timestamp (uint256)
+  lastUpdated: BigInt! # Unix timestamp (uint256)
+  mintedAtBlock: BigInt! # Block number when minted
+  lastUpdatedBlock: BigInt! # Block number of last update
+
+  # Course tracking
+  totalCoursesCompleted: Int!
+  courses: [CertificateCourse!]! @derivedFrom(field: "certificate")
+
+  # Payment tracking
+  firstPaymentHash: Bytes! # bytes32 from initial mint
+  lastPaymentHash: Bytes! # bytes32 from last action
+
+  # Metadata
+  metadataURI: String # ipfs:// URL to metadata JSON
+}
+
+type CertificateCourse @entity {
+  # Composite ID: {tokenId}-{courseId}
+  id: ID!
+  certificate: Certificate!
+  courseId: BigInt!
+
+  # When this course was added
+  addedAt: BigInt! # Unix timestamp
+  addedAtBlock: BigInt! # Block number
+
+  # Certificate image at time of addition
+  ipfsCID: String!
+
+  # Payment for this specific course addition
+  paymentHash: Bytes!
+
+  # Transaction info
+  transactionHash: Bytes!
+  transactionFrom: Bytes!
+}
+
+type CertificateRevocation @entity {
+  id: ID! # Transaction hash
+  certificate: Certificate!
+  revokedAt: BigInt!
+  revokedAtBlock: BigInt!
+  reason: String!
+  revokedBy: Bytes! # Admin who revoked
+}
+
+# Event entities for historical tracking
+type CertificateMintedEvent @entity {
+  id: ID! # Transaction hash + log index
+  certificate: Certificate!
+  owner: Bytes!
+  tokenId: BigInt!
+  recipientName: String!
+  ipfsCID: String!
+  paymentReceiptHash: Bytes!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type CourseAddedToCertificateEvent @entity {
+  id: ID! # Transaction hash + log index
+  certificate: Certificate!
+  owner: Bytes!
+  tokenId: BigInt!
+  courseId: BigInt!
+  newIpfsCID: String!
+  paymentReceiptHash: Bytes!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# Global statistics
+type CertificateStats @entity {
+  id: ID! # "global"
+  totalCertificatesMinted: Int!
+  totalCoursesAddedToCertificates: Int!
+  totalRevenueFirstMint: BigInt! # Total ETH from first mints
+  totalRevenueCourseAdditions: BigInt! # Total ETH from course additions
+  uniqueHolders: Int!
+  lastUpdatedBlock: BigInt!
+}
+
+# ============================================
+# EXAMPLE QUERIES FOR FRONTEND INTEGRATION
+# ============================================
+
+# Query 1: Get certificate by tokenId (QR Code Scan)
+# query GetCertificateByToken($tokenId: BigInt!) {
+#   certificate(id: $tokenId) {
+#     tokenId
+#     platformName
+#     recipientName
+#     recipientAddress
+#     lifetimeFlag
+#     isValid
+#     ipfsCID
+#     baseRoute
+#     issuedAt
+#     lastUpdated
+#     totalCoursesCompleted
+#     courses {
+#       courseId
+#       addedAt
+#       ipfsCID
+#     }
+#   }
+# }
+
+# Query 2: Get user's certificate by wallet address
+# query GetUserCertificate($address: Bytes!) {
+#   certificates(where: { recipientAddress: $address }) {
+#     tokenId
+#     platformName
+#     recipientName
+#     lifetimeFlag
+#     isValid
+#     ipfsCID
+#     issuedAt
+#     lastUpdated
+#     totalCoursesCompleted
+#     courses(orderBy: addedAt, orderDirection: desc) {
+#       courseId
+#       addedAt
+#       ipfsCID
+#     }
+#   }
+# }
+
+# Query 3: Get all certificates (admin dashboard)
+# query GetAllCertificates($first: Int!, $skip: Int!) {
+#   certificates(first: $first, skip: $skip, orderBy: issuedAt, orderDirection: desc) {
+#     tokenId
+#     recipientName
+#     recipientAddress
+#     totalCoursesCompleted
+#     issuedAt
+#     lastUpdated
+#     isValid
+#   }
+#   certificateStats(id: "global") {
+#     totalCertificatesMinted
+#     totalCoursesAddedToCertificates
+#     uniqueHolders
+#   }
+# }
+
+# Query 4: Get certificate history timeline
+# query GetCertificateTimeline($tokenId: BigInt!) {
+#   certificate(id: $tokenId) {
+#     tokenId
+#     recipientName
+#     courses(orderBy: addedAt, orderDirection: asc) {
+#       courseId
+#       addedAt
+#       ipfsCID
+#       transactionHash
+#     }
+#   }
+#   certificateMintedEvents(where: { tokenId: $tokenId }) {
+#     blockTimestamp
+#     ipfsCID
+#     paymentReceiptHash
+#     transactionHash
+#   }
+#   courseAddedToCertificateEvents(where: { tokenId: $tokenId }, orderBy: blockTimestamp) {
+#     courseId
+#     blockTimestamp
+#     newIpfsCID
+#     paymentReceiptHash
+#     transactionHash
+#   }
+# }
+
+# Query 5: Verify certificate authenticity (for /certificates page)
+# query VerifyCertificate($tokenId: BigInt!, $address: Bytes!) {
+#   certificate(id: $tokenId) {
+#     tokenId
+#     recipientAddress
+#     recipientName
+#     isValid
+#     lifetimeFlag
+#     totalCoursesCompleted
+#     issuedAt
+#     lastUpdated
+#     courses {
+#       courseId
+#       addedAt
+#     }
+#   }
+# }
+# Frontend validation:
+# if (certificate.recipientAddress.toLowerCase() !== address.toLowerCase()) {
+#   throw new Error('Address mismatch - certificate belongs to different user');
+# }
+# if (!certificate.isValid) {
+#   throw new Error('Certificate has been revoked');
+# }

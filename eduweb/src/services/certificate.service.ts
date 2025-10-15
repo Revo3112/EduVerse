@@ -17,7 +17,8 @@ const TEMPLATE_URL = 'https://copper-far-firefly-220.mypinata.cloud/ipfs/bafybei
 const CANVAS_WIDTH = 6250;
 const CANVAS_HEIGHT = 4419;
 
-const QR_BASE_URL = 'https://verify.eduverse.com/certificate';
+// QR Code Configuration - Uses environment variable for deployment flexibility
+const QR_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 const NAME_POSITION = {
   x: CANVAS_WIDTH / 2,
@@ -50,8 +51,26 @@ const QR_POSITION = {
   size: 1000,
 };
 
-async function generateQRCode(certificateId: string): Promise<Buffer> {
-  const verifyUrl = `${QR_BASE_URL}/${certificateId}`;
+/**
+ * Generate QR code for certificate verification
+ * @param data - Certificate data containing tokenId and recipientAddress for blockchain verification
+ * @returns Buffer containing QR code image
+ *
+ * QR Format: {BASE_URL}/certificates?tokenId={tokenId}&address={address}
+ * Example: http://192.168.18.143:3000/certificates?tokenId=1&address=0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+ *
+ * This URL will trigger the /certificates page to:
+ * 1. Parse tokenId and address from query parameters
+ * 2. Query Goldsky indexer for certificate data from blockchain
+ * 3. Display complete learning history and certificate details
+ */
+async function generateQRCode(data: CertificateData): Promise<Buffer> {
+  // Construct blockchain-compatible verification URL
+  const tokenId = data.tokenId || 0; // Fallback to 0 for testing/legacy
+  const address = data.recipientAddress || data.walletAddress || '0x0';
+  const verifyUrl = `${QR_BASE_URL}/certificates?tokenId=${tokenId}&address=${address}`;
+
+  console.log('[Certificate Service] QR Code URL:', verifyUrl);
 
   const qrCodeDataUrl = await QRCode.toDataURL(verifyUrl, {
     width: QR_POSITION.size,
@@ -171,7 +190,7 @@ export async function generateAndUploadCertificate(
     );
 
     console.log('[Certificate Service] Generating QR code...');
-    const qrCodeBuffer = await generateQRCode(data.certificateId);
+    const qrCodeBuffer = await generateQRCode(data);
     const qrCodeImage = await loadImage(qrCodeBuffer);
     ctx.drawImage(qrCodeImage, QR_POSITION.x, QR_POSITION.y, QR_POSITION.size, QR_POSITION.size);
 
@@ -204,9 +223,13 @@ export async function generateAndUploadCertificate(
       },
       keyvalues: {
         certificateId: data.certificateId,
+        tokenId: data.tokenId?.toString() || '0',
         studentName: data.studentName,
         courseName: data.courseName,
+        recipientAddress: data.recipientAddress || data.walletAddress || '0x0',
+        completedCourses: data.completedCourses?.join(',') || data.courseId,
         uploadedAt: new Date().toISOString(),
+        certificateVersion: '2.0',
       },
     });
 
@@ -217,19 +240,105 @@ export async function generateAndUploadCertificate(
 
     console.log(`[Certificate Service] Image uploaded: ${imageUploadResult.data.cid}`);
 
+    // ========================================
+    // ERC-1155 COMPATIBLE METADATA STRUCTURE
+    // ========================================
+    // CRITICAL: Matches CertificateManager.sol "One Certificate Per User" model
+    // This certificate GROWS with each course completion, not one per course
+    // Follows OpenSea metadata standards for Goldsky indexer compatibility
     const metadata = {
-      name: `${data.courseName} - Certificate`,
-      description: `Certificate of completion for ${data.studentName}`,
-      image: imageUploadResult.data.cid,
+      // Standard ERC-1155 fields
+      name: data.platformName
+        ? `${data.platformName} Certificate #${data.tokenId || 0}`
+        : `EduVerse Lifetime Learning Certificate #${data.tokenId || 0}`,
+      description: `This evolving certificate represents the complete learning journey of ${data.studentName} on EduVerse. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${data.completedCourses?.length || 1} verified course${(data.completedCourses?.length || 1) > 1 ? 's' : ''}.`,
+      image: `ipfs://${imageUploadResult.data.cid}`,
+      decimals: 0, // Non-fungible (ERC-1155 with amount=1)
+
+      // Blockchain-compatible attributes matching Certificate struct fields
       attributes: [
-        { trait_type: 'Student', value: data.studentName },
-        { trait_type: 'Course', value: data.courseName },
-        { trait_type: 'Course ID', value: data.courseId.toString() },
-        { trait_type: 'Completion Date', value: data.completionDate },
-        { trait_type: 'Instructor', value: data.instructorName },
-        { trait_type: 'Certificate ID', value: data.certificateId },
-        { trait_type: 'Wallet Address', value: data.walletAddress },
+        // === CORE CERTIFICATE DATA (from Certificate struct) ===
+        {
+          trait_type: 'Token ID',
+          display_type: 'number',
+          value: data.tokenId || 0,
+        },
+        {
+          trait_type: 'Platform Name',
+          value: data.platformName || 'EduVerse Academy',
+        },
+        {
+          trait_type: 'Recipient Name',
+          value: data.studentName,
+        },
+        {
+          trait_type: 'Recipient Address',
+          value: data.recipientAddress || data.walletAddress || '0x0',
+        },
+        {
+          trait_type: 'Lifetime Flag',
+          display_type: 'boolean',
+          value: data.lifetimeFlag !== undefined ? data.lifetimeFlag : true,
+        },
+        {
+          trait_type: 'Is Valid',
+          display_type: 'boolean',
+          value: data.isValid !== undefined ? data.isValid : true,
+        },
+
+        // === COURSE COMPLETION DATA ===
+        {
+          trait_type: 'Total Courses Completed',
+          display_type: 'number',
+          value: data.completedCourses?.length || 1,
+        },
+        ...(data.completedCourses && data.completedCourses.length > 0
+          ? [
+              {
+                trait_type: 'Completed Course IDs',
+                value: data.completedCourses.join(', '),
+              },
+            ]
+          : [
+              {
+                trait_type: 'Completed Course IDs',
+                value: data.courseId || '0',
+              },
+            ]),
+
+        // === TIMESTAMPS (Unix timestamps for blockchain compatibility) ===
+        {
+          trait_type: 'Issued At',
+          display_type: 'date',
+          value: data.issuedAt || Math.floor(Date.now() / 1000),
+        },
+        {
+          trait_type: 'Last Updated',
+          display_type: 'date',
+          value: data.lastUpdated || Math.floor(Date.now() / 1000),
+        },
+
+        // === VERIFICATION & PAYMENT ===
+        {
+          trait_type: 'Payment Receipt Hash',
+          value: data.paymentReceiptHash || '0x0000000000000000000000000000000000000000000000000000000000000000',
+        },
+        {
+          trait_type: 'Base Route',
+          value: data.baseRoute || QR_BASE_URL,
+        },
       ],
+
+      // Additional properties for enhanced functionality
+      properties: {
+        qr_verification_url: `${QR_BASE_URL}/certificates?tokenId=${data.tokenId || 0}&address=${
+          data.recipientAddress || data.walletAddress || '0x0'
+        }`,
+        base_route: data.baseRoute || `${QR_BASE_URL}/certificates`,
+        certificate_version: '2.0', // Version 2.0 = Blockchain-compatible
+        supports_multiple_courses: true,
+        is_soulbound: true, // Cannot be transferred
+      },
     };
 
     console.log('[Certificate Service] Uploading metadata to Pinata...');
