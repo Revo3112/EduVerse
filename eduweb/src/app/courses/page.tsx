@@ -67,7 +67,7 @@ export default function CoursesPage() {
     <ContentContainer className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-4xl font-bold text-white">
+        <h1 className="text-4xl font-bold text-foreground">
           Browse Courses
         </h1>
         <p className="text-muted-foreground text-lg">

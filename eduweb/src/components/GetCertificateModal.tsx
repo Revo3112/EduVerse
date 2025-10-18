@@ -88,29 +88,67 @@ export function GetCertificateModal({
     setStep('generating');
 
     try {
-      // Call backend API to generate certificate
-      const response = await fetch('/api/certificate/generate', {
+      // ==================== BLOCKCHAIN-COMPATIBLE REQUEST ====================
+      // Matches CertificateManager.sol Certificate struct and generate-pinata API
+
+      // Prepare request body with proper field mapping
+      const requestBody = {
+        // Required fields (API validation)
+        studentName: recipientName.trim(),           // ✅ Maps to recipientName in smart contract
+        courseName: courseTitle,                      // ✅ Required for certificate generation
+        courseId: courseId.toString(),                // ✅ Primary course ID
+
+        // Blockchain fields (for proper metadata generation)
+        recipientAddress: address,                    // ✅ User's wallet address for QR code
+        platformName: 'EduVerse Academy',            // ✅ Platform name for certificate
+        baseRoute: typeof window !== 'undefined'
+          ? `${window.location.origin}/certificates`  // ✅ QR code base URL
+          : 'http://localhost:3000/certificates',
+
+        // Optional: Add tokenId if user already has a certificate
+        // This would come from smart contract query: userCertificates[address]
+        // tokenId: existingTokenId,
+
+        // Optional: Add all completed courses for proper metadata
+        // This would come from Goldsky indexer query
+        // completedCourses: [1, 2, 3],
+
+        isValid: true,                                // ✅ Certificate validity
+        lifetimeFlag: true,                          // ✅ Lifetime certificate
+      };
+
+      console.log('[GetCertificateModal] Sending request to generate-pinata API:', {
+        ...requestBody,
+        recipientAddress: `${requestBody.recipientAddress.slice(0, 6)}...${requestBody.recipientAddress.slice(-4)}`,
+      });
+
+      // Call correct API endpoint (generate-pinata, not generate)
+      const response = await fetch('/api/certificate/generate-pinata', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          recipientName: recipientName.trim(),
-          courseId: courseId.toString(),
-          userAddress: address,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate certificate');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[GetCertificateModal] API Error:', errorData);
+        throw new Error(errorData.error || 'Failed to generate certificate');
       }
 
       const data = await response.json();
+      console.log('[GetCertificateModal] Certificate generation successful:', {
+        cid: data.data?.cid,
+        tokenId: data.data?.tokenId,
+        verificationUrl: data.data?.verificationUrl,
+      });
 
+      // Store certificate data with proper structure
       setCertificateData({
-        ipfsCID: data.ipfsCID,
-        previewUrl: data.previewUrl,
-        paymentHash: data.paymentHash,
+        ipfsCID: data.data.cid,                      // ✅ Plain CID for smart contract
+        previewUrl: data.data.signedUrl,             // ✅ IPFS gateway URL
+        paymentHash: data.data.certificateId,        // Temporary payment hash (in production: use tx hash)
       });
 
       setStep('minting');
@@ -120,8 +158,8 @@ export function GetCertificateModal({
       await handleMintCertificate(data);
 
     } catch (error) {
-      console.error('Certificate generation error:', error);
-      toast.error('Failed to generate certificate. Please try again.');
+      console.error('[GetCertificateModal] Certificate generation error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to generate certificate. Please try again.');
       setStep('input');
     } finally {
       setIsLoading(false);

@@ -95,7 +95,8 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         uint256 indexed tokenId,
         string recipientName,
         string ipfsCID,
-        bytes32 paymentReceiptHash
+        bytes32 paymentReceiptHash,
+        uint256 pricePaid  // ✅ GOLDSKY: Added for revenue analytics
     );
 
     event CourseAddedToCertificate(
@@ -103,7 +104,8 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         uint256 indexed tokenId,
         uint256 indexed courseId,
         string newIpfsCID,
-        bytes32 paymentReceiptHash
+        bytes32 paymentReceiptHash,
+        uint256 pricePaid  // ✅ GOLDSKY: Added for revenue analytics
     );
 
     event CertificateUpdated(
@@ -191,17 +193,21 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         if (paymentReceiptHash == bytes32(0)) revert InvalidPaymentReceiptHash();
         if (usedPaymentHashes[paymentReceiptHash]) revert PaymentHashAlreadyUsed();
 
-        // Check course completion AND license ownership
+        // ✅ BUSINESS LOGIC CHECK 1: Course must be completed
         if (!progressTracker.isCourseCompleted(msg.sender, courseId)) {
             revert CourseNotCompleted();
         }
 
-        // ✅ NEW: Validate user actually owned a license for this course
+        // ✅ BUSINESS LOGIC CHECK 2: User must have owned a license (prevents free certificates)
         CourseLicense.License memory userLicense = courseLicense.getLicense(msg.sender, courseId);
         if (userLicense.courseId == 0) {
             revert NoLicenseOwnership();
         }
-        // Allow expired licenses - user can get certificate if course was completed during license period
+
+        // ✅ SCENARIO 3 SUPPORT: Allow certificate purchase even if license expired
+        // User can complete course, wait years, then buy certificate
+        // License expiry does NOT block certificate purchase
+        // Only requirements: (1) Course completed, (2) User owned a license
 
         // Get user's existing certificate
         uint256 existingTokenId = userCertificates[msg.sender];
@@ -234,6 +240,11 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         internal
         validStringLength(recipientName, 100, "recipientName")
     {
+        // ✅ MEDIUM FIX: Prevent double-mint race condition (Security Enhancement)
+        if (userCertificates[msg.sender] != 0) {
+            revert CertificateAlreadyExists();
+        }
+
         // Get certificate price (creator-set or default)
         uint256 certificatePrice = _getCertificatePrice(courseId);
 
@@ -280,7 +291,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
         _processCertificatePayment(course.creator, certificatePrice);
 
-        emit CertificateMinted(msg.sender, tokenId, recipientName, ipfsCID, paymentReceiptHash);
+        emit CertificateMinted(msg.sender, tokenId, recipientName, ipfsCID, paymentReceiptHash, certificatePrice);  // ✅ Added certificatePrice
         emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
     }
 
@@ -334,7 +345,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
         _processPayment(course.creator, additionPrice);
 
-        emit CourseAddedToCertificate(msg.sender, tokenId, courseId, ipfsCID, paymentReceiptHash);
+        emit CourseAddedToCertificate(msg.sender, tokenId, courseId, ipfsCID, paymentReceiptHash, additionPrice);  // ✅ Added additionPrice
         emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
     }
 
@@ -413,7 +424,8 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         if (!cert.isValid) revert CertificateNotFound(tokenId);
 
         // Validate payment for batch operation
-        uint256 totalFee = defaultCourseAdditionFee * courseIds.length;
+        uint256 perCourseFee = defaultCourseAdditionFee;  // ✅ Store for event emission
+        uint256 totalFee = perCourseFee * courseIds.length;
         if (msg.value < totalFee) revert InsufficientPayment();
 
         // Validate all courses are completed and not already in certificate
@@ -440,7 +452,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
             cert.completedCourses.push(courseId);
             certificateCourseExists[tokenId][courseId] = true;
 
-            emit CourseAddedToCertificate(msg.sender, tokenId, courseId, ipfsCID, paymentReceiptHash);
+            emit CourseAddedToCertificate(msg.sender, tokenId, courseId, ipfsCID, paymentReceiptHash, perCourseFee);  // ✅ GOLDSKY: Per-course fee
 
             unchecked { ++i; } // Safe: controlled loop
         }

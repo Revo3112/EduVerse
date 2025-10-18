@@ -10,10 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Rating, RatingButton } from '@/components/ui/rating';
-import { useCanRate, useSubmitRating, useUserRating } from '@/hooks/useRating';
+import { useCanRate, useRatingCooldown, useSubmitRating, useUserRating } from '@/hooks/useRating';
 import { Course, getCategoryName, getDifficultyName } from '@/lib/mock-data';
-import { formatRatingDisplay } from '@/lib/rating-utils';
-import { AlertCircle, Loader2, Star, Trash2 } from 'lucide-react';
+import { formatCooldownTime, formatRatingDisplay } from '@/lib/rating-utils';
+import { AlertCircle, Clock, Loader2, Star, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 interface RatingModalProps {
@@ -38,6 +38,7 @@ export const RatingModal = ({
   const { submitRating, deleteRating, isSubmitting, isDeleting, error } = useSubmitRating();
   const { rating: currentUserRating, refetch: refetchUserRating } = useUserRating(course.id, userAddress);
   const { canRate, reason: cantRateReason } = useCanRate(course.id, userAddress, course.creator);
+  const { isInCooldown, remainingSeconds } = useRatingCooldown(course.id, userAddress);
 
   // Initialize selected rating with current user rating
   useEffect(() => {
@@ -140,6 +141,21 @@ export const RatingModal = ({
                 </div>
               )}
 
+                {/* Cooldown Warning */}
+                {hasCurrentRating && isInCooldown && (
+                  <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+                    <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    <div>
+                      <p className="font-medium text-orange-900 dark:text-orange-100">
+                        Rating Cooldown Active
+                      </p>
+                      <p className="text-sm text-orange-700 dark:text-orange-300">
+                        You can update your rating in {formatCooldownTime(remainingSeconds)}
+                      </p>
+                    </div>
+                  </Alert>
+                )}
+
               {/* Interactive Rating */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">
@@ -234,7 +250,7 @@ export const RatingModal = ({
             {canRate && (
               <Button
                 onClick={handleSubmit}
-                disabled={selectedRating === 0 || !hasChanges || isSubmitting || isDeleting}
+                disabled={selectedRating === 0 || !hasChanges || isSubmitting || isDeleting || (hasCurrentRating && isInCooldown)}
                 className="flex-1 sm:flex-none"
               >
                 {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

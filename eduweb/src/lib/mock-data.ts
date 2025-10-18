@@ -301,10 +301,17 @@ export const mockCourses: ExtendedCourse[] = [
     totalSections: 10,
     sections: createMockEnrichedSections(BigInt(1), 10),
     userProgress: [
+      // ✅ ALL 10 sections completed (100% progress) for certificate testing
       { courseId: BigInt(1), sectionId: BigInt(0), completed: true, completedAt: BigInt(1709856000) },
       { courseId: BigInt(1), sectionId: BigInt(1), completed: true, completedAt: BigInt(1709942400) },
       { courseId: BigInt(1), sectionId: BigInt(2), completed: true, completedAt: BigInt(1710028800) },
-      { courseId: BigInt(1), sectionId: BigInt(3), completed: false, completedAt: BigInt(0) }
+      { courseId: BigInt(1), sectionId: BigInt(3), completed: true, completedAt: BigInt(1710115200) },
+      { courseId: BigInt(1), sectionId: BigInt(4), completed: true, completedAt: BigInt(1710201600) },
+      { courseId: BigInt(1), sectionId: BigInt(5), completed: true, completedAt: BigInt(1710288000) },
+      { courseId: BigInt(1), sectionId: BigInt(6), completed: true, completedAt: BigInt(1710374400) },
+      { courseId: BigInt(1), sectionId: BigInt(7), completed: true, completedAt: BigInt(1710460800) },
+      { courseId: BigInt(1), sectionId: BigInt(8), completed: true, completedAt: BigInt(1710547200) },
+      { courseId: BigInt(1), sectionId: BigInt(9), completed: true, completedAt: BigInt(1710633600) }
     ],
     rating: {
       totalRatings: BigInt(150),
@@ -396,6 +403,7 @@ export const mockLicenses: License[] = [
 
 // Mock sertifikat tunggal untuk pengguna.
 // Sertifikat ini mencerminkan perjalanan belajar pengguna, bertambah seiring kursus yang diselesaikan.
+// NOTE: Course 1 removed from completedCourses to test "Get Certificate" button for 100% completed course
 export const mockUserCertificate: Certificate = {
     tokenId: BigInt(101),
     platformName: "EduVerse Academy",
@@ -405,11 +413,11 @@ export const mockUserCertificate: Certificate = {
     isValid: true,
     ipfsCID: "bafybeigajo2ei5zcnbtr3a245fhx3o6dtoa27yrhvro7jcyy4ywdkitgwm", // CID gambar sertifikat terbaru
     baseRoute: "https://verify.eduverse.com/certificate",
-    issuedAt: BigInt(1710028800), // Timestamp saat kursus pertama selesai & sertifikat di-mint
+    issuedAt: BigInt(1710201600), // Timestamp saat kursus pertama selesai & sertifikat di-mint
     lastUpdated: BigInt(1710201600), // Timestamp saat kursus terakhir ditambahkan
-    totalCoursesCompleted: BigInt(2),
+    totalCoursesCompleted: BigInt(1),
     paymentReceiptHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd",
-    completedCourses: [BigInt(1), BigInt(2)] // ID kursus yang telah diselesaikan dari `mockCourses`
+    completedCourses: [BigInt(2)] // Only Course 2 has certificate claimed (Course 1 removed for testing)
 };
 
 

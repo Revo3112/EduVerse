@@ -59,7 +59,8 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         address indexed student,
         uint256 tokenId,
         uint256 durationMonths,
-        uint256 expiryTimestamp
+        uint256 expiryTimestamp,
+        uint256 pricePaid  // ✅ GOLDSKY: Added for revenue analytics
     );
 
     event LicenseRenewed(
@@ -67,7 +68,25 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         address indexed student,
         uint256 tokenId,
         uint256 durationMonths,
-        uint256 expiryTimestamp
+        uint256 expiryTimestamp,
+        uint256 pricePaid  // ✅ GOLDSKY: Added for revenue analytics
+    );
+
+    // ✅ GOLDSKY: New event for analytics - track license expiry
+    event LicenseExpired(
+        uint256 indexed courseId,
+        address indexed student,
+        uint256 tokenId,
+        uint256 expiredAt
+    );
+
+    // ✅ GOLDSKY: New event for revenue analytics
+    event RevenueRecorded(
+        uint256 indexed courseId,
+        address indexed creator,
+        uint256 amount,
+        uint256 timestamp,
+        string revenueType  // "LICENSE_MINT" or "LICENSE_RENEWAL"
     );
 
     constructor(address _courseFactory, address _platformWallet)
@@ -157,7 +176,11 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         _mint(msg.sender, tokenId, 1, "");
         _processPayment(course.creator, totalPrice);
 
-        emit LicenseMinted(courseId, msg.sender, tokenId, durationMonths, expiryTimestamp);
+        // ✅ NEW: Record purchase for student history tracking
+        courseFactory.recordCoursePurchase(msg.sender, courseId);
+
+        emit LicenseMinted(courseId, msg.sender, tokenId, durationMonths, expiryTimestamp, totalPrice);  // ✅ Added totalPrice
+        emit RevenueRecorded(courseId, course.creator, totalPrice, block.timestamp, "LICENSE_MINT");  // ✅ GOLDSKY Analytics
     }
 
     /**
@@ -211,18 +234,24 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
             newExpiryTimeStamp = block.timestamp + durationInSeconds;
         }
 
-        // Safe addition for duration
+        // Safe addition for duration tracking
         if (license.durationLicense > type(uint256).max - durationMonths) {
             revert ArithmeticOverflow();
         }
 
+        // ✅ BUSINESS LOGIC: "Renewal identical to purchase"
+        // - Per-transaction limit: Each renewal max 12 months ✅
+        // - NO cumulative cap: Users can renew indefinitely ✅
+        // - This allows long-term students to maintain access without artificial limits
+
         license.expiryTimestamp = newExpiryTimeStamp;
-        license.durationLicense += durationMonths;
+        license.durationLicense += durationMonths;  // Track total for analytics only
         license.isActive = true;
 
         _processPayment(course.creator, totalPrice);
 
-        emit LicenseRenewed(courseId, msg.sender, tokenId, durationMonths, newExpiryTimeStamp);
+        emit LicenseRenewed(courseId, msg.sender, tokenId, durationMonths, newExpiryTimeStamp, totalPrice);  // ✅ Added totalPrice
+        emit RevenueRecorded(courseId, course.creator, totalPrice, block.timestamp, "LICENSE_RENEWAL");  // ✅ GOLDSKY Analytics
     }
 
     /**
@@ -231,6 +260,23 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     function hasValidLicense(address student, uint256 courseId) external view returns (bool) {
         License memory license = licenses[courseId][student];
         return license.isActive && license.expiryTimestamp > block.timestamp;
+    }
+
+    /**
+     * @dev Checks and marks license as expired if needed (for analytics)
+     * @param student Address of the student
+     * @param courseId ID of the course
+     * @custom:goldsky Emits LicenseExpired event for analytics tracking
+     */
+    function checkAndMarkExpired(address student, uint256 courseId) external {
+        License storage license = licenses[courseId][student];
+
+        // Only process if license exists, is active, and has expired
+        if (license.courseId != 0 && license.isActive && license.expiryTimestamp <= block.timestamp) {
+            license.isActive = false;
+            uint256 tokenId = studentTokenIds[student][courseId];
+            emit LicenseExpired(courseId, student, tokenId, license.expiryTimestamp);
+        }
     }
 
     /**

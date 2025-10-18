@@ -266,10 +266,10 @@ export function useCanRate(
       return;
     }
 
-    // TODO: Add additional checks
-    // - Check if user is blacklisted
-    // - Check if ratings are disabled for course
-    // - Check cooldown period
+    // TODO: Add additional checks when Web3 integration is complete
+    // - Check if user is blacklisted (call contract.userBlacklisted)
+    // - Check if ratings are disabled for course (call contract.ratingsDisabled)
+    // - Check cooldown period (call contract.lastRatingTime)
 
     setCanRate(true);
     setReason(null);
@@ -278,5 +278,70 @@ export function useCanRate(
   return {
     canRate,
     reason,
+  };
+}
+
+/**
+ * Hook to check rating cooldown status
+ * @param courseId - The course ID
+ * @param userAddress - The user's wallet address
+ * @returns Cooldown information
+ */
+export function useRatingCooldown(
+  courseId: bigint | undefined,
+  userAddress: string | undefined
+) {
+  const [isInCooldown, setIsInCooldown] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const checkCooldown = useCallback(async () => {
+    if (!courseId || !userAddress) return;
+
+    setIsLoading(true);
+
+    try {
+      // TODO: Replace with actual thirdweb contract call
+      // const contract = getContract({
+      //   client: thirdwebClient,
+      //   chain: mantaPacific,
+      //   address: contractAddresses.addresses.courseFactory,
+      //   abi: CourseFactoryABI,
+      // });
+      //
+      // const lastRatingTime = await readContract({
+      //   contract,
+      //   method: "lastRatingTime",
+      //   params: [userAddress, courseId]
+      // });
+      //
+      // const COOLDOWN_PERIOD = 86400; // 24 hours in seconds
+      // const now = Math.floor(Date.now() / 1000);
+      // const remaining = (lastRatingTime + COOLDOWN_PERIOD) - now;
+
+      // Mock data for now - simulate no cooldown
+      const remaining = 0;
+
+      setIsInCooldown(remaining > 0);
+      setRemainingSeconds(remaining > 0 ? remaining : 0);
+    } catch (err) {
+      console.error('Error checking cooldown:', err);
+      // On error, assume no cooldown (contract will validate anyway)
+      setIsInCooldown(false);
+      setRemainingSeconds(0);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [courseId, userAddress]);
+
+  useEffect(() => {
+    checkCooldown();
+  }, [checkCooldown]);
+
+  return {
+    isInCooldown,
+    remainingSeconds,
+    isLoading,
+    refetch: checkCooldown,
   };
 }

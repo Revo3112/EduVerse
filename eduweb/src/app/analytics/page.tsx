@@ -9,14 +9,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import {
   Activity,
+  AlertTriangle,
   ArrowUpDown,
   Award,
   BookOpen,
   CheckCircle,
+  Clock,
+  DollarSign,
   Edit,
+  Eye,
+  EyeOff,
   FileText,
   GraduationCap,
   Layers,
+  Play,
   Plus,
   RefreshCw,
   Shield,
@@ -55,9 +61,32 @@ interface CourseCreatedEventData {
   difficulty: CourseDifficulty // CourseDifficulty difficulty
 }
 
+interface CourseDeletedEventData {
+  courseId: number          // uint256 indexed courseId
+  deletedBy: string         // address indexed deletedBy
+}
+
+interface CourseUnpublishedEventData {
+  courseId: number          // uint256 indexed courseId
+  unpublishedBy: string     // address indexed unpublishedBy
+}
+
+interface CourseRepublishedEventData {
+  courseId: number          // uint256 indexed courseId
+  republishedBy: string     // address indexed republishedBy
+}
+
+interface CourseEmergencyDeactivatedEventData {
+  courseId: number          // uint256 indexed courseId
+  reason: string            // string reason
+}
+
 interface CourseUpdatedEventData {
   courseId: number          // uint256 indexed courseId
   creator: string           // address indexed creator
+  newPrice: number          // uint256 newPrice - ✅ GOLDSKY price change tracking
+  oldPrice: number          // uint256 oldPrice - ✅ GOLDSKY compare adjustments
+  isActive: boolean         // bool isActive - ✅ GOLDSKY publish/unpublish status
 }
 
 interface SectionAddedEventData {
@@ -116,6 +145,7 @@ interface LicenseMintedEventData {
   tokenId: number           // uint256 tokenId
   durationMonths: number    // uint256 durationMonths
   expiryTimestamp: number   // uint256 expiryTimestamp
+  pricePaid: number         // uint256 pricePaid - ✅ GOLDSKY revenue analytics
 }
 
 interface LicenseRenewedEventData {
@@ -124,9 +154,30 @@ interface LicenseRenewedEventData {
   tokenId: number           // uint256 tokenId
   durationMonths: number    // uint256 durationMonths
   expiryTimestamp: number   // uint256 expiryTimestamp
+  pricePaid: number         // uint256 pricePaid - ✅ GOLDSKY revenue analytics
+}
+
+interface LicenseExpiredEventData {
+  courseId: number          // uint256 indexed courseId
+  student: string           // address indexed student
+  tokenId: number           // uint256 tokenId
+  expiredAt: number         // uint256 expiredAt
+}
+
+interface RevenueRecordedEventData {
+  courseId: number          // uint256 indexed courseId
+  amount: number            // uint256 amount
+  revenueType: string       // string revenueType - ✅ GOLDSKY "LicenseMinted" or "LicenseRenewed"
 }
 
 // CRITICAL: ProgressTracker events
+interface SectionStartedEventData {
+  student: string           // address indexed student
+  courseId: number          // uint256 indexed courseId
+  sectionId: number         // uint256 indexed sectionId
+  startedAt: number         // uint256 startedAt
+}
+
 interface SectionCompletedEventData {
   student: string           // address indexed student
   courseId: number          // uint256 indexed courseId
@@ -181,13 +232,14 @@ interface CertificatePaymentRecordedEventData {
 
 // Union type untuk semua event data
 type TransactionEventData =
-  | CourseCreatedEventData | CourseUpdatedEventData | SectionAddedEventData
-  | SectionUpdatedEventData
+  | CourseCreatedEventData | CourseUpdatedEventData | CourseDeletedEventData
+  | CourseUnpublishedEventData | CourseRepublishedEventData | CourseEmergencyDeactivatedEventData
+  | SectionAddedEventData | SectionUpdatedEventData
   | SectionDeletedEventData | SectionMovedEventData | BatchSectionsAddedEventData
   | SectionsSwappedEventData | SectionsBatchReorderedEventData
   | CourseRatedEventData | RatingUpdatedEventData | RatingDeletedEventData | RatingRemovedEventData
-  | LicenseMintedEventData | LicenseRenewedEventData
-  | SectionCompletedEventData | CourseCompletedEventData | ProgressResetEventData
+  | LicenseMintedEventData | LicenseRenewedEventData | LicenseExpiredEventData | RevenueRecordedEventData
+  | SectionStartedEventData | SectionCompletedEventData | CourseCompletedEventData | ProgressResetEventData
   | CertificateMintedEventData | CourseAddedToCertificateEventData
   | CertificateUpdatedEventData | CertificateRevokedEventData
   | CertificatePaymentRecordedEventData
@@ -285,11 +337,14 @@ interface BlockchainTransactionEvent {
 
   // Derived info for analytics
   transactionType:
-  | 'course_created' | 'course_updated' | 'section_added' | 'section_updated'
-  | 'section_deleted' | 'section_moved' | 'batch_sections_added' | 'sections_swapped'
-  | 'sections_batch_reordered' | 'course_rated' | 'rating_updated' | 'rating_deleted'
-  | 'license_minted' | 'license_renewed' | 'section_completed' | 'course_completed'
-  | 'progress_reset' | 'certificate_minted' | 'course_added_to_certificate'
+  | 'course_created' | 'course_updated' | 'course_deleted' | 'course_unpublished'
+  | 'course_republished' | 'course_emergency_deactivated'
+  | 'section_added' | 'section_updated' | 'section_deleted' | 'section_moved'
+  | 'batch_sections_added' | 'sections_swapped' | 'sections_batch_reordered'
+  | 'course_rated' | 'rating_updated' | 'rating_deleted'
+  | 'license_minted' | 'license_renewed' | 'license_expired' | 'revenue_recorded'
+  | 'section_started' | 'section_completed' | 'course_completed' | 'progress_reset'
+  | 'certificate_minted' | 'course_added_to_certificate'
   | 'certificate_updated' | 'certificate_revoked' | 'certificate_payment_recorded'
 }
 
@@ -461,9 +516,11 @@ const generateMockBlockchainTransaction = (): BlockchainTransactionEvent => {
   // Weighted distribution (more common transactions have higher probability)
   const transactionTypes = [
     { type: 'section_completed', weight: 25, contract: 'ProgressTracker', event: 'SectionCompleted' },
+    { type: 'section_started', weight: 20, contract: 'ProgressTracker', event: 'SectionStarted' },
     { type: 'course_rated', weight: 15, contract: 'CourseFactory', event: 'CourseRated' },
     { type: 'license_minted', weight: 12, contract: 'CourseLicense', event: 'LicenseMinted' },
     { type: 'section_added', weight: 10, contract: 'CourseFactory', event: 'SectionAdded' },
+    { type: 'revenue_recorded', weight: 8, contract: 'CourseLicense', event: 'RevenueRecorded' },
     { type: 'course_completed', weight: 8, contract: 'ProgressTracker', event: 'CourseCompleted' },
     { type: 'certificate_minted', weight: 6, contract: 'CertificateManager', event: 'CertificateMinted' },
     { type: 'course_created', weight: 5, contract: 'CourseFactory', event: 'CourseCreated' },
@@ -471,16 +528,21 @@ const generateMockBlockchainTransaction = (): BlockchainTransactionEvent => {
     { type: 'course_added_to_certificate', weight: 4, contract: 'CertificateManager', event: 'CourseAddedToCertificate' },
     { type: 'course_updated', weight: 3, contract: 'CourseFactory', event: 'CourseUpdated' },
     { type: 'section_updated', weight: 3, contract: 'CourseFactory', event: 'SectionUpdated' },
+    { type: 'license_expired', weight: 2, contract: 'CourseLicense', event: 'LicenseExpired' },
     { type: 'certificate_updated', weight: 2, contract: 'CertificateManager', event: 'CertificateUpdated' },
     { type: 'rating_updated', weight: 2, contract: 'CourseFactory', event: 'RatingUpdated' },
     { type: 'section_moved', weight: 2, contract: 'CourseFactory', event: 'SectionMoved' },
+    { type: 'course_unpublished', weight: 1, contract: 'CourseFactory', event: 'CourseUnpublished' },
+    { type: 'course_republished', weight: 1, contract: 'CourseFactory', event: 'CourseRepublished' },
     { type: 'batch_sections_added', weight: 1, contract: 'CourseFactory', event: 'BatchSectionsAdded' },
     { type: 'section_deleted', weight: 1, contract: 'CourseFactory', event: 'SectionDeleted' },
     { type: 'sections_swapped', weight: 1, contract: 'CourseFactory', event: 'SectionsSwapped' },
     { type: 'sections_batch_reordered', weight: 1, contract: 'CourseFactory', event: 'SectionsBatchReordered' },
     { type: 'rating_deleted', weight: 1, contract: 'CourseFactory', event: 'RatingDeleted' },
     { type: 'progress_reset', weight: 1, contract: 'ProgressTracker', event: 'ProgressReset' },
-    { type: 'certificate_revoked', weight: 1, contract: 'CertificateManager', event: 'CertificateRevoked' }
+    { type: 'certificate_revoked', weight: 1, contract: 'CertificateManager', event: 'CertificateRevoked' },
+    { type: 'course_deleted', weight: 0.5, contract: 'CourseFactory', event: 'CourseDeleted' },
+    { type: 'course_emergency_deactivated', weight: 0.1, contract: 'CourseFactory', event: 'CourseEmergencyDeactivated' }
   ]
 
   // Weighted selection
@@ -553,10 +615,39 @@ const generateEventData = (transactionType: string): TransactionEventData => {
       } as CourseCreatedEventData
 
     case 'course_updated':
+      const oldPrice = Math.floor(Math.random() * 5000000000000000000) + 100000000000000000 // 0.1-5 MANTA
+      const newPrice = Math.floor(Math.random() * 5000000000000000000) + 100000000000000000
       return {
         courseId,
-        creator: userAddress
+        creator: userAddress,
+        newPrice,
+        oldPrice,
+        isActive: Math.random() > 0.5
       } as CourseUpdatedEventData
+
+    case 'course_deleted':
+      return {
+        courseId,
+        deletedBy: userAddress
+      } as CourseDeletedEventData
+
+    case 'course_unpublished':
+      return {
+        courseId,
+        unpublishedBy: userAddress
+      } as CourseUnpublishedEventData
+
+    case 'course_republished':
+      return {
+        courseId,
+        republishedBy: userAddress
+      } as CourseRepublishedEventData
+
+    case 'course_emergency_deactivated':
+      return {
+        courseId,
+        reason: 'Security violation detected'
+      } as CourseEmergencyDeactivatedEventData
 
     case 'section_added':
       return {
@@ -586,23 +677,51 @@ const generateEventData = (transactionType: string): TransactionEventData => {
 
     case 'license_minted':
       const duration = [1, 3, 6, 12][Math.floor(Math.random() * 4)]
+      const pricePaid = Math.floor(Math.random() * 5000000000000000000) + 100000000000000000 // 0.1-5 MANTA
       return {
         courseId,
         student: userAddress,
         tokenId: Math.floor(Math.random() * 10000) + 1,
         durationMonths: duration,
-        expiryTimestamp: Date.now() + (duration * 30 * 24 * 60 * 60 * 1000)
+        expiryTimestamp: Date.now() + (duration * 30 * 24 * 60 * 60 * 1000),
+        pricePaid
       } as LicenseMintedEventData
 
     case 'license_renewed':
       const renewDuration = [1, 3, 6, 12][Math.floor(Math.random() * 4)]
+      const renewPricePaid = Math.floor(Math.random() * 5000000000000000000) + 100000000000000000
       return {
         courseId,
         student: userAddress,
         tokenId: Math.floor(Math.random() * 10000) + 1,
         durationMonths: renewDuration,
-        expiryTimestamp: Date.now() + (renewDuration * 30 * 24 * 60 * 60 * 1000)
+        expiryTimestamp: Date.now() + (renewDuration * 30 * 24 * 60 * 60 * 1000),
+        pricePaid: renewPricePaid
       } as LicenseRenewedEventData
+
+    case 'license_expired':
+      return {
+        courseId,
+        student: userAddress,
+        tokenId: Math.floor(Math.random() * 10000) + 1,
+        expiredAt: Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000) // Expired within last week
+      } as LicenseExpiredEventData
+
+    case 'revenue_recorded':
+      const revenueAmount = Math.floor(Math.random() * 5000000000000000000) + 100000000000000000
+      return {
+        courseId,
+        amount: revenueAmount,
+        revenueType: Math.random() > 0.5 ? 'LicenseMinted' : 'LicenseRenewed'
+      } as RevenueRecordedEventData
+
+    case 'section_started':
+      return {
+        student: userAddress,
+        courseId,
+        sectionId: Math.floor(Math.random() * 50),
+        startedAt: Date.now() - Math.floor(Math.random() * 24 * 60 * 60 * 1000) // Started within last day
+      } as SectionStartedEventData
 
     case 'certificate_minted':
       return {
@@ -715,6 +834,14 @@ const TransactionTypeIcon = memo<{
       return <BookOpen {...iconProps} className={cn(iconProps.className, colorClass)} />
     case 'course_updated':
       return <Edit {...iconProps} className={cn(iconProps.className, colorClass)} />
+    case 'course_deleted':
+      return <Trash2 {...iconProps} className={cn(iconProps.className, colorClass, "text-red-500")} />
+    case 'course_unpublished':
+      return <EyeOff {...iconProps} className={cn(iconProps.className, colorClass)} />
+    case 'course_republished':
+      return <Eye {...iconProps} className={cn(iconProps.className, colorClass)} />
+    case 'course_emergency_deactivated':
+      return <AlertTriangle {...iconProps} className={cn(iconProps.className, colorClass, "text-red-600")} />
     case 'section_added':
       return <Plus {...iconProps} className={cn(iconProps.className, colorClass)} />
     case 'section_updated':
@@ -729,6 +856,12 @@ const TransactionTypeIcon = memo<{
       return <Wallet {...iconProps} className={cn(iconProps.className, colorClass)} />
     case 'license_renewed':
       return <RefreshCw {...iconProps} className={cn(iconProps.className, colorClass)} />
+    case 'license_expired':
+      return <Clock {...iconProps} className={cn(iconProps.className, colorClass, "text-orange-500")} />
+    case 'revenue_recorded':
+      return <DollarSign {...iconProps} className={cn(iconProps.className, colorClass, "text-green-500")} />
+    case 'section_started':
+      return <Play {...iconProps} className={cn(iconProps.className, colorClass)} />
     case 'section_completed':
       return <CheckCircle {...iconProps} className={cn(iconProps.className, colorClass)} />
     case 'course_completed':
@@ -774,14 +907,30 @@ const TransactionRow = memo<{ transaction: BlockchainTransactionEvent }>(({ tran
     switch (tx.transactionType) {
       case 'course_created':
         return `"${data.title}" by ${data.creatorName} (${COURSE_CATEGORIES_NAMES[data.category as number]})`
+      case 'course_deleted':
+        return `Course #${data.courseId} deleted by ${String(data.deletedBy).substring(0, 8)}...`
+      case 'course_unpublished':
+        return `Course #${data.courseId} unpublished`
+      case 'course_republished':
+        return `Course #${data.courseId} republished`
+      case 'course_emergency_deactivated':
+        return `Course #${data.courseId} emergency deactivated: ${data.reason}`
       case 'section_added':
         return `"${data.title}" added to course #${data.courseId}`
       case 'section_updated':
         return `Section #${data.sectionId} updated in course #${data.courseId}`
+      case 'section_started':
+        return `Student started Course #${data.courseId}, Section #${data.sectionId}`
       case 'section_completed':
         return `Course #${data.courseId}, Section #${data.sectionId}`
       case 'license_minted':
-        return `${data.durationMonths} month license for course #${data.courseId}`
+        return `${data.durationMonths} month license for course #${data.courseId} (${(Number(data.pricePaid) / 1e18).toFixed(4)} MANTA)`
+      case 'license_renewed':
+        return `${data.durationMonths} month renewal for course #${data.courseId} (${(Number(data.pricePaid) / 1e18).toFixed(4)} MANTA)`
+      case 'license_expired':
+        return `License expired for course #${data.courseId} (Token #${data.tokenId})`
+      case 'revenue_recorded':
+        return `${(Number(data.amount) / 1e18).toFixed(4)} MANTA revenue from ${data.revenueType} for course #${data.courseId}`
       case 'certificate_minted':
         return `Certificate for ${data.recipientName} (Token #${data.tokenId})`
       case 'course_rated':
@@ -975,8 +1124,25 @@ export default function AnalyticsPage() {
             updated.activeCreators += Math.random() > 0.7 ? 1 : 0
             break
 
+          case 'course_deleted':
+            updated.totalCourses = Math.max(0, updated.totalCourses - 1)
+            updated.activeCourses = Math.max(0, updated.activeCourses - 1)
+            break
+
+          case 'course_unpublished':
+            updated.activeCourses = Math.max(0, updated.activeCourses - 1)
+            break
+
+          case 'course_republished':
+            updated.activeCourses += 1
+            break
+
           case 'section_added':
             updated.totalSections += 1
+            break
+
+          case 'section_started':
+            updated.activeStudents += Math.random() > 0.7 ? 1 : 0
             break
 
           case 'batch_sections_added':
@@ -1017,6 +1183,14 @@ export default function AnalyticsPage() {
             updated.totalLicenseRevenue = (parseFloat(updated.totalLicenseRevenue) + renewalRevenue).toFixed(6)
             updated.totalCreatorPayouts = (parseFloat(updated.totalCreatorPayouts) + renewalCreatorPayout).toFixed(6)
             updated.totalPlatformRevenue = (parseFloat(updated.totalPlatformRevenue) + renewalPlatformFee).toFixed(6)
+            break
+
+          case 'license_expired':
+            updated.activeLicenses = Math.max(0, updated.activeLicenses - 1)
+            break
+
+          case 'revenue_recorded':
+            // Revenue already tracked in license_minted/renewed, this is just event logging
             break
 
           case 'certificate_minted':

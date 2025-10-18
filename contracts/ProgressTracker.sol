@@ -49,6 +49,8 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
     error InvalidContractAddress();
 
     // ============ Events ============
+    /// @dev Emitted when student starts a section
+    event SectionStarted(address indexed student, uint256 indexed courseId, uint256 indexed sectionId, uint256 startedAt);
     /// @dev Emitted when student completes a section
     event SectionCompleted(address indexed student, uint256 indexed courseId, uint256 indexed sectionId);
     /// @dev Emitted when student completes entire course
@@ -67,6 +69,31 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
         }
         courseFactory = CourseFactory(_courseFactory);
         courseLicense = CourseLicense(_courseLicense);
+    }
+
+    /**
+     * @dev Marks a section as started for analytics tracking
+     * @param courseId ID of the course
+     * @param sectionId ID of the section
+     * @notice Requires valid license and validates section exists
+     * @custom:goldsky Emits SectionStarted event for analytics
+     */
+    function startSection(uint256 courseId, uint256 sectionId) external nonReentrant {
+        // Gas-efficient custom error instead of require
+        if (!courseLicense.hasValidLicense(msg.sender, courseId)) {
+            revert NoValidLicense(msg.sender, courseId);
+        }
+
+        // Get course sections to validate section ID
+        CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
+        if (sectionId >= sections.length) {
+            revert SectionNotFound(courseId, sectionId);
+        }
+
+        // Only emit if section not already completed
+        if (!sectionProgress[msg.sender][courseId][sectionId].completed) {
+            emit SectionStarted(msg.sender, courseId, sectionId, block.timestamp);
+        }
     }
 
     /**

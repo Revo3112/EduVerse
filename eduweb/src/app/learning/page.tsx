@@ -19,6 +19,9 @@ import { RatingModal } from '@/components/RatingModal';
 // Import certificate modal
 import { GetCertificateModal } from '@/components/GetCertificateModal';
 
+// Import renewal modal
+import RenewLicenseModal from '@/components/RenewLicenseModal';
+
 // Import data dan tipe dari file mock-data
 import {
   Course,
@@ -47,6 +50,15 @@ export default function LearningPage() {
     id: bigint;
     title: string;
     price: bigint;
+  } | null>(null);
+
+  // Renewal Modal State
+  const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
+  const [selectedCourseForRenewal, setSelectedCourseForRenewal] = useState<{
+    id: number;
+    title: string;
+    creatorName: string;
+    pricePerMonth: bigint;
   } | null>(null);
 
   // Mock user address - in production, this would come from wallet connection
@@ -125,7 +137,27 @@ export default function LearningPage() {
   // =================================================================
 
   const handleContinueLearning = (courseId: number) => {
-    router.push(`/learning/course-details?id=${courseId}`);
+    const license = mockDB.getLicenseForUser(BigInt(courseId), mockUserAddress);
+    const course = mockCourses.find(c => c.id === BigInt(courseId));
+
+    if (!license || !course) return;
+
+    const now = Math.floor(Date.now() / 1000);
+    const isLicenseActive = Number(license.expiryTimestamp) > now && license.isActive;
+
+    if (isLicenseActive) {
+    // License masih aktif - navigasi langsung ke course details
+      router.push(`/learning/course-details?id=${courseId}`);
+    } else {
+      // License expired - tampilkan renewal modal (SCENARIO 2)
+      setSelectedCourseForRenewal({
+        id: courseId,
+        title: course.title,
+        creatorName: course.creatorName,
+        pricePerMonth: course.pricePerMonth
+      });
+      setIsRenewalModalOpen(true);
+    }
   };
 
   const handleViewCertificate = () => {
@@ -174,6 +206,29 @@ export default function LearningPage() {
     // In production, this would trigger a refetch of certificates
     console.log('Certificate minted successfully');
     // Could also refresh learning data to show updated certificate status
+  };
+
+  // Renewal Modal Handlers
+  const handleRenewLicense = async (courseId: number, duration: number) => {
+    try {
+      // TODO: Implement actual blockchain renewal logic
+      // This should call CourseLicense.mintLicense() with payment
+      console.log('Renewing license for course:', courseId, 'Duration:', duration, 'months');
+
+      // Simulate renewal success
+      alert(`License renewed successfully for ${duration} month(s)!`);
+
+      // After successful renewal, navigate to course details
+      router.push(`/learning/course-details?id=${courseId}`);
+    } catch (error) {
+      console.error('Renewal failed:', error);
+      alert('Failed to renew license. Please try again.');
+    }
+  };
+
+  const handleCloseRenewalModal = () => {
+    setIsRenewalModalOpen(false);
+    setSelectedCourseForRenewal(null);
   };
 
   const formatLearningTime = (seconds: number): string => {
@@ -375,7 +430,14 @@ export default function LearningPage() {
 
         <TabsContent value="history" className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {learningData.historyCourses.map((course) => (
+            {learningData.historyCourses.map((course) => {
+              const originalCourse = mockCourses.find(c => Number(c.id) === course.id);
+              const license = originalCourse ? mockDB.getLicenseForUser(originalCourse.id, mockUserAddress) : null;
+              const hasLicense = license !== null;
+              const isCompleted = course.status === 'Completed';
+              const canClaimCertificate = isCompleted && hasLicense && !course.certificateId;
+
+              return (
               <Card key={course.id} className="group hover:shadow-lg transition-all duration-300 border border-border bg-card h-full flex flex-col">
                 <CardHeader className="space-y-4">
                   <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
@@ -405,8 +467,8 @@ export default function LearningPage() {
                         variant={course.status === 'Completed' ? 'default' : 'outline'}
                         className={`text-xs ${
                           course.status === 'Completed'
-                            ? 'bg-green-500 hover:bg-green-600 text-white'
-                            : 'border-yellow-500 text-yellow-600'
+                          ? 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 text-white'
+                          : 'border-yellow-500 text-yellow-600 dark:text-yellow-400'
                         }`}
                       >
                         {course.status}
@@ -423,7 +485,7 @@ export default function LearningPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Progress: {course.completedSections}/{course.totalSections} sections</span>
-                      <span className={course.status === 'Completed' ? 'text-green-600 font-semibold' : 'text-yellow-600'}>
+                        <span className={course.status === 'Completed' ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-yellow-600 dark:text-yellow-400'}>
                         {course.progress}%
                       </span>
                     </div>
@@ -446,12 +508,27 @@ export default function LearningPage() {
                   </div>
                   <div className="pt-2 mt-auto">
                     {course.status === 'Completed' ? (
-                      <>
-                        <p className="text-sm text-green-600 mb-3 font-medium">
-                          ✓ Certificate earned: {course.certificateId}
-                        </p>
                         <div className="space-y-2">
-                          {/* Show either "Get Certificate" or "View Certificate" based on whether they have one */}
+                          {/* Certificate Status Badge */}
+                          {!course.certificateId && (
+                            <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/20 mb-3">
+                              <p className="text-sm font-medium text-green-600 dark:text-green-400 flex items-center gap-2">
+                                <Award className="w-4 h-4" />
+                                Certificate Available
+                              </p>
+                            </div>
+                          )}
+
+                          {course.certificateId && (
+                            <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 mb-3">
+                              <p className="text-sm font-medium text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                                <Award className="w-4 h-4" />
+                                Certificate ID: {course.certificateId}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Action Buttons */}
                           {course.certificateId ? (
                             <Button
                               variant="outline"
@@ -480,10 +557,9 @@ export default function LearningPage() {
                             Rate Course
                           </Button>
                         </div>
-                      </>
                     ) : (
                       <>
-                        <p className="text-sm text-yellow-600 mb-3 font-medium">
+                            <p className="text-sm text-yellow-600 dark:text-yellow-400 mb-3 font-medium">
                           ⚠ License expired - {course.progress}% completed
                         </p>
                         <div className="space-y-2">
@@ -510,7 +586,8 @@ export default function LearningPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         </TabsContent>
       </Tabs>
@@ -535,6 +612,19 @@ export default function LearningPage() {
           courseTitle={selectedCourseForCertificate.title}
           certificatePrice={selectedCourseForCertificate.price}
           onSuccess={handleCertificateSuccess}
+        />
+      )}
+
+      {/* Renewal Modal */}
+      {selectedCourseForRenewal && (
+        <RenewLicenseModal
+          isOpen={isRenewalModalOpen}
+          onClose={handleCloseRenewalModal}
+          courseId={selectedCourseForRenewal.id}
+          courseTitle={selectedCourseForRenewal.title}
+          creatorName={selectedCourseForRenewal.creatorName}
+          pricePerMonth={selectedCourseForRenewal.pricePerMonth}
+          onRenew={handleRenewLicense}
         />
       )}
     </ContentContainer>
