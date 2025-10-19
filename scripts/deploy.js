@@ -3,11 +3,36 @@
  * Deploys all contracts to Manta Pacific Testnet and exports ABIs
  */
 
-const { ethers, network } = require("hardhat");
+const { ethers, network, run } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 const { ExportSystem } = require("./export-system");
 const { PATHS } = require("./core/system");
+
+/**
+ * Verify contract on block explorer
+ */
+async function verifyContract(address, constructorArgs, contractName) {
+  console.log(`\n🔍 Verifying ${contractName} at ${address}...`);
+  try {
+    await run("verify:verify", {
+      address: address,
+      constructorArguments: constructorArgs,
+    });
+    console.log(`✅ ${contractName} verified successfully on block explorer!`);
+    return true;
+  } catch (error) {
+    if (error.message.includes("Already Verified")) {
+      console.log(`✅ ${contractName} is already verified`);
+      return true;
+    } else {
+      console.log(`⚠️ ${contractName} verification failed:`, error.message);
+      console.log(`   You can verify manually later with:`);
+      console.log(`   npx hardhat verify --network mantaPacificTestnet ${address}`);
+      return false;
+    }
+  }
+}
 
 async function deployContract(contractName, ...args) {
   console.log(`\n🚀 Deploying ${contractName}...`);
@@ -19,8 +44,6 @@ async function deployContract(contractName, ...args) {
 
   const address = await contract.getAddress();
   console.log(`✅ ${contractName} deployed successfully to: ${address}`);
-  console.log(`🔍 Verify contract with:`);
-  console.log(`   npx hardhat verify --network mantaPacificTestnet ${address}`);
 
   return contract;
 }
@@ -36,11 +59,17 @@ async function main() {
   try {
     // Deploy all contracts
     const courseFactory = await deployContract("CourseFactory");
+    await verifyContract(courseFactory.target, [], "CourseFactory");
 
     const courseLicense = await deployContract(
       "CourseLicense",
       courseFactory.target,
       deployer.address
+    );
+    await verifyContract(
+      courseLicense.target,
+      [courseFactory.target, deployer.address],
+      "CourseLicense"
     );
 
     const progressTracker = await deployContract(
@@ -48,12 +77,22 @@ async function main() {
       courseFactory.target,
       courseLicense.target
     );
+    await verifyContract(
+      progressTracker.target,
+      [courseFactory.target, courseLicense.target],
+      "ProgressTracker"
+    );
 
     const certificateManager = await deployContract(
       "CertificateManager",
       courseFactory.target,
       progressTracker.target,
       deployer.address
+    );
+    await verifyContract(
+      certificateManager.target,
+      [courseFactory.target, progressTracker.target, deployer.address],
+      "CertificateManager"
     );
 
     // Save contract addresses
@@ -82,13 +121,16 @@ async function main() {
     await exportSystem.export({ target: "all" });
 
     console.log("\n🎉 Complete deployment and setup finished successfully!");
-    console.log("\n📋 Summary:");
+    console.log("\n📋 Deployment Summary:");
     console.log(`  Network: ${addresses.network} (Chain ID: ${addresses.chainId})`);
+    console.log(`  Deployer: ${addresses.deployer}`);
+    console.log(`\n📝 Contract Addresses:`);
     console.log(`  CourseFactory: ${addresses.courseFactory}`);
     console.log(`  CourseLicense: ${addresses.courseLicense}`);
     console.log(`  ProgressTracker: ${addresses.progressTracker}`);
     console.log(`  CertificateManager: ${addresses.certificateManager}`);
-    console.log("\n✅ All ABIs exported and environments updated using unified system!");
+    console.log("\n✅ All contracts deployed, verified, and ABIs exported!");
+    console.log("✅ Environment files updated for mobile and frontend!");
 
   } catch (error) {
     console.error("\n❌ Deployment failed:", error);

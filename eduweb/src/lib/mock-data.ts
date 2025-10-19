@@ -370,7 +370,7 @@ export const mockCourses: ExtendedCourse[] = [
         courseId: BigInt(4),
         title: "Test.mp4 - Livepeer HLS Streaming Test",
         description: "Video test untuk memverifikasi integrasi Livepeer player. Video ini di-upload ke Livepeer dan memiliki 3 quality renditions: 1200p (1920x1200), 800p (1280x800), dan 400p (640x400). HLS adaptive streaming akan otomatis memilih quality terbaik berdasarkan koneksi internet.",
-        contentCID: "ef2erhbety65714m", // ✅ Livepeer Playback ID (16 char hex)
+        contentCID: "41cfxt8j26ksmxgr", // ✅ Livepeer Playback ID (16 char hex)
         duration: BigInt(58), // Estimated duration in seconds (39.61 MB @ 5.43 mbps ≈ 58s)
         orderId: BigInt(0),
         videoMetadata: {
