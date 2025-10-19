@@ -171,7 +171,6 @@ export default function CreateCoursePage() {
   const [isDraftSupported, setIsDraftSupported] = useState<boolean>(false);
   const [isSavingDraft, setIsSavingDraft] = useState<boolean>(false);
   const [isLoadingDraft, setIsLoadingDraft] = useState<boolean>(true);
-  const [isDeletingItem, setIsDeletingItem] = useState<boolean>(false);
   const [draftSaveStatus, setDraftSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
@@ -284,60 +283,6 @@ export default function CreateCoursePage() {
 
     initializeDraftStorage();
   }, []);
-
-  // Auto-save draft data (text only, fast)
-  useEffect(() => {
-    if (isLoadingDraft || !isDraftSupported || isDeletingItem || isSavingDraft) return;
-
-    const saveTimer = setTimeout(async () => {
-      try {
-        setIsSavingDraft(true);
-        setDraftSaveStatus('saving');
-
-        // Prepare draft form data
-        const draftFormData: DraftFormData = {
-          title: formData.title,
-          description: formData.description,
-          creatorName: formData.creatorName,
-          pricePerMonth: formData.pricePerMonth,
-          category: formData.category,
-          difficulty: formData.difficulty,
-          learningObjectives: formData.learningObjectives,
-          requirements: formData.requirements,
-          tags: formData.tags,
-          thumbnailFileId: formData.thumbnailFileId,
-          sectionFileIds: sections.map(s => s.fileId).filter(Boolean) as string[]
-        };
-
-        // Prepare sections data
-        const draftSections: DraftSection[] = sections.map(section => ({
-          id: section.id,
-          title: section.title,
-          fileId: section.fileId,
-          duration: section.duration,
-          type: section.type,
-          description: section.description
-        }));
-
-        await draftStorage.saveDraftData(draftFormData, draftSections);
-
-        setDraftSaveStatus('saved');
-        setLastSavedAt(new Date());
-
-        // Reset status after a delay
-        setTimeout(() => setDraftSaveStatus('idle'), 2000);
-
-      } catch (error) {
-        console.error('Failed to save draft:', error);
-        setDraftSaveStatus('error');
-        setTimeout(() => setDraftSaveStatus('idle'), 3000);
-      } finally {
-        setIsSavingDraft(false);
-      }
-    }, 1000);
-
-    return () => clearTimeout(saveTimer);
-  }, [formData, sections, isLoadingDraft, isDraftSupported, isDeletingItem, isSavingDraft]);
 
   // Handle thumbnail upload with file storage
   const handleThumbnailUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -453,8 +398,6 @@ export default function CreateCoursePage() {
 
   // Handle thumbnail removal with file cleanup
   const removeThumbnail = useCallback(async () => {
-    setIsDeletingItem(true);
-
     try {
       // Delete stored file if exists
       if (formData.thumbnailFileId && isDraftSupported) {
@@ -521,14 +464,13 @@ export default function CreateCoursePage() {
           setIsSavingDraft(false);
         }
       }
-    } finally {
-      setIsDeletingItem(false);
+    } catch (error) {
+      console.error('Error removing thumbnail:', error);
     }
   }, [formData, isDraftSupported, sections]);
 
   // Delete section with file cleanup
   const deleteSection = useCallback(async (sectionId: string) => {
-    setIsDeletingItem(true);
 
     try {
       const section = sections.find(s => s.id === sectionId);
@@ -593,8 +535,8 @@ export default function CreateCoursePage() {
           setIsSavingDraft(false);
         }
       }
-    } finally {
-      setIsDeletingItem(false);
+    } catch (error) {
+      console.error('Error deleting section:', error);
     }
   }, [sections, isDraftSupported, formData]);
 
@@ -724,7 +666,21 @@ export default function CreateCoursePage() {
   };
 
   /**
-   * Upload course assets to IPFS via API endpoint
+   * Upload course assets to IPFS via Hybrid API (OPTION A)
+   *
+   * Architecture:
+   * - Thumbnail → Pinata IPFS (for course cards, certificates)
+   * - Videos → Livepeer with IPFS storage (for playback + transcoding)
+   *
+   * Smart Contract Storage:
+   * - thumbnailCID: Pinata IPFS CID (Qm... or bafy...)
+   * - section.contentCID: Livepeer playback ID (16-char hex like "abc123def456")
+   *
+   * Playback Detection:
+   * - HybridVideoPlayer checks contentCID format
+   * - 16-char hex → LivepeerPlayerView (modern player with quality selector)
+   * - IPFS CID → LegacyVideoPlayer (backward compatibility for old Pinata videos)
+   *
    * Returns plain CIDs compatible with smart contract storage
    */
   const uploadCourseAssetsToIPFS = async (): Promise<{
@@ -767,9 +723,9 @@ export default function CreateCoursePage() {
         }
       });
 
-      // Upload to Pinata via API
-      console.log('[Create Course] Uploading assets to Pinata...');
-      const response = await fetch('/api/course/upload-assets-pinata', {
+      // Upload to Livepeer (videos) + Pinata (thumbnail) via Hybrid API
+      console.log('[Create Course] Uploading assets via Hybrid API (OPTION A)...');
+      const response = await fetch('/api/course/upload-assets-hybrid', {
         method: 'POST',
         body: uploadFormData,
       });
@@ -869,7 +825,7 @@ export default function CreateCoursePage() {
       const courseData = {
         title: formData.title,
         description: formData.description,
-        thumbnailCID, // Plain CID for smart contract
+        thumbnailCID, // Pinata IPFS CID (for course cards)
         creatorName: formData.creatorName,
         pricePerMonth: formData.pricePerMonth,
         category: formData.category,
@@ -878,6 +834,8 @@ export default function CreateCoursePage() {
           title: section.title,
           description: section.description,
           duration: section.duration,
+          // contentCID is Livepeer playback ID (16-char hex)
+          // HybridVideoPlayer auto-detects and uses LivepeerPlayerView
           contentCID: videoCIDs.find(v => v.sectionId === section.id)?.cid || '',
         })),
       };
@@ -899,7 +857,8 @@ export default function CreateCoursePage() {
 
       // Prepare blockchain transaction
       try {
-        const transaction = prepareCreateCourseTransaction({
+        // Step 2.1: Create course on blockchain
+        const createCourseTransaction = prepareCreateCourseTransaction({
           metadata: {
             title: formData.title,
             description: formData.description,
@@ -913,10 +872,60 @@ export default function CreateCoursePage() {
         });
 
         // Send transaction using Thirdweb
-        sendTransaction(transaction, {
+        sendTransaction(createCourseTransaction, {
           onSuccess: async (result) => {
-            console.log('✅ Course published to blockchain!');
+            console.log('✅ Course created on blockchain!');
             console.log('Transaction:', result);
+
+            // Step 2.2: Extract courseId from transaction result
+            // Thirdweb returns transaction receipt which includes logs
+            // We need to parse CourseCreated event to get courseId
+            try {
+              // For now, we'll estimate courseId as the latest
+              // In production, parse CourseCreated event from logs
+              // Event CourseCreated(uint256 indexed courseId, address indexed creator, ...)
+
+              console.log('[Create Course] Transaction successful');
+              console.log('[Create Course] Next: Adding sections to blockchain...');
+
+              // Step 2.3: Add sections in batches of 50
+              if (courseData.sections.length > 0) {
+                toast.info('Adding course sections...', {
+                  description: `Uploading ${courseData.sections.length} sections in batches`,
+                });
+
+                // NOTE: In production, extract courseId from transaction logs
+                // For now, this will need the courseId from the event
+                // The frontend will need to query the blockchain or parse events
+
+                // Split sections into batches of 50
+                const BATCH_SIZE = 50;
+                const batches: typeof courseData.sections[] = [];
+
+                for (let i = 0; i < courseData.sections.length; i += BATCH_SIZE) {
+                  batches.push(courseData.sections.slice(i, i + BATCH_SIZE));
+                }
+
+                console.log(`[Create Course] Splitting ${courseData.sections.length} sections into ${batches.length} batches`);
+
+                // TODO: Implement batch section upload
+                // This requires getting courseId from transaction result
+                // For now, log a warning
+                console.warn('[Create Course] ⚠️ SECTIONS NOT ADDED TO BLOCKCHAIN');
+                console.warn('[Create Course] Need to implement courseId extraction from transaction logs');
+                console.warn('[Create Course] Sections uploaded to IPFS only');
+
+                toast.warning('Course created, but sections not added', {
+                  description: 'Section upload to blockchain is not yet implemented',
+                  duration: 5000,
+                });
+              }
+            } catch (sectionError) {
+              console.error('[Create Course] Failed to add sections:', sectionError);
+              toast.error('Sections not added', {
+                description: 'Course created but sections failed to upload',
+              });
+            }
 
             // Clear draft after successful upload
             await clearDraft();

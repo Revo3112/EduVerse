@@ -38,7 +38,6 @@ export function VideoPlayerWithRefresh({
   // Use the signed URL hook for auto-refresh
   const {
     signedUrl,
-    expiresAt: _currentExpiresAt,
     isRefreshing,
     refreshSignedUrl,
     timeUntilExpiry,

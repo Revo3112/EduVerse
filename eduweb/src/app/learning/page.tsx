@@ -435,7 +435,6 @@ export default function LearningPage() {
               const license = originalCourse ? mockDB.getLicenseForUser(originalCourse.id, mockUserAddress) : null;
               const hasLicense = license !== null;
               const isCompleted = course.status === 'Completed';
-              const canClaimCertificate = isCompleted && hasLicense && !course.certificateId;
 
               return (
               <Card key={course.id} className="group hover:shadow-lg transition-all duration-300 border border-border bg-card h-full flex flex-col">

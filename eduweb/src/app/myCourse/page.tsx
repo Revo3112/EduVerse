@@ -3,6 +3,21 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { Rating } from "@/components/ui/rating";
 import { Separator } from "@/components/ui/separator";
@@ -16,6 +31,10 @@ import {
   type Course
 } from "@/lib/mock-data";
 import {
+  prepareDeleteCourseTransaction,
+  prepareUpdateCourseTransaction,
+} from "@/services/courseContract.service";
+import {
   BarChart3,
   BookOpen,
   DollarSign,
@@ -23,12 +42,18 @@ import {
   Eye,
   MoreHorizontal,
   PlusCircle,
+  Power,
+  PowerOff,
   Star,
+  Trash2,
   TrendingUp,
   Users,
-  Wallet
+  Wallet,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 
 interface CreatorCourse extends Course {
   // Analytics data that would come from Goldsky indexer in production
@@ -81,23 +106,354 @@ interface CreatorCourse extends Course {
  *    - Generate leaderboards and performance comparisons
  *    - Provide real-time dashboard updates via GraphQL subscriptions
  *
- * GOLDSKY SUBGRAPH ENTITIES NEEDED:
- * - Course, Creator, License, Progress, Certificate, Rating
- * - Relationships: Creator -> Courses, Course -> Licenses/Progress/Ratings
- * - Time-series data for revenue and enrollment trends
- * - Aggregated statistics for dashboard KPIs
+ * ===================================================================
+ * GOLDSKY SUBGRAPH SCHEMA DESIGN
+ * ===================================================================
  *
- * IMPLEMENTATION APPROACH:
- * 1. Deploy Goldsky subgraph indexing all 4 EduVerse contracts
- * 2. Replace mock data hooks with GraphQL queries to Goldsky endpoint
- * 3. Use GraphQL subscriptions for real-time dashboard updates
- * 4. Implement caching strategy for frequently accessed analytics
- * 5. Add pagination for large datasets (courses, students, transactions)
+ * ENTITIES:
+ *
+ * type Course @entity {
+ *   id: ID!                          # courseId
+ *   creator: Creator!                # Relation to Creator
+ *   title: String!
+ *   description: String!
+ *   thumbnailCID: String!
+ *   creatorName: String!
+ *   category: CourseCategory!
+ *   difficulty: CourseDifficulty!
+ *   pricePerMonth: BigInt!           # In wei
+ *   isActive: Boolean!
+ *   createdAt: BigInt!               # Timestamp
+ *   updatedAt: BigInt!               # Last update timestamp
+ *
+ *   # Aggregated metrics (computed from events)
+ *   totalRevenue: BigInt!            # Sum of all license purchases
+ *   totalEnrollments: Int!           # Count of LicenseMinted events
+ *   activeEnrollments: Int!          # Count of active licenses
+ *   completedStudents: Int!          # Count of CourseCompleted events
+ *   averageRating: BigDecimal!       # Average of all ratings
+ *   totalRatings: Int!               # Count of ratings
+ *
+ *   # Relations
+ *   licenses: [License!]! @derivedFrom(field: "course")
+ *   sections: [CourseSection!]! @derivedFrom(field: "course")
+ *   progress: [StudentProgress!]! @derivedFrom(field: "course")
+ *   ratings: [CourseRating!]! @derivedFrom(field: "course")
+ *   certificates: [Certificate!]! @derivedFrom(field: "course")
+ * }
+ *
+ * type Creator @entity {
+ *   id: ID!                          # Creator address
+ *   address: Bytes!
+ *   name: String!                    # Latest creatorName from courses
+ *   coursesCreated: Int!
+ *   totalRevenue: BigInt!            # Sum across all courses
+ *   totalEnrollments: Int!           # Sum across all courses
+ *   averageRating: BigDecimal!       # Weighted average across all courses
+ *
+ *   courses: [Course!]! @derivedFrom(field: "creator")
+ *
+ *   createdAt: BigInt!
+ *   lastActive: BigInt!
+ * }
+ *
+ * type License @entity {
+ *   id: ID!                          # licenseId
+ *   course: Course!
+ *   student: Bytes!                  # Student address
+ *   durationMonths: Int!
+ *   expiryTimestamp: BigInt!
+ *   isActive: Boolean!
+ *   priceAtPurchase: BigInt!         # Price when purchased
+ *   purchasedAt: BigInt!
+ *   renewedAt: BigInt                # Last renewal timestamp
+ *   renewalCount: Int!               # Number of renewals
+ * }
+ *
+ * type StudentProgress @entity {
+ *   id: ID!                          # student-courseId
+ *   course: Course!
+ *   student: Bytes!
+ *   completedSections: [Int!]!       # Array of section IDs
+ *   totalSections: Int!
+ *   progressPercentage: BigDecimal!
+ *   isCompleted: Boolean!
+ *   completedAt: BigInt              # Timestamp when completed
+ *   startedAt: BigInt!
+ *   lastProgressAt: BigInt!
+ * }
+ *
+ * type CourseRating @entity {
+ *   id: ID!                          # student-courseId
+ *   course: Course!
+ *   student: Bytes!
+ *   rating: Int!                     # 1-5 stars
+ *   createdAt: BigInt!
+ *   updatedAt: BigInt!
+ * }
+ *
+ * type Certificate @entity {
+ *   id: ID!                          # certificateId
+ *   course: Course!
+ *   student: Bytes!
+ *   studentName: String!
+ *   imageCID: String!                # Certificate image IPFS CID
+ *   qrCodeCID: String!               # QR code IPFS CID
+ *   issuedAt: BigInt!
+ *   expiresAt: BigInt!
+ *   isValid: Boolean!
+ * }
+ *
+ * type CourseSection @entity {
+ *   id: ID!                          # courseId-sectionId
+ *   course: Course!
+ *   sectionId: Int!
+ *   title: String!
+ *   contentCID: String!              # Video IPFS CID
+ *   duration: BigInt!                # Duration in seconds
+ *   orderId: Int!
+ *   isActive: Boolean!
+ * }
+ *
+ * # Time-series entities for analytics
+ * type DailyRevenue @entity {
+ *   id: ID!                          # date-courseId
+ *   course: Course!
+ *   date: String!                    # YYYY-MM-DD
+ *   revenue: BigInt!                 # Revenue for that day
+ *   enrollments: Int!                # New enrollments that day
+ * }
+ *
+ * type MonthlyRevenue @entity {
+ *   id: ID!                          # month-courseId
+ *   course: Course!
+ *   month: String!                   # YYYY-MM
+ *   revenue: BigInt!
+ *   enrollments: Int!
+ *   completions: Int!
+ * }
+ *
+ * ===================================================================
+ * EVENT HANDLERS TO IMPLEMENT
+ * ===================================================================
+ *
+ * FROM CourseFactory.sol:
+ * 1. handleCourseCreated(event: CourseCreated)
+ *    - Create Course entity
+ *    - Create or update Creator entity
+ *    - Initialize metrics (totalRevenue=0, totalEnrollments=0, etc.)
+ *
+ * 2. handleCourseUpdated(event: CourseUpdated)
+ *    - Update Course entity fields
+ *    - Track price changes for revenue projections
+ *    - Update updatedAt timestamp
+ *
+ * 3. handleCourseDeleted(event: CourseDeleted)
+ *    - Set Course.isActive = false
+ *    - Update updatedAt timestamp
+ *
+ * 4. handleSectionAdded(event: SectionAdded)
+ *    - Create CourseSection entity
+ *    - Update Course.sections array
+ *
+ * 5. handleBatchSectionsAdded(event: BatchSectionsAdded)
+ *    - Create multiple CourseSection entities
+ *    - Efficiently handle batch operations
+ *
+ * 6. handleRatingAdded(event: RatingAdded)
+ *    - Create or update CourseRating entity
+ *    - Recalculate Course.averageRating
+ *    - Increment Course.totalRatings
+ *
+ * FROM CourseLicense.sol:
+ * 7. handleLicenseMinted(event: LicenseMinted)
+ *    - Create License entity
+ *    - Increment Course.totalEnrollments
+ *    - Increment Course.activeEnrollments
+ *    - Add Course.totalRevenue += license price
+ *    - Create/update DailyRevenue entity
+ *    - Update Creator.totalRevenue and totalEnrollments
+ *
+ * 8. handleLicenseRenewed(event: LicenseRenewed)
+ *    - Update License entity (renewedAt, renewalCount++)
+ *    - Add Course.totalRevenue += renewal price
+ *    - Create/update DailyRevenue entity
+ *
+ * 9. handleLicenseExpired(event: LicenseExpired)
+ *    - Set License.isActive = false
+ *    - Decrement Course.activeEnrollments
+ *
+ * FROM ProgressTracker.sol:
+ * 10. handleProgressUpdated(event: ProgressUpdated)
+ *     - Create or update StudentProgress entity
+ *     - Update completedSections array
+ *     - Recalculate progressPercentage
+ *     - Update lastProgressAt timestamp
+ *
+ * 11. handleCourseCompleted(event: CourseCompleted)
+ *     - Set StudentProgress.isCompleted = true
+ *     - Set completedAt timestamp
+ *     - Increment Course.completedStudents
+ *
+ * FROM CertificateManager.sol:
+ * 12. handleCertificateIssued(event: CertificateIssued)
+ *     - Create Certificate entity
+ *     - Link to Course and student
+ *     - Track certificate revenue (separate from course revenue)
+ *
+ * ===================================================================
+ * GRAPHQL QUERIES FOR DASHBOARD
+ * ===================================================================
+ *
+ * Query 1: Get creator's courses with analytics
+ * ```graphql
+ * query GetCreatorCourses($creatorAddress: Bytes!) {
+ *   creator(id: $creatorAddress) {
+ *     id
+ *     name
+ *     totalRevenue
+ *     totalEnrollments
+ *     averageRating
+ *     courses(orderBy: createdAt, orderDirection: desc) {
+ *       id
+ *       title
+ *       description
+ *       thumbnailCID
+ *       category
+ *       difficulty
+ *       pricePerMonth
+ *       isActive
+ *       totalRevenue
+ *       totalEnrollments
+ *       activeEnrollments
+ *       completedStudents
+ *       averageRating
+ *       totalRatings
+ *       createdAt
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * Query 2: Get monthly revenue trends
+ * ```graphql
+ * query GetMonthlyRevenue($courseId: ID!, $startMonth: String!, $endMonth: String!) {
+ *   monthlyRevenues(
+ *     where: { course: $courseId, month_gte: $startMonth, month_lte: $endMonth }
+ *     orderBy: month
+ *     orderDirection: asc
+ *   ) {
+ *     month
+ *     revenue
+ *     enrollments
+ *     completions
+ *   }
+ * }
+ * ```
+ *
+ * Query 3: Get student engagement metrics
+ * ```graphql
+ * query GetCourseEngagement($courseId: ID!) {
+ *   course(id: $courseId) {
+ *     totalEnrollments
+ *     completedStudents
+ *     progress(where: { isCompleted: false }) {
+ *       student
+ *       progressPercentage
+ *       lastProgressAt
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * Query 4: Get rating distribution
+ * ```graphql
+ * query GetRatingDistribution($courseId: ID!) {
+ *   course(id: $courseId) {
+ *     averageRating
+ *     totalRatings
+ *     ratings {
+ *       rating
+ *       createdAt
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * Subscription: Real-time revenue updates
+ * ```graphql
+ * subscription OnRevenueUpdate($creatorAddress: Bytes!) {
+ *   creator(id: $creatorAddress) {
+ *     totalRevenue
+ *     courses {
+ *       id
+ *       title
+ *       totalRevenue
+ *       totalEnrollments
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * ===================================================================
+ * IMPLEMENTATION APPROACH
+ * ===================================================================
+ *
+ * 1. Deploy Goldsky subgraph indexing all 4 EduVerse contracts:
+ *    - CourseFactory (0x...)
+ *    - CourseLicense (0x...)
+ *    - ProgressTracker (0x...)
+ *    - CertificateManager (0x...)
+ *
+ * 2. Replace mock data hooks with GraphQL queries to Goldsky endpoint:
+ *    - Create useCreatorCourses() hook for course list
+ *    - Create useCreatorAnalytics() hook for metrics
+ *    - Create useCourseRevenue() hook for revenue trends
+ *
+ * 3. Use GraphQL subscriptions for real-time dashboard updates:
+ *    - Subscribe to revenue changes
+ *    - Subscribe to new enrollments
+ *    - Subscribe to course completions
+ *
+ * 4. Implement caching strategy for frequently accessed analytics:
+ *    - Cache creator totals (refresh every 5 minutes)
+ *    - Cache course metrics (refresh on subscription updates)
+ *    - Invalidate cache on user actions (edit, delete, unpublish)
+ *
+ * 5. Add pagination for large datasets:
+ *    - Courses: 20 per page
+ *    - Students: 50 per page
+ *    - Transactions: 100 per page
+ *
+ * ===================================================================
+ * BUSINESS LOGIC VALIDATION
+ * ===================================================================
+ *
+ * This dashboard supports the instructor flow from business requirements:
+ *
+ * 1. ✅ View all created courses
+ * 2. ✅ See performance metrics (revenue, enrollments, completions, ratings)
+ * 3. ✅ Edit courses (navigate to /edit/[courseId])
+ * 4. ✅ Unpublish courses (set isActive = false)
+ * 5. ✅ Delete courses (soft delete, preserves student data)
+ * 6. ✅ Republish courses (set isActive = true)
+ * 7. ✅ Real-time pricing (ETH to IDR conversion)
+ * 8. ✅ Analytics breakdown (revenue, students, ratings)
+ *
+ * All data is on-chain for transparency, indexed by Goldsky for performance.
  * ===================================================================
  */
 
 export default function MyCoursePage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'courses' | 'analytics'>('overview');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [unpublishDialogOpen, setUnpublishDialogOpen] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<bigint | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<CreatorCourse | null>(null);
+
+  const router = useRouter();
+  const activeAccount = useActiveAccount();
+  const { mutate: sendTransaction } = useSendTransaction();
 
   // Real-time ETH to IDR pricing
   const { ethToIDR, isLoading: priceLoading, lastUpdated } = useEthPrice();
@@ -157,6 +513,155 @@ export default function MyCoursePage() {
     return `${amount.toFixed(4)} ETH`;
   };
 
+  // Action Handlers
+  const handleViewCourse = (courseId: bigint) => {
+    router.push(`/course/${courseId}`);
+  };
+
+  const handleEditCourse = (courseId: bigint) => {
+    router.push(`/edit?courseId=${courseId}`);
+  };
+
+  const handleOpenDeleteDialog = (course: CreatorCourse) => {
+    setSelectedCourse(course);
+    setSelectedCourseId(BigInt(course.id));
+    setDeleteDialogOpen(true);
+  };
+
+  const handleOpenUnpublishDialog = (course: CreatorCourse) => {
+    setSelectedCourse(course);
+    setSelectedCourseId(BigInt(course.id));
+    setUnpublishDialogOpen(true);
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!selectedCourseId || !activeAccount) {
+      toast.error("Error", {
+        description: "Please connect your wallet first",
+      });
+      return;
+    }
+
+    try {
+      const transaction = prepareDeleteCourseTransaction({
+        courseId: selectedCourseId,
+      });
+
+      sendTransaction(transaction, {
+        onSuccess: () => {
+          toast.success("Course deleted successfully", {
+            description: "The course has been marked as inactive",
+          });
+          setDeleteDialogOpen(false);
+          setSelectedCourseId(null);
+          setSelectedCourse(null);
+        },
+        onError: (error) => {
+          console.error("Failed to delete course:", error);
+          toast.error("Failed to delete course", {
+            description: error.message || "Please try again",
+          });
+        },
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      toast.error("Error preparing transaction", {
+        description: errorMessage,
+      });
+    }
+  };
+
+  const handleUnpublishCourse = async () => {
+    if (!selectedCourseId || !selectedCourse || !activeAccount) {
+      toast.error("Error", {
+        description: "Please connect your wallet first",
+      });
+      return;
+    }
+
+    try {
+      const transaction = prepareUpdateCourseTransaction({
+        courseId: selectedCourseId,
+        metadata: {
+          title: selectedCourse.title,
+          description: selectedCourse.description,
+          thumbnailCID: selectedCourse.thumbnailCID,
+          creatorName: selectedCourse.creatorName,
+          category: getCategoryName(selectedCourse.category),
+          difficulty: getDifficultyName(selectedCourse.difficulty),
+        },
+        pricePerMonth: (Number(selectedCourse.pricePerMonth) / 1e18).toString(),
+        isActive: false, // Unpublish
+      });
+
+      sendTransaction(transaction, {
+        onSuccess: () => {
+          toast.success("Course unpublished", {
+            description: "The course is now inactive and hidden from students",
+          });
+          setUnpublishDialogOpen(false);
+          setSelectedCourseId(null);
+          setSelectedCourse(null);
+        },
+        onError: (error) => {
+          console.error("Failed to unpublish course:", error);
+          toast.error("Failed to unpublish course", {
+            description: error.message || "Please try again",
+          });
+        },
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      toast.error("Error preparing transaction", {
+        description: errorMessage,
+      });
+    }
+  };
+
+  const handleRepublishCourse = async (course: CreatorCourse) => {
+    if (!activeAccount) {
+      toast.error("Error", {
+        description: "Please connect your wallet first",
+      });
+      return;
+    }
+
+    try {
+      const transaction = prepareUpdateCourseTransaction({
+        courseId: BigInt(course.id),
+        metadata: {
+          title: course.title,
+          description: course.description,
+          thumbnailCID: course.thumbnailCID,
+          creatorName: course.creatorName,
+          category: getCategoryName(course.category),
+          difficulty: getDifficultyName(course.difficulty),
+        },
+        pricePerMonth: (Number(course.pricePerMonth) / 1e18).toString(),
+        isActive: true, // Republish
+      });
+
+      sendTransaction(transaction, {
+        onSuccess: () => {
+          toast.success("Course republished", {
+            description: "The course is now active and visible to students",
+          });
+        },
+        onError: (error) => {
+          console.error("Failed to republish course:", error);
+          toast.error("Failed to republish course", {
+            description: error.message || "Please try again",
+          });
+        },
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      toast.error("Error preparing transaction", {
+        description: errorMessage,
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -171,24 +676,17 @@ export default function MyCoursePage() {
             </div>
 
             {/* Real-time Pricing Display */}
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Card className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-green-600" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">ETH Price</p>
-                    <p className="font-semibold">
-                      {priceLoading ? "..." : formatIDR(ethToIDR)}
-                    </p>
-                  </div>
+            <Card className="px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-green-600" />
+                <div>
+                  <p className="text-sm text-muted-foreground">ETH Price</p>
+                  <p className="font-semibold">
+                    {priceLoading ? "..." : formatIDR(ethToIDR)}
+                  </p>
                 </div>
-              </Card>
-
-              <Button>
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Create Course
-              </Button>
-            </div>
+              </div>
+            </Card>
           </div>
         </div>
       </div>
@@ -324,7 +822,7 @@ export default function MyCoursePage() {
                       Manage and monitor your published courses
                     </p>
                   </div>
-                  <Button>
+                  <Button onClick={() => router.push('/create')}>
                     <PlusCircle className="h-4 w-4 mr-2" />
                     Create New Course
                   </Button>
@@ -395,15 +893,48 @@ export default function MyCoursePage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button variant="ghost" size="sm">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewCourse(BigInt(course.id))}
+                            >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditCourse(BigInt(course.id))}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {course.isActive ? (
+                                  <DropdownMenuItem onClick={() => handleOpenUnpublishDialog(course)}>
+                                    <PowerOff className="h-4 w-4 mr-2" />
+                                    Unpublish Course
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem onClick={() => handleRepublishCourse(course)}>
+                                    <Power className="h-4 w-4 mr-2" />
+                                    Republish Course
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleOpenDeleteDialog(course)}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Course
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -534,6 +1065,57 @@ export default function MyCoursePage() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Course</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{selectedCourse?.title}&quot;? This action will mark the course as inactive.
+              Enrolled students will retain access to their purchased content.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteCourse}
+            >
+              Delete Course
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unpublish Confirmation Dialog */}
+      <Dialog open={unpublishDialogOpen} onOpenChange={setUnpublishDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unpublish Course</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to unpublish &quot;{selectedCourse?.title}&quot;? The course will be hidden from new students
+              but existing enrollments will remain active.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setUnpublishDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUnpublishCourse}>
+              Unpublish Course
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

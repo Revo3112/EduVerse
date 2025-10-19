@@ -28,7 +28,6 @@ interface CertificateCardProps {
 }
 
 export function CertificateCard({
-  courseId,
   courseTitle,
   isCompleted,
   hasLicense,

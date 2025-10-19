@@ -352,27 +352,48 @@ export const mockCourses: ExtendedCourse[] = [
     }
   },
   {
-    id: BigInt(3),
-    title: "Arsitektur dan Pengembangan Protokol DeFi",
-    description: "Rancang dan bangun protokol keuangan terdesentralisasi dari awal. Pelajari tentang AMM, protokol pinjaman, dan strategi yield farming.",
+    id: BigInt(4),
+    title: "🎬 Test Livepeer Video Playback",
+    description: "Course khusus untuk testing integrasi Livepeer player dengan HLS streaming dan multiple quality renditions. Video ini menggunakan Livepeer playback ID dan akan otomatis menggunakan LivepeerPlayerView component.",
     thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
-    creator: "0x9F8e7D6c5B4a3921F8e7D6c5B4a39218F7e6D5c4",
-    creatorName: "Maria Rodriguez",
-    isActive: false, // Contoh kursus tidak aktif
-    category: CourseCategory.Finance,
-    difficulty: CourseDifficulty.Intermediate,
-    pricePerMonth: BigInt("4000000000000000"), // 0.004 ETH
-    createdAt: BigInt(1704009600), // 3 Jan 2024
-    totalSections: 8,
-    sections: createMockEnrichedSections(BigInt(3), 8),
-    userProgress: [],
+    creator: MOCK_USER_ADDRESS,
+    creatorName: "EduVerse Dev Team",
+    isActive: true,
+    category: CourseCategory.Technology,
+    difficulty: CourseDifficulty.Beginner,
+    pricePerMonth: BigInt("100000000000000"), // 0.0001 ETH (test course)
+    createdAt: BigInt(Math.floor(Date.now() / 1000) - 86400), // 1 day ago
+    totalSections: 1,
+    sections: [
+      {
+        id: BigInt(400), // Course 4, Section 0
+        courseId: BigInt(4),
+        title: "Test.mp4 - Livepeer HLS Streaming Test",
+        description: "Video test untuk memverifikasi integrasi Livepeer player. Video ini di-upload ke Livepeer dan memiliki 3 quality renditions: 1200p (1920x1200), 800p (1280x800), dan 400p (640x400). HLS adaptive streaming akan otomatis memilih quality terbaik berdasarkan koneksi internet.",
+        contentCID: "ef2erhbety65714m", // ✅ Livepeer Playback ID (16 char hex)
+        duration: BigInt(58), // Estimated duration in seconds (39.61 MB @ 5.43 mbps ≈ 58s)
+        orderId: BigInt(0),
+        videoMetadata: {
+          thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
+          qualityOptions: [
+            { resolution: "1200p", bitrate: 4405, size: 39.61 }, // Original upload quality
+            { resolution: "800p", bitrate: 2225, size: 16.11 },  // Livepeer transcoded
+            { resolution: "400p", bitrate: 877, size: 6.35 }     // Livepeer transcoded
+          ],
+          subtitleLanguages: [],
+          chapters: [
+            { title: "Full Video", startTime: 0, endTime: 58 }
+          ],
+          estimatedSize: 39.61 // File size in MB (from Livepeer dashboard)
+        }
+      }
+    ],
+    userProgress: [], // No progress yet - fresh for testing
     rating: {
-        totalRatings: BigInt(95),
-        ratingSum: BigInt(446), // (95 * 4.7)
-        averageRating: BigInt(47000), // 4.7000
-        userRatings: new Map([
-            [MOCK_USER_ADDRESS, 5]
-        ])
+        totalRatings: BigInt(0),
+        ratingSum: BigInt(0),
+        averageRating: BigInt(0),
+        userRatings: new Map()
     }
   }
 ];
@@ -398,6 +419,13 @@ export const mockLicenses: License[] = [
     durationLicense: BigInt(1),
     expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) - (10 * 86400)), // Kedaluwarsa 10 hari lalu
     isActive: false // Seharusnya false jika sudah kedaluwarsa
+  },
+  {
+    courseId: BigInt(4),
+    student: MOCK_USER_ADDRESS,
+    durationLicense: BigInt(12), // 1 year license for testing
+    expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + (365 * 86400)), // Active for 1 year
+    isActive: true
   }
 ];
 

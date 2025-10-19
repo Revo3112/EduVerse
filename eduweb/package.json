@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
+    "@livepeer/react": "^4.3.6",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -30,6 +31,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.12",
+    "livepeer": "^3.5.0",
     "localforage": "^1.10.0",
     "lucide-react": "^0.542.0",
     "next": "15.4.1",
@@ -45,6 +47,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "thirdweb": "^5.105.37",
+    "tus-js-client": "^4.3.1",
     "zod": "^3.25.75"
   },
   "devDependencies": {

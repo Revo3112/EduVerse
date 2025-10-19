@@ -155,7 +155,7 @@ export function GetCertificateModal({
       toast.success('Certificate generated! Ready to mint.');
 
       // Proceed to mint (in production, would call smart contract here)
-      await handleMintCertificate(data);
+      await handleMintCertificate();
 
     } catch (error) {
       console.error('[GetCertificateModal] Certificate generation error:', error);
@@ -167,7 +167,7 @@ export function GetCertificateModal({
   };
 
   // Handle blockchain minting
-  const handleMintCertificate = async (_certData: unknown) => {
+  const handleMintCertificate = async () => {
     setIsLoading(true);
 
     try {

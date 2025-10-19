@@ -142,18 +142,6 @@ interface Certificate {
 }
 
 /**
- * License struct from CourseLicense.sol
- * CRITICAL FIX: licenseType → durationLicense (field name was wrong)
- */
-interface License {
-  courseId: bigint
-  student: `0x${string}`        // Address type for web3
-  durationLicense: number       // FIXED: Was "licenseType", correct is "durationLicense" (CourseLicense.sol line 32)
-  expiryTimestamp: bigint
-  isActive: boolean
-}
-
-/**
  * Section progress tracking from ProgressTracker.sol
  * Used for tracking individual section completion
  */
@@ -194,9 +182,13 @@ interface UserProfileData {
   totalSectionsCompleted: number
   totalCoursesCompleted: number
   coursesCreated: ExtendedCourse[]
-  activeLicenses: License[]
+  // ❌ REMOVED: activeLicenses - CourseLicense.sol doesn't provide array getter
+  //    Smart contract only has licenses[courseId][student] mapping
+  //    Need Goldsky indexer to track LicenseMinted events for active licenses list
   certificate: Certificate | null
-  completedCourseIds: bigint[]
+  // ❌ REMOVED: completedCourseIds - This data comes from certificate.completedCourses[]
+  //    CertificateManager.sol stores completedCourses in Certificate struct
+  //    No separate mapping for completed course IDs
   completedSections: SectionProgress[]
   isLoading: boolean
   error: string | null
@@ -210,9 +202,9 @@ const useUserProfile = (address: string): UserProfileData => {
     totalSectionsCompleted: 0,
     totalCoursesCompleted: 0,
     coursesCreated: [],
-    activeLicenses: [],
+    // activeLicenses removed - need Goldsky indexer
     certificate: null,
-    completedCourseIds: [],
+    // completedCourseIds removed - comes from certificate.completedCourses
     completedSections: [],
     isLoading: true,
     error: null,
@@ -306,22 +298,9 @@ const useUserProfile = (address: string): UserProfileData => {
             ]
           }
         ],
-        activeLicenses: [
-          {
-            courseId: BigInt(3),
-            student: address as `0x${string}`,  // Fixed type
-            durationLicense: 30,                // FIXED: Was licenseType, now durationLicense in days
-            expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + 2592000), // 30 days from now
-            isActive: true
-          },
-          {
-            courseId: BigInt(4),
-            student: address as `0x${string}`,  // Fixed type
-            durationLicense: 30,                // FIXED: Was licenseType, now durationLicense in days
-            expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + 1296000), // 15 days from now
-            isActive: true
-          }
-        ],
+        // ❌ activeLicenses removed - CourseLicense.sol doesn't provide getter for array
+        //    Smart contract: licenses[courseId][student] mapping only
+        //    🔧 GOLDSKY REQUIRED: Index LicenseMinted events to get active licenses list
         certificate: {
           tokenId: BigInt(42),
           recipientName: "Web3 Developer",
@@ -337,7 +316,8 @@ const useUserProfile = (address: string): UserProfileData => {
           lifetimeFlag: true,
           baseRoute: "https://eduverse.com/verify"
         },
-        completedCourseIds: [BigInt(1), BigInt(2), BigInt(3), BigInt(4), BigInt(5)],
+        // ❌ completedCourseIds removed - Data comes from certificate.completedCourses[]
+        //    CertificateManager.sol stores this in Certificate struct
         completedSections: [],
         isLoading: false,
         error: null,
@@ -509,9 +489,9 @@ const ProfileHeader = memo<{ profileData: UserProfileData; disconnect?: () => vo
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-              {profileData.activeLicenses.length}
+              {profileData.certificate?.completedCourses?.length ?? 0}
             </div>
-            <div className="text-sm text-muted-foreground">Licenses</div>
+            <div className="text-sm text-muted-foreground">Completed</div>
           </div>
         </div>
       </CardContent>
@@ -522,14 +502,15 @@ ProfileHeader.displayName = 'ProfileHeader'
 
 const LearningTab = memo<{ profileData: UserProfileData }>(({ profileData }) => {
   const learningStats = useMemo(() => {
-    // TODO: Replace with actual course data from blockchain
-    const completedCourses: ExtendedCourse[] = [] // profileData.completedCourseIds.map(id => getCourseFromContract(id)).filter(Boolean)
+    // ✅ SMART CONTRACT ALIGNED: Get completed courses from certificate.completedCourses[]
+    const completedCourses: ExtendedCourse[] = [] // TODO: profileData.certificate?.completedCourses.map(id => getCourseFromContract(id)).filter(Boolean) || []
     return {
       coursesCompleted: profileData.totalCoursesCompleted,
       totalLearningHours: Math.floor(profileData.totalSectionsCompleted * 0.75),
       certificatesEarned: profileData.certificate ? 1 : 0,
       averageRating: 4.6,
-      activeLicenses: profileData.activeLicenses.length,
+      // ❌ REMOVED: activeLicenses - Need Goldsky indexer to track LicenseMinted events
+      // activeLicenses: 0, // CourseLicense.sol doesn't provide array getter
       skillsAcquired: [...new Set(completedCourses.map(course => getCategoryName(course.category)))]
     }
   }, [profileData])
@@ -572,10 +553,9 @@ const LearningTab = memo<{ profileData: UserProfileData }>(({ profileData }) => 
               <span className="text-sm">Learning Hours</span>
               <span className="font-semibold">{learningStats.totalLearningHours}h</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-sm">Active Licenses</span>
-              <span className="font-semibold">{learningStats.activeLicenses}</span>
-            </div>
+            {/* ❌ REMOVED: Active Licenses metric
+                CourseLicense.sol doesn't provide array getter for student's licenses
+                Need Goldsky indexer to track LicenseMinted events */}
           </CardContent>
         </Card>
 
@@ -672,7 +652,7 @@ const LearningTab = memo<{ profileData: UserProfileData }>(({ profileData }) => 
         </Card>
       )}
 
-      {profileData.completedCourseIds.length > 0 && (
+      {(profileData.certificate?.completedCourses?.length ?? 0) > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Completed Courses</CardTitle>
@@ -680,7 +660,8 @@ const LearningTab = memo<{ profileData: UserProfileData }>(({ profileData }) => 
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {profileData.completedCourseIds.map(courseId => {
+              {/* ✅ SMART CONTRACT ALIGNED: Using certificate.completedCourses from CertificateManager.sol */}
+              {(profileData.certificate?.completedCourses || []).map((courseId: bigint) => {
                 // TODO: Replace with actual course data from blockchain
                 // const course = getCourseFromContract(courseId)
 
@@ -836,7 +817,7 @@ const TeachingTab = memo<{ profileData: UserProfileData }>(({ profileData }) => 
                     <div className="mt-1">
                       <div className="flex items-center text-sm text-yellow-600">
                         <Star className="h-3 w-3 mr-1 fill-current" />
-                        {(Number(course.rating.averageRating) / 10000).toFixed(1)}
+                        {(parseFloat(course.rating.averageRating.toString()) / 10000).toFixed(1)}
                       </div>
                     </div>
                   </div>
@@ -870,40 +851,57 @@ TeachingTab.displayName = 'TeachingTab'
 
 const ActivityTab = memo<{ profileData: UserProfileData }>(({ profileData }) => {
   const activities = useMemo(() => {
-    const activityList = []
+    type ActivityItem = {
+      id: string;
+      title: string;
+      description: string;
+      timestamp: number;
+      icon: React.ReactNode;
+    };
+
+    const userActivityList: ActivityItem[] = [];
 
     if (profileData.certificate) {
-      activityList.push({
-        id: `cert-${profileData.certificate.tokenId}`,
-        title: 'Certificate Earned',
-        description: `Earned lifetime certificate #${Number(profileData.certificate.tokenId)}`,
-        timestamp: Number(profileData.certificate.issuedAt) * 1000,
-        icon: <Award className="h-4 w-4 text-yellow-500" />
-      })
+      const certTokenId = profileData.certificate.tokenId.toString();
+      const timestampStr = profileData.certificate.issuedAt.toString();
+      const certIssuedAtMs = parseFloat(timestampStr) * 1000;
 
-      profileData.completedCourseIds.forEach((courseId, index) => {
+      userActivityList.push({
+        id: `cert-${certTokenId}`,
+        title: 'Certificate Earned',
+        description: `Earned lifetime certificate #${certTokenId}`,
+        timestamp: certIssuedAtMs,
+        icon: <Award className="h-4 w-4 text-yellow-500" />
+      });
+
+      // ✅ SMART CONTRACT ALIGNED: Using certificate.completedCourses from CertificateManager.sol
+      (profileData.certificate.completedCourses || []).forEach((courseId: bigint, index: number) => {
         // TODO: Replace with actual course data from blockchain
-        activityList.push({
-          id: `completed-${courseId}`,
-          title: `Completed Course #${courseId}`,
+        const updatedStr = profileData.certificate!.lastUpdated.toString();
+        const lastUpdatedMs = parseFloat(updatedStr) * 1000;
+        userActivityList.push({
+          id: `completed-${courseId.toString()}`,
+          title: `Completed Course #${courseId.toString()}`,
           description: `Finished all sections and updated certificate`,
-          timestamp: Number(profileData.certificate!.lastUpdated) * 1000 - (index * 86400000),
+          timestamp: lastUpdatedMs - (index * 86400000),
           icon: <CheckCircle className="h-4 w-4 text-green-500" />
-        })
-      })
+        });
+      });
     }
 
     profileData.coursesCreated.forEach((course) => {
-      activityList.push({
-        id: `created-${course.id}`,
+      const createdStr = course.createdAt.toString();
+      const courseCreatedAtMs = parseFloat(createdStr) * 1000;
+      userActivityList.push({
+        id: `created-${course.id.toString()}`,
         title: `Created "${course.title}"`,
         description: `Published new ${getCategoryName(course.category)} course`,
-        timestamp: Number(course.createdAt) * 1000,
+        timestamp: courseCreatedAtMs,
         icon: <GraduationCap className="h-4 w-4 text-blue-500" />
-      })
-    })
+      });
+    });
 
-    return activityList.sort((a, b) => b.timestamp - a.timestamp).slice(0, 8)
+    return userActivityList.sort((a, b) => b.timestamp - a.timestamp).slice(0, 8)
   }, [profileData])
 
   const formatDate = useCallback((timestamp: number) => {
@@ -973,10 +971,9 @@ const ActivityTab = memo<{ profileData: UserProfileData }>(({ profileData }) => 
             <span className="text-sm">Courses Created</span>
             <Badge variant="secondary">{profileData.coursesCreated.length}</Badge>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm">Active Licenses</span>
-            <Badge variant="secondary">{profileData.activeLicenses.length}</Badge>
-          </div>
+          {/* ❌ REMOVED: Active Licenses
+              CourseLicense.sol doesn't provide array getter
+              Need Goldsky indexer to track LicenseMinted events */}
           <div className="flex justify-between items-center">
             <span className="text-sm">Certificate Status</span>
             <Badge variant={profileData.certificate ? "default" : "secondary"}>
@@ -1091,32 +1088,16 @@ const IdentityTab = memo<{ profileData: UserProfileData }>(({ profileData }) => 
 
           <Separator />
 
-          {profileData.activeLicenses.length > 0 && (
-            <div>
-              <h4 className="font-medium mb-3">Active Course Licenses</h4>
-              <div className="space-y-2">
-                {profileData.activeLicenses.map((license) => {
-                  // TODO: Replace with actual course data from blockchain
-                  const courseTitle = `Course #${license.courseId.toString()}`
-                  const daysLeft = Math.ceil((Number(license.expiryTimestamp) * 1000 - Date.now()) / (1000 * 60 * 60 * 24))
+          {/* ❌ REMOVED: Active Course Licenses Section
+              CourseLicense.sol doesn't have array getter for student's licenses
+              Smart contract only has licenses[courseId][student] mapping
+              🔧 GOLDSKY REQUIRED: Index LicenseMinted events to track active licenses
 
-                  return (
-                    <div key={license.courseId.toString()} className="flex justify-between items-center p-3 rounded-lg bg-muted/50">
-                      <div>
-                        <div className="font-medium text-sm">{courseTitle}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {daysLeft > 0 ? `${daysLeft} days left` : 'Expired'}
-                        </div>
-                      </div>
-                      <Badge variant={daysLeft > 7 ? "default" : daysLeft > 0 ? "secondary" : "destructive"}>
-                        {daysLeft > 0 ? "Active" : "Expired"}
-                      </Badge>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+              To implement with Goldsky:
+              1. Index LicenseMinted(courseId, student, tokenId, durationMonths, expiryTimestamp)
+              2. Index LicenseExpired(courseId, student, tokenId, expiredAt)
+              3. Query active licenses: WHERE student = address AND expiryTimestamp > now
+          */}
 
           <Separator />
 
@@ -1131,8 +1112,8 @@ const IdentityTab = memo<{ profileData: UserProfileData }>(({ profileData }) => 
 
               <div className="text-center p-4 rounded-lg bg-purple-50 dark:bg-purple-950/20">
                 <BookOpen className="h-8 w-8 text-purple-500 mx-auto mb-2" />
-                <div className="text-lg font-bold">{profileData.activeLicenses.length}</div>
-                <div className="text-sm text-muted-foreground">Active Licenses</div>
+                <div className="text-lg font-bold">{profileData.certificate?.completedCourses?.length ?? 0}</div>
+                <div className="text-sm text-muted-foreground">Completed Courses</div>
               </div>
             </div>
           </div>

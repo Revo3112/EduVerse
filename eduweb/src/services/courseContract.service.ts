@@ -28,18 +28,48 @@ import { prepareContractCall, readContract, type PreparedTransaction } from "thi
 // TYPES
 // ============================================================================
 
+// Enum mappings matching CourseFactory.sol
+export enum CourseCategory {
+  Programming = 0,
+  Design = 1,
+  Business = 2,
+  Marketing = 3,
+  DataScience = 4,
+  Finance = 5,
+  Healthcare = 6,
+  Language = 7,
+  Arts = 8,
+  Mathematics = 9,
+  Science = 10,
+  Engineering = 11,
+  Technology = 12,
+  Education = 13,
+  Psychology = 14,
+  Culinary = 15,
+  PersonalDevelopment = 16,
+  Legal = 17,
+  Sports = 18,
+  Other = 19,
+}
+
+export enum CourseDifficulty {
+  Beginner = 0,
+  Intermediate = 1,
+  Advanced = 2,
+}
+
 export interface CourseMetadata {
   title: string;
   description: string;
   thumbnailCID: string; // Plain CID without ipfs:// prefix
   creatorName: string;
-  category: string;
-  difficulty: string;
+  category: string; // String from frontend, will be converted to enum
+  difficulty: string; // String from frontend, will be converted to enum
 }
 
 export interface SectionData {
   title: string;
-  description: string;
+  description: string; // Frontend only, not sent to smart contract
   contentCID: string; // Video CID from Pinata
   duration: number; // Duration in seconds (60-10800)
 }
@@ -50,11 +80,27 @@ export interface CreateCourseParams {
   pricePerMonth: string; // Price in ETH (e.g., "0.01")
 }
 
+export interface BatchAddSectionsParams {
+  courseId: bigint;
+  sections: SectionData[];
+}
+
 export interface AddSectionParams {
   courseId: bigint;
   title: string;
   contentCID: string;
   duration: number;
+}
+
+export interface UpdateCourseParams {
+  courseId: bigint;
+  metadata: CourseMetadata;
+  pricePerMonth: string; // Price in ETH (e.g., "0.01")
+  isActive: boolean;
+}
+
+export interface DeleteCourseParams {
+  courseId: bigint;
 }
 
 export interface Course {
@@ -81,6 +127,57 @@ export interface Section {
 // ============================================================================
 // VALIDATION HELPERS
 // ============================================================================
+
+/**
+ * Convert category string to enum number
+ */
+export function categoryToEnum(category: string): number {
+  const mapping: Record<string, number> = {
+    Programming: CourseCategory.Programming,
+    Design: CourseCategory.Design,
+    Business: CourseCategory.Business,
+    Marketing: CourseCategory.Marketing,
+    DataScience: CourseCategory.DataScience,
+    Finance: CourseCategory.Finance,
+    Healthcare: CourseCategory.Healthcare,
+    Language: CourseCategory.Language,
+    Arts: CourseCategory.Arts,
+    Mathematics: CourseCategory.Mathematics,
+    Science: CourseCategory.Science,
+    Engineering: CourseCategory.Engineering,
+    Technology: CourseCategory.Technology,
+    Education: CourseCategory.Education,
+    Psychology: CourseCategory.Psychology,
+    Culinary: CourseCategory.Culinary,
+    PersonalDevelopment: CourseCategory.PersonalDevelopment,
+    Legal: CourseCategory.Legal,
+    Sports: CourseCategory.Sports,
+    Other: CourseCategory.Other,
+  };
+
+  if (!(category in mapping)) {
+    throw new Error(`Invalid category: ${category}`);
+  }
+
+  return mapping[category];
+}
+
+/**
+ * Convert difficulty string to enum number
+ */
+export function difficultyToEnum(difficulty: string): number {
+  const mapping: Record<string, number> = {
+    Beginner: CourseDifficulty.Beginner,
+    Intermediate: CourseDifficulty.Intermediate,
+    Advanced: CourseDifficulty.Advanced,
+  };
+
+  if (!(difficulty in mapping)) {
+    throw new Error(`Invalid difficulty: ${difficulty}`);
+  }
+
+  return mapping[difficulty];
+}
 
 /**
  * Validate section duration meets smart contract requirements
@@ -193,24 +290,111 @@ export function prepareCreateCourseTransaction(
   // Convert price to wei
   const priceInWei = ethToWei(params.pricePerMonth);
 
+  // Convert category and difficulty strings to enum numbers
+  const categoryEnum = categoryToEnum(params.metadata.category);
+  const difficultyEnum = difficultyToEnum(params.metadata.difficulty);
+
   // Prepare transaction
   const transaction = prepareContractCall({
     contract: courseFactory,
-    method: "function createCourse(string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, string category, string difficulty) returns (uint256)",
+    method: "function createCourse(string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, uint8 category, uint8 difficulty) returns (uint256)",
     params: [
       params.metadata.title,
       params.metadata.description,
       params.metadata.thumbnailCID,
       params.metadata.creatorName,
       priceInWei,
-      params.metadata.category,
-      params.metadata.difficulty,
+      categoryEnum,
+      difficultyEnum,
     ],
   });
 
   console.log('[Contract Service] ✅ Transaction prepared successfully');
+  console.log('[Contract Service] Category:', params.metadata.category, '→', categoryEnum);
+  console.log('[Contract Service] Difficulty:', params.metadata.difficulty, '→', difficultyEnum);
   return transaction;
 }
+
+/**
+ * Prepare transaction to batch add sections to a course
+ * Handles up to 50 sections per transaction (smart contract limit)
+ *
+ * For 100 sections, call this function twice:
+ * - First batch: sections 0-49
+ * - Second batch: sections 50-99
+ *
+ * @param params - Batch section parameters
+ * @returns Prepared transaction or throws error if validation fails
+ *
+ * @example
+ * ```tsx
+ * const { mutate: sendTx } = useSendTransaction();
+ *
+ * // For 100 sections, split into 2 batches
+ * const batch1 = sections.slice(0, 50);
+ * const batch2 = sections.slice(50, 100);
+ *
+ * // Send first batch
+ * const tx1 = prepareBatchAddSectionsTransaction({ courseId: 1n, sections: batch1 });
+ * sendTx(tx1, {
+ *   onSuccess: () => {
+ *     // Send second batch
+ *     const tx2 = prepareBatchAddSectionsTransaction({ courseId: 1n, sections: batch2 });
+ *     sendTx(tx2);
+ *   }
+ * });
+ * ```
+ */
+export function prepareBatchAddSectionsTransaction(
+  params: BatchAddSectionsParams
+): PreparedTransaction {
+  console.log('[Contract Service] ========================================');
+  console.log('[Contract Service] Preparing batch add sections transaction...');
+  console.log('[Contract Service] Course ID:', params.courseId);
+  console.log('[Contract Service] Sections:', params.sections.length);
+
+  // Validate batch size (max 50 per transaction)
+  if (params.sections.length === 0) {
+    throw new Error('At least one section is required');
+  }
+
+  if (params.sections.length > 50) {
+    throw new Error(`Batch limit exceeded: ${params.sections.length} sections (max 50 per transaction). Split into multiple batches.`);
+  }
+
+  // Validate sections
+  const validation = validateSections(params.sections);
+  if (!validation.valid) {
+    throw new Error(`Validation failed: ${validation.error}`);
+  }
+
+  // Convert SectionData[] to smart contract format (remove description field)
+  const sectionsForBlockchain = params.sections.map(section => [
+    section.title,
+    section.contentCID,
+    BigInt(section.duration),
+  ]);
+
+  // Prepare transaction
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method: "function batchAddSections(uint256 courseId, tuple(string,string,uint256)[] sectionsData) returns (bool)",
+    params: [
+      params.courseId,
+      sectionsForBlockchain,
+    ],
+  });
+
+  console.log('[Contract Service] ✅ Batch transaction prepared successfully');
+  console.log('[Contract Service] Sections to add:', params.sections.length);
+  return transaction;
+}
+
+/**
+ * Prepare transaction to add a section to an existing course
+ * Returns a PreparedTransaction for execution with useSendTransaction() hook
+ *
+```
 
 /**
  * Prepare transaction to add a section to an existing course
@@ -268,6 +452,114 @@ export function prepareAddSectionTransaction(
   });
 
   console.log('[Contract Service] ✅ Transaction prepared successfully');
+  return transaction;
+}
+
+/**
+ * Prepare a transaction to update an existing course
+ *
+ * @param params - Update course parameters including courseId, metadata, price, and isActive status
+ * @returns Prepared transaction for use with useSendTransaction
+ *
+ * @example
+ * ```tsx
+ * const transaction = prepareUpdateCourseTransaction({
+ *   courseId: 1n,
+ *   metadata: {
+ *     title: "Updated Course Title",
+ *     description: "Updated description",
+ *     thumbnailCID: "QmXXX...",
+ *     creatorName: "Instructor Name",
+ *     category: "Programming",
+ *     difficulty: "Intermediate"
+ *   },
+ *   pricePerMonth: "0.02",
+ *   isActive: true
+ * });
+ * sendTx(transaction);
+ * ```
+ */
+export function prepareUpdateCourseTransaction(
+  params: UpdateCourseParams
+): PreparedTransaction {
+  console.log('[Contract Service] ========================================');
+  console.log('[Contract Service] Preparing update course transaction...');
+  console.log('[Contract Service] Course ID:', params.courseId);
+  console.log('[Contract Service] Title:', params.metadata.title);
+  console.log('[Contract Service] Price:', params.pricePerMonth, 'ETH');
+  console.log('[Contract Service] Is Active:', params.isActive);
+
+  // Convert category and difficulty to enums
+  const categoryEnum = categoryToEnum(params.metadata.category);
+  const difficultyEnum = difficultyToEnum(params.metadata.difficulty);
+
+  console.log('[Contract Service] Category:', params.metadata.category, '→', categoryEnum);
+  console.log('[Contract Service] Difficulty:', params.metadata.difficulty, '→', difficultyEnum);
+
+  // Convert ETH to wei
+  const priceInWei = ethToWei(params.pricePerMonth);
+  console.log('[Contract Service] Price in wei:', priceInWei.toString());
+
+  // Validate price
+  const MAX_PRICE_WEI = BigInt("1000000000000000000"); // 1 ETH
+  if (priceInWei === BigInt(0)) {
+    throw new Error('Price cannot be zero');
+  }
+  if (priceInWei > MAX_PRICE_WEI) {
+    throw new Error(`Price exceeds maximum of 1 ETH (provided: ${params.pricePerMonth} ETH)`);
+  }
+
+  // Prepare transaction
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method: "function updateCourse(uint256 courseId, string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, bool isActive, uint8 category, uint8 difficulty)",
+    params: [
+      params.courseId,
+      params.metadata.title,
+      params.metadata.description,
+      params.metadata.thumbnailCID,
+      params.metadata.creatorName,
+      priceInWei,
+      params.isActive,
+      categoryEnum,
+      difficultyEnum,
+    ],
+  });
+
+  console.log('[Contract Service] ✅ Update transaction prepared successfully');
+  return transaction;
+}
+
+/**
+ * Prepare a transaction to delete a course (soft delete - marks as inactive)
+ *
+ * @param params - Delete course parameters (courseId)
+ * @returns Prepared transaction for use with useSendTransaction
+ *
+ * @example
+ * ```tsx
+ * const transaction = prepareDeleteCourseTransaction({
+ *   courseId: 1n
+ * });
+ * sendTx(transaction);
+ * ```
+ */
+export function prepareDeleteCourseTransaction(
+  params: DeleteCourseParams
+): PreparedTransaction {
+  console.log('[Contract Service] ========================================');
+  console.log('[Contract Service] Preparing delete course transaction...');
+  console.log('[Contract Service] Course ID:', params.courseId);
+  console.log('[Contract Service] NOTE: This is a soft delete (marks as inactive)');
+
+  // Prepare transaction
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method: "function deleteCourse(uint256 courseId)",
+    params: [params.courseId],
+  });
+
+  console.log('[Contract Service] ✅ Delete transaction prepared successfully');
   return transaction;
 }
 

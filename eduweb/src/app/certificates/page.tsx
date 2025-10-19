@@ -9,24 +9,54 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Award, BookOpen, Calendar, CheckCircle, Clock, QrCode, Shield, Trophy } from 'lucide-react'
 import React, { useCallback, useState } from 'react'
 
-// ==================== EXACT SMART CONTRACT TYPES ====================
-// Must match CertificateManager.sol structs exactly for Goldsky indexer
+// ==================== IMPORT SMART CONTRACT TYPES ====================
+// Import from mock-data.ts which matches smart contracts exactly (uses bigint)
+import {
+  Certificate as BlockchainCertificate,
+  CourseCategory,
+  CourseDifficulty,
+  getCategoryName,
+  getDifficultyName
+} from '@/lib/mock-data'
 
-enum CourseCategory {
-  Programming = 0, Design = 1, Business = 2, Marketing = 3, DataScience = 4,
-  Finance = 5, Healthcare = 6, Language = 7, Arts = 8, Mathematics = 9,
-  Science = 10, Engineering = 11, Technology = 12, Education = 13, Psychology = 14,
-  Culinary = 15, PersonalDevelopment = 16, Legal = 17, Sports = 18, Other = 19
-}
+/**
+ * ==================== BLOCKCHAIN INTEGRATION GUIDE ====================
+ *
+ * This page is READY for blockchain integration with certificate-blockchain.service.ts
+ *
+ * CURRENT STATE:
+ * ✅ Types imported from mock-data.ts (matches smart contracts with bigint)
+ * ✅ Conversion helpers ready (convertBlockchainCertificate)
+ * ✅ UI components support both mock and real data
+ * ⏳ Using mock data until blockchain/Goldsky integration
+ *
+ * INTEGRATION STEPS:
+ * 1. Import service: import { getUserCertificateId, getCertificateDetails } from '@/services/certificate-blockchain.service'
+ * 2. Add wallet hook: const account = useActiveAccount()
+ * 3. Load certificate: const cert = await getCertificateDetails(tokenId)
+ * 4. Convert to UI: const uiCert = convertBlockchainCertificate(cert, enrichedCourses)
+ * 5. Render: <CertificateCard certificate={uiCert} />
+ *
+ * REQUIRES GOLDSKY FOR:
+ * - Enriched course data (titles, thumbnails, creator info)
+ * - initialMintPrice from first payment event
+ * - completedCourses array with full course details
+ *
+ * WITHOUT GOLDSKY (Basic Integration):
+ * - Can show certificate with course IDs only
+ * - Must manually fetch course details for each ID
+ * - Limited UX but functional
+ *
+ * =======================================================================
+ */
 
-enum CourseDifficulty {
-  Beginner = 0, Intermediate = 1, Advanced = 2
-}
+// ==================== UI TYPES ====================
+// For display purposes, we convert bigint to number/string for UI rendering
 
 /**
  * @interface Certificate
- * @description ONE CERTIFICATE PER USER model - Matches CertificateManager.sol Certificate struct
- * @goldsky Query CertificateMinted event WHERE owner == userAddress to get tokenId
+ * @description UI-friendly certificate type with bigint converted to number for display
+ * @note For blockchain integration, use BlockchainCertificate type from service
  */
 interface Certificate {
   tokenId: number
@@ -48,6 +78,7 @@ interface Certificate {
 /**
  * @interface CourseInCertificate
  * @description Enriched course data from CourseFactory + ProgressTracker + CertificateManager events
+ * @note This requires Goldsky indexer to combine data from multiple contracts
  */
 interface CourseInCertificate {
   courseId: number
@@ -66,9 +97,6 @@ interface CourseInCertificate {
   pricePaid: number
   isFirstCourse: boolean
 }
-
-const getCategoryName = (category: CourseCategory): string => CourseCategory[category]
-const getDifficultyName = (difficulty: CourseDifficulty): string => CourseDifficulty[difficulty]
 
 const getCategoryColor = (categoryName: string): string => {
   const colors: Record<string, string> = {
@@ -97,6 +125,58 @@ const getCategoryColor = (categoryName: string): string => {
 
 const formatMantaPrice = (wei: number): string => (wei / 1e18).toFixed(4) + ' MANTA'
 const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+
+// ==================== BLOCKCHAIN CONVERSION HELPERS ====================
+/**
+ * Helper functions to convert blockchain BigInt data to UI-friendly types
+ * Use these when integrating with certificate-blockchain.service.ts
+ */
+
+/**
+ * Convert blockchain certificate (bigint) to UI certificate (number)
+ * @param blockchainCert Certificate from smart contract with bigint types
+ * @param enrichedCourses Enriched course data from Goldsky (optional)
+ * @returns UI-friendly certificate with number types
+ */
+const convertBlockchainCertificate = (
+  blockchainCert: BlockchainCertificate,
+  enrichedCourses?: CourseInCertificate[]
+): Certificate => ({
+  tokenId: Number(blockchainCert.tokenId),
+  platformName: blockchainCert.platformName,
+  recipientName: blockchainCert.recipientName,
+  recipientAddress: blockchainCert.recipientAddress,
+  lifetimeFlag: blockchainCert.lifetimeFlag,
+  isValid: blockchainCert.isValid,
+  ipfsCID: blockchainCert.ipfsCID,
+  baseRoute: blockchainCert.baseRoute,
+  issuedAt: Number(blockchainCert.issuedAt) * 1000, // Convert to milliseconds
+  lastUpdated: Number(blockchainCert.lastUpdated) * 1000,
+  totalCoursesCompleted: Number(blockchainCert.totalCoursesCompleted),
+  paymentReceiptHash: blockchainCert.paymentReceiptHash,
+  completedCourses: enrichedCourses || [], // Requires Goldsky to enrich
+  initialMintPrice: 0 // TODO: Get from first payment event via Goldsky
+});
+
+/**
+ * Format BigInt wei amount to MANTA display string
+ * @param wei Amount in wei (bigint)
+ * @returns Formatted string like "0.0010 MANTA"
+ */
+const formatMantaPriceFromBigInt = (wei: bigint): string => {
+  const eth = Number(wei) / 1e18;
+  return eth.toFixed(4) + ' MANTA';
+};
+
+/**
+ * Format BigInt timestamp to human-readable date
+ * @param timestamp Unix timestamp in seconds (bigint)
+ * @returns Formatted date string
+ */
+const formatDateFromBigInt = (timestamp: bigint): string => {
+  const date = new Date(Number(timestamp) * 1000);
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+};
 
 // ==================== MOCK DATA ====================
 const mockCertificate: Certificate = {
