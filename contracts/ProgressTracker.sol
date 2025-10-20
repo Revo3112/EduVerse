@@ -52,7 +52,7 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
     /// @dev Emitted when student starts a section
     event SectionStarted(address indexed student, uint256 indexed courseId, uint256 indexed sectionId, uint256 startedAt);
     /// @dev Emitted when student completes a section
-    event SectionCompleted(address indexed student, uint256 indexed courseId, uint256 indexed sectionId);
+    event SectionCompleted(address indexed student, uint256 indexed courseId, uint256 indexed sectionId, uint256 completedAt);
     /// @dev Emitted when student completes entire course
     event CourseCompleted(address indexed student, uint256 indexed courseId);
     /// @dev Emitted when admin resets student progress
@@ -151,8 +151,8 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
             emit CourseCompleted(msg.sender, courseId);
         }
 
-        // Emit event following OpenZeppelin conventions
-        emit SectionCompleted(msg.sender, courseId, sectionId);
+        // Emit event following OpenZeppelin conventions with completion timestamp
+        emit SectionCompleted(msg.sender, courseId, sectionId, block.timestamp);
     }
 
     /**

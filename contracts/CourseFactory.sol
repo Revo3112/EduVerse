@@ -236,6 +236,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     error NoRatingToDelete();
     error NoLicenseOrCompletion(); // New: User must have license or completed course to rate
     error NoLicenseOwnership(); // CRITICAL FIX: User must have ever purchased license to rate
+    error UnauthorizedCaller(address caller, address expected); // ✅ For recordCoursePurchase access control
 
     // Events
     event CourseCreated(
@@ -390,7 +391,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param _courseLicense Address of CourseLicense contract
      */
     function setCourseLicense(address _courseLicense) external onlyOwner {
-        require(_courseLicense != address(0), "Invalid address");
+        if (_courseLicense == address(0)) revert InvalidAddress(_courseLicense);
         courseLicense = ICourseLicense(_courseLicense);
     }
 
@@ -399,7 +400,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param _progressTracker Address of ProgressTracker contract
      */
     function setProgressTracker(address _progressTracker) external onlyOwner {
-        require(_progressTracker != address(0), "Invalid address");
+        if (_progressTracker == address(0)) revert InvalidAddress(_progressTracker);
         progressTracker = IProgressTracker(_progressTracker);
     }
 
@@ -1364,7 +1365,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @notice Only CourseLicense contract can call this
      */
     function recordCoursePurchase(address student, uint256 courseId) external {
-        require(msg.sender == address(courseLicense), "Only CourseLicense can record purchases");
+        if (msg.sender != address(courseLicense)) {
+            revert UnauthorizedCaller(msg.sender, address(courseLicense));
+        }
 
         if (!hasStudentPurchased[student][courseId]) {
             studentPurchasedCourses[student].push(courseId);

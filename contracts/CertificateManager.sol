@@ -88,6 +88,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     mapping(uint256 => string) private _tokenURIs;               // Custom token URIs
     mapping(uint256 => mapping(uint256 => bool)) public certificateCourseExists; // tokenId => courseId => exists
     mapping(uint256 => uint256) public courseCertificatePrices;  // courseId => certificate price set by creator
+    mapping(uint256 => mapping(uint256 => uint256)) public certificateCourseCompletionDate; // ✅ tokenId => courseId => completion timestamp
 
     // ==================== EVENTS ====================
     event CertificateMinted(
@@ -339,6 +340,15 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
 
         // Track course existence
         certificateCourseExists[tokenId][courseId] = true;
+
+        // ✅ Store completion timestamp for certificate timeline display
+        CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
+        if (sections.length > 0) {
+            uint256 lastSectionId = sections.length - 1;
+            ProgressTracker.SectionProgress memory lastSection =
+                progressTracker.getSectionProgress(msg.sender, courseId, lastSectionId);
+            certificateCourseCompletionDate[tokenId][courseId] = lastSection.completedAt;
+        }
 
         // Process payment with 2% platform fee for course additions (98% creator + 2% platform)
         // Note: First certificate uses 10% fee, subsequent additions use 2% fee
@@ -693,6 +703,21 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
             return creatorPrice;
         }
         return defaultCertificateFee;
+    }
+
+    /**
+     * @dev Gets completion date for a specific course in certificate
+     * @param tokenId Certificate token ID
+     * @param courseId Course ID
+     * @return timestamp Completion timestamp (0 if not found)
+     * @custom:goldsky Enables timeline display: "Blockchain Dev completed on Jan 15, 2024"
+     */
+    function getCourseCompletionDate(uint256 tokenId, uint256 courseId)
+        external
+        view
+        returns (uint256 timestamp)
+    {
+        return certificateCourseCompletionDate[tokenId][courseId];
     }
 
     /**
