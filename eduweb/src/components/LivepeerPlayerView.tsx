@@ -68,6 +68,8 @@ export function LivepeerPlayerView({
   const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [hoverTime, setHoverTime] = useState<number | null>(null); // For progress bar hover tooltip
+  const [showHoverTooltip, setShowHoverTooltip] = useState(false);
 
   // Quality selector state
   const [availableQualities, setAvailableQualities] = useState<VideoQuality[]>([]);
@@ -236,15 +238,14 @@ export function LivepeerPlayerView({
     };
   }, [onProgressUpdate]);
 
-
-  // Format time as MM:SS
+  // Format time as MM:SS for display
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Progress bar percentage
+  // Progress bar percentage for custom displays
   const progressPercent = duration ? (time / duration) * 100 : 0;
 
   // Seek to specific time
@@ -268,7 +269,8 @@ export function LivepeerPlayerView({
     // Manual quality switching would require using their primitives
   };
 
-  // Toggle play/pause
+  // Toggle play/pause - Available for custom controls
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const togglePlay = () => {
     if (playerRef.current) {
       if (playing) {
@@ -279,21 +281,24 @@ export function LivepeerPlayerView({
     }
   };
 
-  // Toggle mute
+  // Toggle mute - Available for custom controls
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const toggleMute = () => {
     if (playerRef.current) {
       playerRef.current.muted = !playerRef.current.muted;
     }
   };
 
-  // Set volume
+  // Set volume - Available for custom controls
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleVolumeChange = (newVolume: number) => {
     if (playerRef.current) {
       playerRef.current.volume = newVolume;
     }
   };
 
-  // Toggle fullscreen
+  // Toggle fullscreen - Available for custom controls
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const toggleFullscreen = async () => {
     if (!wrapRef.current) return;
 
@@ -429,6 +434,32 @@ export function LivepeerPlayerView({
               </div>
             )}
 
+            {/* Video Info Overlay - Shows playback info and stats */}
+            {showControls && playbackInfo && (
+              <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-xs space-y-1 z-10">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">Progress:</span>
+                  <span className="font-mono">{Math.round(progressPercent)}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">Time:</span>
+                  <span className="font-mono">{formatTime(time)} / {formatTime(duration)}</span>
+                </div>
+                {!muted && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">Volume:</span>
+                    <span className="font-mono">{Math.round(volume * 100)}%</span>
+                  </div>
+                )}
+                {muted && (
+                  <div className="flex items-center gap-2 text-yellow-400">
+                    <VolumeX className="h-3 w-3" />
+                    <span>Muted</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Center Play/Pause Button - Using Livepeer Primitives */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <Player.PlayPauseTrigger
@@ -448,13 +479,42 @@ export function LivepeerPlayerView({
             {showControls && (
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/70 to-transparent p-4 z-20">
                 {/* Progress Bar - Using Livepeer Seek Primitive */}
-                <Player.Seek className="relative group flex cursor-pointer items-center select-none touch-none w-full h-6 mb-4">
-                  <Player.Track className="bg-white/30 relative grow rounded-full h-2 group-hover:h-3 transition-all">
-                    <Player.SeekBuffer className="absolute bg-white/20 transition duration-1000 rounded-full h-full" />
-                    <Player.Range className="absolute bg-red-500 rounded-full h-full" />
-                  </Player.Track>
-                  <Player.Thumb className="block w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow-lg group-hover:scale-110 transition-transform" />
-                </Player.Seek>
+                <div className="relative w-full mb-4">
+                  <Player.Seek
+                    className="relative group flex cursor-pointer items-center select-none touch-none w-full h-6"
+                    onMouseMove={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const x = e.clientX - rect.left;
+                      const percentage = x / rect.width;
+                      const targetTime = percentage * duration;
+                      setHoverTime(targetTime);
+                      setShowHoverTooltip(true);
+                    }}
+                    onMouseLeave={() => {
+                      setShowHoverTooltip(false);
+                      setHoverTime(null);
+                    }}
+                  >
+                    <Player.Track className="bg-white/30 relative grow rounded-full h-2 group-hover:h-3 transition-all">
+                      <Player.SeekBuffer className="absolute bg-white/20 transition duration-1000 rounded-full h-full" />
+                      <Player.Range className="absolute bg-red-500 rounded-full h-full" />
+                    </Player.Track>
+                    <Player.Thumb className="block w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow-lg group-hover:scale-110 transition-transform" />
+                  </Player.Seek>
+
+                  {/* Hover Time Tooltip */}
+                  {showHoverTooltip && hoverTime !== null && (
+                    <div
+                      className="absolute -top-8 bg-black/90 text-white text-xs px-2 py-1 rounded pointer-events-none"
+                      style={{
+                        left: `${(hoverTime / duration) * 100}%`,
+                        transform: 'translateX(-50%)'
+                      }}
+                    >
+                      {formatTime(hoverTime)}
+                    </div>
+                  )}
+                </div>
 
                 {/* Control Buttons */}
                 <div className="flex items-center justify-between text-white">

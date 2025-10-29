@@ -7,7 +7,13 @@
     "dev:standard": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "goldsky:sync-abis": "cp abis/*.json goldsky-indexer/configs/abis/",
+    "goldsky:deploy": "cd goldsky-indexer/configs && goldsky subgraph deploy eduverse-platform/v1.0.0 --from-abi instant-subgraph-config.json",
+    "goldsky:status": "goldsky subgraph status eduverse-platform/v1.0.0",
+    "goldsky:logs": "goldsky subgraph logs eduverse-platform/v1.0.0",
+    "goldsky:tag:prod": "goldsky subgraph tag create eduverse-platform/v1.0.0 --tag prod",
+    "goldsky:tag:staging": "goldsky subgraph tag create eduverse-platform/v1.0.0 --tag staging"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",
@@ -31,6 +37,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.12",
+    "graphql": "^16.11.0",
+    "graphql-request": "^7.3.1",
     "livepeer": "^3.5.0",
     "localforage": "^1.10.0",
     "lucide-react": "^0.542.0",
@@ -42,6 +50,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.62.0",
+    "react-hot-toast": "^2.6.0",
     "react-player": "^3.3.2",
     "sharp": "^0.34.4",
     "sonner": "^2.0.7",

@@ -59,6 +59,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     uint256 public defaultCourseAdditionFee = 0.0001 ether; // Default fee for adding courses to existing certificate
     address public platformWallet;
     string public defaultPlatformName;                // Configurable platform name
+    string public defaultBaseRoute;                   // ✅ NEW: Global default base route (updatable by admin)
 
     // ==================== STRUCTS ====================
     /**
@@ -125,6 +126,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
 
     event CertificateRevoked(uint256 indexed tokenId, string reason);
     event BaseRouteUpdated(uint256 indexed tokenId, string newBaseRoute);
+    event DefaultBaseRouteUpdated(string newBaseRoute);  // ✅ NEW: Event for global base route update
     event PlatformNameUpdated(string newPlatformName);
     event CourseAdditionFeeUpdated(uint256 newFee);
     event CourseCertificatePriceSet(uint256 indexed courseId, uint256 price, address indexed creator);
@@ -135,9 +137,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         address _progressTracker,
         address _courseLicense,
         address _platformWallet,
-        string memory _initialURI,
+        string memory _initialBaseRoute,  // ✅ CHANGED: Now accepts base route instead of full URI
         string memory _platformName
-    ) ERC1155(_initialURI) Ownable(msg.sender) {
+    ) ERC1155("") Ownable(msg.sender) {  // ✅ CHANGED: Empty URI, will use uri() function override
         if (_courseFactory == address(0)) revert InvalidAddress(_courseFactory);
         if (_progressTracker == address(0)) revert InvalidAddress(_progressTracker);
         if (_courseLicense == address(0)) revert InvalidAddress(_courseLicense);
@@ -148,6 +150,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         courseLicense = CourseLicense(_courseLicense);
         platformWallet = _platformWallet;
         defaultPlatformName = _platformName;
+        defaultBaseRoute = _initialBaseRoute;  // ✅ NEW: Set default base route
     }
 
     // ==================== MODIFIERS ====================
@@ -754,6 +757,50 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         certificates[tokenId].baseRoute = newBaseRoute;
         certificates[tokenId].lastUpdated = block.timestamp;
         emit BaseRouteUpdated(tokenId, newBaseRoute);
+    }
+
+    /**
+     * @dev Updates default base route globally (admin only)
+     * @notice ✅ NEW: Updates the default base route for ALL future certificates
+     * @notice Does NOT update existing certificates - use updateBaseRoute for that
+     * @param newBaseRoute New default base route (e.g., "https://eduverse.academy/verify")
+     */
+    function updateDefaultBaseRoute(
+        string calldata newBaseRoute
+    )
+        external
+        onlyOwner
+        validStringLength(newBaseRoute, 200, "baseRoute")
+    {
+        defaultBaseRoute = newBaseRoute;
+        emit DefaultBaseRouteUpdated(newBaseRoute);
+    }
+
+    /**
+     * @dev Batch updates base route for multiple certificates (admin only)
+     * @notice ✅ NEW: Gas-efficient way to update many certificates when domain changes
+     * @param tokenIds Array of certificate token IDs
+     * @param newBaseRoute New base route to apply to all
+     */
+    function batchUpdateBaseRoute(
+        uint256[] calldata tokenIds,
+        string calldata newBaseRoute
+    )
+        external
+        onlyOwner
+        validStringLength(newBaseRoute, 200, "baseRoute")
+    {
+        if (tokenIds.length == 0) revert EmptyCoursesArray();
+
+        for (uint256 i = 0; i < tokenIds.length; ) {
+            uint256 tokenId = tokenIds[i];
+            if (_exists(tokenId)) {
+                certificates[tokenId].baseRoute = newBaseRoute;
+                certificates[tokenId].lastUpdated = block.timestamp;
+                emit BaseRouteUpdated(tokenId, newBaseRoute);
+            }
+            unchecked { ++i; }
+        }
     }
 
     /**

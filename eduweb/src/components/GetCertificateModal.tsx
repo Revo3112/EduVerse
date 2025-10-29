@@ -100,9 +100,10 @@ export function GetCertificateModal({
 
         // Blockchain fields (for proper metadata generation)
         recipientAddress: address,                    // ✅ User's wallet address for QR code
-        platformName: 'EduVerse Academy',            // ✅ Platform name for certificate
+        // ✅ DYNAMIC: Read from environment variable (matches deployment script)
+        platformName: process.env.NEXT_PUBLIC_PLATFORM_NAME || 'EduVerse Academy',
         baseRoute: typeof window !== 'undefined'
-          ? `${window.location.origin}/certificates`  // ✅ QR code base URL
+          ? `${window.location.origin}/certificates`  // ✅ QR code base URL (auto-detects production domain)
           : 'http://localhost:3000/certificates',
 
         // Optional: Add tokenId if user already has a certificate

@@ -59,15 +59,15 @@
  */
 
 import {
-  certificateManager,
-  courseLicense,
-  progressTracker,
+    certificateManager,
+    courseLicense,
+    progressTracker,
 } from "@/lib/contracts";
 import { ethers } from "ethers";
 import {
-  prepareContractCall,
-  readContract,
-  type PreparedTransaction,
+    prepareContractCall,
+    readContract,
+    type PreparedTransaction,
 } from "thirdweb";
 
 // ============================================================================
@@ -577,6 +577,11 @@ export async function getCertificatePrice(
       "function getCourseCertificatePrice(uint256 courseId) view returns (uint256)",
     params: [courseId],
   });
+
+  // Log pricing context for debugging
+  console.log(
+    `[Certificate] Price for course ${courseId}: ${price} wei (${isFirstCertificate ? "first mint" : "addition"})`
+  );
 
   return price;
 }

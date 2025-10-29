@@ -16,13 +16,24 @@ interface ICourseLicense {
         bool isActive;
     }
 
-    function hasValidLicense(address student, uint256 courseId) external view returns (bool);
+    function hasValidLicense(
+        address student,
+        uint256 courseId
+    ) external view returns (bool);
+
     function recordPurchase(address student, uint256 courseId) external;
-    function getLicense(address student, uint256 courseId) external view returns (License memory);
+
+    function getLicense(
+        address student,
+        uint256 courseId
+    ) external view returns (License memory);
 }
 
 interface IProgressTracker {
-    function isCourseCompleted(address student, uint256 courseId) external view returns (bool);
+    function isCourseCompleted(
+        address student,
+        uint256 courseId
+    ) external view returns (bool);
 }
 
 /**
@@ -113,13 +124,13 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param creatorName Display name of course creator (dynamic string)
      */
     struct Course {
-        address creator;           // 20 bytes - Slot 1 start
-        uint64 id;                // 8 bytes
-        uint32 createdAt;         // 4 bytes - Total: 32 bytes (1 slot)
-        uint128 pricePerMonth;    // 16 bytes - Slot 2 start (ETH-denominated, not USD/fiat)
-        CourseCategory category;  // 1 byte (uint8)
+        address creator; // 20 bytes - Slot 1 start
+        uint64 id; // 8 bytes
+        uint32 createdAt; // 4 bytes - Total: 32 bytes (1 slot)
+        uint128 pricePerMonth; // 16 bytes - Slot 2 start (ETH-denominated, not USD/fiat)
+        CourseCategory category; // 1 byte (uint8)
         CourseDifficulty difficulty; // 1 byte (uint8)
-        bool isActive;            // 1 byte - Total so far: 19 bytes in Slot 2
+        bool isActive; // 1 byte - Total so far: 19 bytes in Slot 2
         // String types go to separate slots (dynamic storage)
         string title;
         string description;
@@ -250,9 +261,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
     event CourseUpdated(
         uint256 indexed courseId,
         address indexed creator,
-        uint256 newPrice,    // ✅ GOLDSKY: Track price changes for revenue analytics
-        uint256 oldPrice,    // ✅ GOLDSKY: Compare price adjustments
-        bool isActive        // ✅ GOLDSKY: Track publish/unpublish status
+        uint256 newPrice, // ✅ GOLDSKY: Track price changes for revenue analytics
+        uint256 oldPrice, // ✅ GOLDSKY: Compare price adjustments
+        bool isActive // ✅ GOLDSKY: Track publish/unpublish status
     );
     event SectionAdded(
         uint256 indexed courseId,
@@ -400,7 +411,8 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param _progressTracker Address of ProgressTracker contract
      */
     function setProgressTracker(address _progressTracker) external onlyOwner {
-        if (_progressTracker == address(0)) revert InvalidAddress(_progressTracker);
+        if (_progressTracker == address(0))
+            revert InvalidAddress(_progressTracker);
         progressTracker = IProgressTracker(_progressTracker);
     }
 
@@ -563,7 +575,13 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         course.category = category;
         course.difficulty = difficulty;
 
-        emit CourseUpdated(courseId, msg.sender, pricePerMonth, oldPrice, isActive);
+        emit CourseUpdated(
+            courseId,
+            msg.sender,
+            pricePerMonth,
+            oldPrice,
+            isActive
+        );
     }
 
     /**
@@ -670,6 +688,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
                 // Update orderId to match new array position
                 sections[i].orderId = i;
                 // Note: section.id remains unchanged (original creation order)
+
+                // ✅ CRITICAL FIX: Emit SectionUpdated for Goldsky indexer synchronization
+                // This ensures the indexer updates orderId for all shifted sections
+                emit SectionUpdated(courseId, sections[i].id);
             }
         }
 
@@ -900,12 +922,16 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
         if (address(courseLicense) != address(0)) {
             // Check if user ever owned a license (courseId != 0 means they purchased)
-            ICourseLicense.License memory userLicense = courseLicense.getLicense(msg.sender, courseId);
+            ICourseLicense.License memory userLicense = courseLicense
+                .getLicense(msg.sender, courseId);
             everPurchased = userLicense.courseId != 0;
         }
 
         if (address(progressTracker) != address(0)) {
-            hasCompleted = progressTracker.isCourseCompleted(msg.sender, courseId);
+            hasCompleted = progressTracker.isCourseCompleted(
+                msg.sender,
+                courseId
+            );
         }
 
         // User can rate if they EVER purchased OR completed the course
@@ -1344,7 +1370,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @return Array of course IDs purchased by the student
      * @custom:goldsky Used for student dashboard "My Courses" / "History" page
      */
-    function getStudentPurchasedCourses(address student) external view returns (uint256[] memory) {
+    function getStudentPurchasedCourses(
+        address student
+    ) external view returns (uint256[] memory) {
         return studentPurchasedCourses[student];
     }
 
@@ -1354,7 +1382,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
      * @param courseId ID of the course
      * @return bool indicating if student has purchased the course
      */
-    function hasStudentPurchasedCourse(address student, uint256 courseId) external view returns (bool) {
+    function hasStudentPurchasedCourse(
+        address student,
+        uint256 courseId
+    ) external view returns (bool) {
         return hasStudentPurchased[student][courseId];
     }
 
@@ -1449,8 +1480,14 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         CourseCategory category,
         uint256 offset,
         uint256 limit
-    ) external view validCategory(category) returns (uint256[] memory courseIds) {
-        if (limit == 0 || limit > 100) revert("Limit must be between 1 and 100");
+    )
+        external
+        view
+        validCategory(category)
+        returns (uint256[] memory courseIds)
+    {
+        if (limit == 0 || limit > 100)
+            revert("Limit must be between 1 and 100");
 
         uint256[] memory tempIds = new uint256[](limit);
         uint256 count = 0;
@@ -1489,8 +1526,14 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         CourseDifficulty difficulty,
         uint256 offset,
         uint256 limit
-    ) external view validDifficulty(difficulty) returns (uint256[] memory courseIds) {
-        if (limit == 0 || limit > 100) revert("Limit must be between 1 and 100");
+    )
+        external
+        view
+        validDifficulty(difficulty)
+        returns (uint256[] memory courseIds)
+    {
+        if (limit == 0 || limit > 100)
+            revert("Limit must be between 1 and 100");
 
         uint256[] memory tempIds = new uint256[](limit);
         uint256 count = 0;
@@ -1498,7 +1541,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
         unchecked {
             for (uint256 i = 1; i <= _courseIds && count < limit; i++) {
-                if (courses[i].isActive && courses[i].difficulty == difficulty) {
+                if (
+                    courses[i].isActive && courses[i].difficulty == difficulty
+                ) {
                     if (skipped >= offset) {
                         tempIds[count] = i;
                         count++;
@@ -1530,8 +1575,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         uint256 offset,
         uint256 limit
     ) external view returns (uint256[] memory courseIds) {
-        if (limit == 0 || limit > 100) revert("Limit must be between 1 and 100");
-        if (minRating > 50000) revert("MinRating cannot exceed 5.0 stars (50000)");
+        if (limit == 0 || limit > 100)
+            revert("Limit must be between 1 and 100");
+        if (minRating > 50000)
+            revert("MinRating cannot exceed 5.0 stars (50000)");
 
         uint256[] memory tempIds = new uint256[](limit);
         uint256 count = 0;
@@ -1539,7 +1586,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
         unchecked {
             for (uint256 i = 1; i <= _courseIds && count < limit; i++) {
-                if (courses[i].isActive && courseRatings[i].averageRating >= minRating) {
+                if (
+                    courses[i].isActive &&
+                    courseRatings[i].averageRating >= minRating
+                ) {
                     if (skipped >= offset) {
                         tempIds[count] = i;
                         count++;
@@ -1602,8 +1652,10 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         uint256 offset,
         uint256 limit
     ) external view returns (uint256[] memory courseIds) {
-        if (limit == 0 || limit > 100) revert("Limit must be between 1 and 100");
-        if (minRating > 50000) revert("MinRating cannot exceed 5.0 stars (50000)");
+        if (limit == 0 || limit > 100)
+            revert("Limit must be between 1 and 100");
+        if (minRating > 50000)
+            revert("MinRating cannot exceed 5.0 stars (50000)");
 
         uint256[] memory tempIds = new uint256[](limit);
         uint256 count = 0;
@@ -1616,7 +1668,8 @@ contract CourseFactory is Ownable, ReentrancyGuard {
 
                 // Check all filters
                 bool matchesFilters = course.isActive &&
-                    (category == CourseCategory.Other || course.category == category) &&
+                    (category == CourseCategory.Other ||
+                        course.category == category) &&
                     course.difficulty == difficulty &&
                     rating.averageRating >= minRating;
 

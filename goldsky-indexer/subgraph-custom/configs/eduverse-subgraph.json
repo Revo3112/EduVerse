@@ -1,0 +1,44 @@
+{
+  "version": "1",
+  "name": "eduverse",
+  "abis": {
+    "courseFactory": {
+      "path": "./coursefactory.json"
+    },
+    "courseLicense": {
+      "path": "./courselicense.json"
+    },
+    "progressTracker": {
+      "path": "./progresstracker.json"
+    },
+    "certificateManager": {
+      "path": "./certificatemanager.json"
+    }
+  },
+  "instances": [
+    {
+      "abi": "courseFactory",
+      "address": "0x44661459e3c092358559d8459e585EA201D04231",
+      "startBlock": 5326332,
+      "chain": "manta-pacific-sepolia"
+    },
+    {
+      "abi": "courseLicense",
+      "address": "0x3aad55E0E88C4594643fEFA837caFAe1723403C8",
+      "startBlock": 5326335,
+      "chain": "manta-pacific-sepolia"
+    },
+    {
+      "abi": "progressTracker",
+      "address": "0xaB2adB0F4D800971Ee095e2bC26f9d4AdBeDe930",
+      "startBlock": 5326340,
+      "chain": "manta-pacific-sepolia"
+    },
+    {
+      "abi": "certificateManager",
+      "address": "0x0a7750524B826E09a27B98564E98AF77fe78f600",
+      "startBlock": 5326345,
+      "chain": "manta-pacific-sepolia"
+    }
+  ]
+}

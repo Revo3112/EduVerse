@@ -39,6 +39,7 @@ import {
     type SectionProgressDetail
 } from "@/services/progress.service";
 import { useCallback, useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 
 // ============================================================================
@@ -79,6 +80,7 @@ export interface UseProgressReturn {
   isStarting: boolean;
   isCompleting: boolean;
   isResetting: boolean;
+  isTransactionPending: boolean;
 
   // Errors
   error: string | null;
@@ -219,6 +221,7 @@ export function useProgress(
       if (!account?.address) {
         const errorMsg = "Please connect your wallet first";
         setError(errorMsg);
+        toast.error(errorMsg);
         console.error("[useProgress]", errorMsg);
         return;
       }
@@ -233,6 +236,8 @@ export function useProgress(
       setIsStarting(true);
       setError(null);
 
+      const loadingToast = toast.loading(`Starting section...`);
+
       try {
         console.log(`[useProgress] Starting section ${sectionId}`);
 
@@ -241,16 +246,20 @@ export function useProgress(
 
         // Send transaction
         sendTransaction(transaction, {
-          onSuccess: async (result) => {
+          onSuccess: async () => {
             console.log(`[useProgress] Section ${sectionId} started!`);
             // Refresh progress after successful start
             await fetchProgress();
+            toast.dismiss(loadingToast);
+            toast.success("Section started successfully!");
           },
           onError: (error) => {
             console.error("[useProgress] Start section error:", error);
             const errorMsg =
               error instanceof Error ? error.message : "Transaction failed";
             setError(errorMsg);
+            toast.dismiss(loadingToast);
+            toast.error(errorMsg);
           },
         });
       } catch (err) {
@@ -258,6 +267,8 @@ export function useProgress(
         const errorMsg =
           err instanceof Error ? err.message : "Failed to prepare transaction";
         setError(errorMsg);
+        toast.dismiss(loadingToast);
+        toast.error(errorMsg);
       } finally {
         setIsStarting(false);
       }
@@ -274,6 +285,7 @@ export function useProgress(
       if (!account?.address) {
         const errorMsg = "Please connect your wallet first";
         setError(errorMsg);
+        toast.error(errorMsg);
         console.error("[useProgress]", errorMsg);
         return;
       }
@@ -289,12 +301,15 @@ export function useProgress(
       if (!section || section.startTime === BigInt(0)) {
         const errorMsg = "Section must be started before completing";
         setError(errorMsg);
+        toast.error(errorMsg);
         console.error("[useProgress]", errorMsg);
         return;
       }
 
       setIsCompleting(true);
       setError(null);
+
+      const loadingToast = toast.loading(`Completing section...`);
 
       try {
         console.log(`[useProgress] Completing section ${sectionId}`);
@@ -307,16 +322,20 @@ export function useProgress(
 
         // Send transaction
         sendTransaction(transaction, {
-          onSuccess: async (result) => {
+          onSuccess: async () => {
             console.log(`[useProgress] Section ${sectionId} completed!`);
             // Refresh progress after successful completion
             await fetchProgress();
+            toast.dismiss(loadingToast);
+            toast.success("🎉 Section completed! Great job!");
           },
           onError: (error) => {
             console.error("[useProgress] Complete section error:", error);
             const errorMsg =
               error instanceof Error ? error.message : "Transaction failed";
             setError(errorMsg);
+            toast.dismiss(loadingToast);
+            toast.error(errorMsg);
           },
         });
       } catch (err) {
@@ -324,6 +343,8 @@ export function useProgress(
         const errorMsg =
           err instanceof Error ? err.message : "Failed to prepare transaction";
         setError(errorMsg);
+        toast.dismiss(loadingToast);
+        toast.error(errorMsg);
       } finally {
         setIsCompleting(false);
       }
@@ -339,6 +360,7 @@ export function useProgress(
     if (!account?.address) {
       const errorMsg = "Please connect your wallet first";
       setError(errorMsg);
+      toast.error(errorMsg);
       console.error("[useProgress]", errorMsg);
       return;
     }
@@ -346,6 +368,8 @@ export function useProgress(
     // Confirm action (component should handle this)
     setIsResetting(true);
     setError(null);
+
+    const loadingToast = toast.loading(`Resetting course progress...`);
 
     try {
       console.log(`[useProgress] Resetting progress for course ${courseId}`);
@@ -355,16 +379,20 @@ export function useProgress(
 
       // Send transaction
       sendTransaction(transaction, {
-        onSuccess: async (result) => {
+        onSuccess: async () => {
           console.log(`[useProgress] Progress reset!`);
           // Refresh progress after successful reset
           await fetchProgress();
+          toast.dismiss(loadingToast);
+          toast.success("Progress reset successfully");
         },
         onError: (error) => {
           console.error("[useProgress] Reset progress error:", error);
           const errorMsg =
             error instanceof Error ? error.message : "Transaction failed";
           setError(errorMsg);
+          toast.dismiss(loadingToast);
+          toast.error(errorMsg);
         },
       });
     } catch (err) {
@@ -372,6 +400,8 @@ export function useProgress(
       const errorMsg =
         err instanceof Error ? err.message : "Failed to prepare transaction";
       setError(errorMsg);
+      toast.dismiss(loadingToast);
+      toast.error(errorMsg);
     } finally {
       setIsResetting(false);
     }
@@ -458,6 +488,7 @@ export function useProgress(
     isStarting,
     isCompleting,
     isResetting,
+    isTransactionPending,
 
     // Errors
     error,

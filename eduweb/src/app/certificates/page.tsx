@@ -133,11 +133,13 @@ const formatDate = (timestamp: number): string => new Date(timestamp).toLocaleDa
  */
 
 /**
+ * TODO: Implement blockchain certificate conversion
  * Convert blockchain certificate (bigint) to UI certificate (number)
  * @param blockchainCert Certificate from smart contract with bigint types
  * @param enrichedCourses Enriched course data from Goldsky (optional)
  * @returns UI-friendly certificate with number types
  */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 const convertBlockchainCertificate = (
   blockchainCert: BlockchainCertificate,
   enrichedCourses?: CourseInCertificate[]
@@ -159,6 +161,7 @@ const convertBlockchainCertificate = (
 });
 
 /**
+ * TODO: Implement price formatting
  * Format BigInt wei amount to MANTA display string
  * @param wei Amount in wei (bigint)
  * @returns Formatted string like "0.0010 MANTA"
@@ -169,6 +172,7 @@ const formatMantaPriceFromBigInt = (wei: bigint): string => {
 };
 
 /**
+ * TODO: Implement date formatting
  * Format BigInt timestamp to human-readable date
  * @param timestamp Unix timestamp in seconds (bigint)
  * @returns Formatted date string
@@ -177,6 +181,7 @@ const formatDateFromBigInt = (timestamp: bigint): string => {
   const date = new Date(Number(timestamp) * 1000);
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 // ==================== MOCK DATA ====================
 const mockCertificate: Certificate = {

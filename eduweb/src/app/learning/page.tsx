@@ -440,15 +440,23 @@ export default function LearningPage() {
               <Card key={course.id} className="group hover:shadow-lg transition-all duration-300 border border-border bg-card h-full flex flex-col">
                 <CardHeader className="space-y-4">
                   <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+                      {/* License status indicator */}
+                      {hasLicense && (
+                        <div className="absolute top-2 left-2 z-10">
+                          <Badge variant="secondary" className="text-xs bg-blue-500 text-white">
+                            Licensed
+                          </Badge>
+                        </div>
+                      )}
                     <ThumbnailImage
                       cid={course.thumbnailCID}
                       alt={course.title}
                       fallback={
-                        <div className={`w-full h-full ${course.status === 'Completed'
+                        <div className={`w-full h-full ${isCompleted
                             ? 'bg-gradient-to-br from-green-500 to-emerald-600'
                             : 'bg-gradient-to-br from-gray-500 to-gray-600'
                           } flex items-center justify-center`}>
-                          {course.status === 'Completed' ? (
+                          {isCompleted ? (
                             <Trophy className="w-12 h-12 text-white/70" />
                           ) : (
                             <Clock className="w-12 h-12 text-white/70" />
@@ -463,9 +471,8 @@ export default function LearningPage() {
                         {course.category}
                       </Badge>
                       <Badge
-                        variant={course.status === 'Completed' ? 'default' : 'outline'}
-                        className={`text-xs ${
-                          course.status === 'Completed'
+                          variant={isCompleted ? 'default' : 'outline'}
+                          className={`text-xs ${isCompleted
                           ? 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 text-white'
                           : 'border-yellow-500 text-yellow-600 dark:text-yellow-400'
                         }`}

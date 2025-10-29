@@ -34,9 +34,9 @@
 
 import { courseFactory, courseLicense } from "@/lib/contracts";
 import {
-  prepareContractCall,
-  readContract,
-  type PreparedTransaction,
+    prepareContractCall,
+    readContract,
+    type PreparedTransaction,
 } from "thirdweb";
 
 // ============================================================================
@@ -345,8 +345,8 @@ export async function calculateLicensePrice(
       params: [courseId],
     });
 
-    // Course is returned as tuple array, destructure to get pricePerMonth (index 3)
-    const [creator, id, createdAt, pricePerMonth] = course;
+    // Course is returned as tuple array, extract only pricePerMonth (index 3)
+    const pricePerMonth = course[3];
     const coursePrice = pricePerMonth;
     const totalPrice = coursePrice * BigInt(durationMonths);
 

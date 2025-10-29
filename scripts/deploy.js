@@ -83,17 +83,93 @@ async function main() {
       "ProgressTracker"
     );
 
+    // ===================================================================
+    // CERTIFICATE SYSTEM CONFIGURATION
+    // ===================================================================
+    // ✅ DYNAMIC: Reads from environment variables for dev/staging/prod flexibility
+    // Priority order:
+    // 1. CERTIFICATE_BASE_ROUTE (explicit certificate route)
+    // 2. NEXT_PUBLIC_APP_URL + '/certificates' (frontend base URL)
+    // 3. Localhost fallback for local development
+
+    const NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL;
+    const CERTIFICATE_BASE_ROUTE = process.env.CERTIFICATE_BASE_ROUTE;
+    const PLATFORM_NAME = process.env.PLATFORM_NAME || process.env.NEXT_PUBLIC_PLATFORM_NAME || "EduVerse Academy";
+
+    // Construct base route with proper fallback chain
+    let baseRoute;
+    if (CERTIFICATE_BASE_ROUTE) {
+      baseRoute = CERTIFICATE_BASE_ROUTE;
+    } else if (NEXT_PUBLIC_APP_URL) {
+      baseRoute = `${NEXT_PUBLIC_APP_URL}/certificates`;
+    } else {
+      baseRoute = "http://localhost:3000/certificates"; // ✅ Fixed path: /certificates (not /verify)
+    }
+
+    // Validation and warnings
+    console.log(`\n📍 Certificate System Configuration:`);
+    console.log(`   Base Route: ${baseRoute}`);
+    console.log(`   Platform Name: ${PLATFORM_NAME}`);
+
+    if (!CERTIFICATE_BASE_ROUTE && !NEXT_PUBLIC_APP_URL) {
+      console.log(`\n⚠️  WARNING: Using localhost BASE_ROUTE for development only!`);
+      console.log(`   For production deployment, set one of these environment variables:`);
+      console.log(`   - CERTIFICATE_BASE_ROUTE=https://your-domain.com/certificates`);
+      console.log(`   - NEXT_PUBLIC_APP_URL=https://your-domain.com`);
+      console.log(`\n   QR codes will be generated with this BASE_ROUTE!`);
+      console.log(`   Changing domains later requires calling updateDefaultBaseRoute() on contract.`);
+    } else {
+      console.log(`   ✅ Using environment-configured BASE_ROUTE`);
+    }
+
     const certificateManager = await deployContract(
       "CertificateManager",
       courseFactory.target,
       progressTracker.target,
-      deployer.address
+      courseLicense.target,
+      deployer.address, // platformWallet
+      baseRoute,        // ✅ Dynamic base route (updatable via updateDefaultBaseRoute)
+      PLATFORM_NAME     // ✅ Platform name (updatable via setDefaultPlatformName)
     );
     await verifyContract(
       certificateManager.target,
-      [courseFactory.target, progressTracker.target, deployer.address],
+      [
+        courseFactory.target,
+        progressTracker.target,
+        courseLicense.target,
+        deployer.address,
+        baseRoute,
+        PLATFORM_NAME
+      ],
       "CertificateManager"
     );
+
+    // ===================================================================
+    // POST-DEPLOYMENT CONFIGURATION
+    // ===================================================================
+    // CRITICAL: Configure contract references for proper cross-contract communication
+    console.log(`\n⚙️  Configuring contract references...`);
+
+    try {
+      // Set CourseLicense address in CourseFactory
+      console.log(`   Setting CourseLicense in CourseFactory...`);
+      const tx1 = await courseFactory.setCourseLicense(courseLicense.target);
+      await tx1.wait();
+      console.log(`   ✅ CourseLicense configured`);
+
+      // Set ProgressTracker address in CourseFactory
+      console.log(`   Setting ProgressTracker in CourseFactory...`);
+      const tx2 = await courseFactory.setProgressTracker(progressTracker.target);
+      await tx2.wait();
+      console.log(`   ✅ ProgressTracker configured`);
+
+      console.log(`\n✅ Post-deployment configuration completed successfully!`);
+    } catch (configError) {
+      console.error(`\n❌ Post-deployment configuration failed:`, configError);
+      console.error(`   You MUST manually configure these before system is operational:`);
+      console.error(`   1. courseFactory.setCourseLicense(${courseLicense.target})`);
+      console.error(`   2. courseFactory.setProgressTracker(${progressTracker.target})`);
+    }
 
     // Save contract addresses
     const addresses = {

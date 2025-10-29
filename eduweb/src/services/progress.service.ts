@@ -266,15 +266,7 @@ export async function getCourseProgress(
   courseId: bigint
 ): Promise<CourseProgress> {
   try {
-    // Get total sections from CourseFactory
-    const course = await readContract({
-      contract: courseFactory,
-      method:
-        "function courses(uint256) view returns (address creator, uint64 id, uint32 createdAt, uint128 pricePerMonth, uint8 category, uint8 difficulty, bool isActive, string title, string description, string thumbnailCID, string creatorName)",
-      params: [courseId],
-    });
-
-    // Get section count
+    // Get section count directly (we don't need full course metadata here)
     const totalSections = await readContract({
       contract: courseFactory,
       method: "function getSectionCount(uint256 courseId) view returns (uint256)",
@@ -708,7 +700,6 @@ export async function calculateLearningStreak(
     // Calculate current streak
     let currentStreak = 0;
     const today = new Date();
-    const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
 
     const checkDate = new Date(today);
     for (const dayKey of sortedDays) {

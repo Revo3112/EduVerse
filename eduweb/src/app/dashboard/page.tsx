@@ -1,186 +1,221 @@
-'use client'
+"use client";
 
-import { DashboardContainer } from "@/components/PageContainer"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import type { LucideIcon } from "lucide-react"
-import { Award, BarChart3, BookOpen, GraduationCap, TrendingUp, Users } from "lucide-react"
-import { useState } from "react"
+import { DashboardContainer } from "@/components/PageContainer";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import type { LucideIcon } from "lucide-react";
+import {
+  Award,
+  BarChart3,
+  BookOpen,
+  GraduationCap,
+  TrendingUp,
+  Users,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
+import { useDashboardData } from "@/hooks/useDashboardData";
+import { useActiveAccount } from "thirdweb/react";
 
 // ============================================================================
-// TYPE DEFINITIONS - Aligned with Smart Contract Events
+// TYPE DEFINITIONS
 // ============================================================================
 
 interface StatCard {
-  title: string
-  value: string | number
-  growth?: string
-  icon: LucideIcon
-  colorScheme: 'blue' | 'green' | 'purple' | 'orange'
+  title: string;
+  value: string | number;
+  growth?: string;
+  icon: LucideIcon;
+  colorScheme: "blue" | "green" | "purple" | "orange";
 }
 
-interface LearningCourse {
-  id: string
-  title: string
-  progress: number // 0-100
-  status: 'In Progress' | 'Not Started' | 'Completed'
-}
-
-interface TeachingCourse {
-  id: string
-  title: string
-  studentCount: number
-  status: 'Active' | 'Inactive' | 'Draft'
-}
-
-interface Activity {
-  id: string
-  type: 'certificate' | 'section' | 'enrollment' | 'course_completed'
-  title: string
-  description: string
-  timestamp: string
-  icon: LucideIcon
-  iconColor: string
-}
+type ColorScheme = {
+  card: string;
+  title: string;
+  icon: string;
+  value: string;
+  growth: string;
+};
 
 // ============================================================================
-// COLOR SCHEMES - Pre-defined for Tailwind CSS purging
+// COLOR SCHEMES
 // ============================================================================
 
-const colorSchemes = {
+const colorSchemes: Record<
+  "blue" | "green" | "purple" | "orange",
+  ColorScheme
+> = {
   blue: {
     card: "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/50",
     title: "text-blue-700 dark:text-blue-300",
     icon: "text-blue-600 dark:text-blue-400",
     value: "text-blue-900 dark:text-blue-100",
-    growth: "text-blue-600 dark:text-blue-400"
+    growth: "text-blue-600 dark:text-blue-400",
   },
   green: {
     card: "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50",
     title: "text-green-700 dark:text-green-300",
     icon: "text-green-600 dark:text-green-400",
     value: "text-green-900 dark:text-green-100",
-    growth: "text-green-600 dark:text-green-400"
+    growth: "text-green-600 dark:text-green-400",
   },
   purple: {
     card: "border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/50",
     title: "text-purple-700 dark:text-purple-300",
     icon: "text-purple-600 dark:text-purple-400",
     value: "text-purple-900 dark:text-purple-100",
-    growth: "text-purple-600 dark:text-purple-400"
+    growth: "text-purple-600 dark:text-purple-400",
   },
   orange: {
     card: "border-orange-200 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/50",
     title: "text-orange-700 dark:text-orange-300",
     icon: "text-orange-600 dark:text-orange-400",
     value: "text-orange-900 dark:text-orange-100",
-    growth: "text-orange-600 dark:text-orange-400"
-  }
-}
+    growth: "text-orange-600 dark:text-orange-400",
+  },
+};
 
 export default function DashboardPage() {
   // ============================================================================
-  // STATE MANAGEMENT - Ready for Goldsky/GraphQL integration
+  // WEB3 & DATA HOOKS
   // ============================================================================
 
-  // Stats Cards - Will be populated from smart contract events
-  const [stats] = useState<StatCard[]>([
+  const account = useActiveAccount();
+  const {
+    stats,
+    learningCourses,
+    teachingCourses,
+    activities,
+    isLoading,
+    error,
+  } = useDashboardData();
+
+  // ============================================================================
+  // STATS CARDS MAPPING
+  // ============================================================================
+
+  const statsCards: StatCard[] = [
     {
       title: "Courses Enrolled",
-      value: 12,
-      growth: "+2 from last month",
+      value: stats.coursesEnrolled,
+      growth: stats.growth.enrolled + " from last month",
       icon: BookOpen,
-      colorScheme: 'blue'
+      colorScheme: "blue",
     },
     {
       title: "Courses Created",
-      value: 5,
-      growth: "+1 from last month",
+      value: stats.coursesCreated,
+      growth: stats.growth.created + " from last month",
       icon: Users,
-      colorScheme: 'green'
+      colorScheme: "green",
     },
     {
-      title: "Courses Completed", // ✅ FIXED: Was "Certificates Earned"
-      value: 8,                    // This represents CourseAddedToCertificate event count
-      growth: "+3 from last month",
+      title: "Courses Completed",
+      value: stats.coursesCompleted,
+      growth: stats.growth.completed + " from last month",
       icon: Award,
-      colorScheme: 'purple'
+      colorScheme: "purple",
     },
     {
       title: "ETH Earned",
-      value: "0.156",
-      growth: "+0.023 from last month",
+      value: stats.ethEarned,
+      growth: stats.growth.earned + " from last month",
       icon: TrendingUp,
-      colorScheme: 'orange'
-    }
-  ])
+      colorScheme: "orange",
+    },
+  ];
 
-  // Continue Learning - Will be populated from ProgressTracker events
-  const [learningCourses] = useState<LearningCourse[]>([
-    {
-      id: "1",
-      title: "Advanced Solidity Development",
-      progress: 75,
-      status: "In Progress"
-    },
-    {
-      id: "2",
-      title: "DeFi Protocol Design",
-      progress: 45,
-      status: "In Progress"
-    }
-  ])
+  // ============================================================================
+  // ACTIVITY ICON MAPPING
+  // ============================================================================
 
-  // Teaching Overview - Will be populated from CourseFactory events
-  const [teachingCourses] = useState<TeachingCourse[]>([
-    {
-      id: "1",
-      title: "Blockchain Fundamentals",
-      studentCount: 156,
-      status: "Active"
-    },
-    {
-      id: "2",
-      title: "Smart Contract Security",
-      studentCount: 89,
-      status: "Active"
+  const getActivityIcon = (
+    type: string
+  ): { icon: LucideIcon; color: string } => {
+    switch (type) {
+      case "certificate":
+        return { icon: Award, color: "text-yellow-500" };
+      case "section":
+        return { icon: BookOpen, color: "text-blue-500" };
+      case "enrollment":
+        return { icon: Users, color: "text-green-500" };
+      case "course_completed":
+        return { icon: GraduationCap, color: "text-purple-500" };
+      case "course_created":
+        return { icon: BarChart3, color: "text-orange-500" };
+      default:
+        return { icon: BookOpen, color: "text-gray-500" };
     }
-  ])
-
-  // Recent Activity - Will be populated from multiple contract events
-  const [activities] = useState<Activity[]>([
-    {
-      id: "1",
-      type: "certificate",
-      title: "Certificate Earned",
-      description: 'Completed "Advanced DeFi Strategies" course',
-      timestamp: "2 hours ago",
-      icon: Award,
-      iconColor: "text-yellow-500"
-    },
-    {
-      id: "2",
-      type: "section",
-      title: "Course Section Added",
-      description: 'Added new section to "Blockchain Fundamentals"',
-      timestamp: "1 day ago",
-      icon: BookOpen,
-      iconColor: "text-blue-500"
-    },
-    {
-      id: "3",
-      type: "enrollment",
-      title: "New Student Enrollment",
-      description: "23 new students enrolled in your courses this week",
-      timestamp: "3 days ago",
-      icon: Users,
-      iconColor: "text-green-500"
-    }
-  ])
+  };
 
   // ============================================================================
   // RENDER
   // ============================================================================
+
+  // Show connection prompt if wallet not connected
+  if (!account) {
+    return (
+      <DashboardContainer className="space-y-6">
+        <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/50">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-blue-500 mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">
+                Connect Your Wallet
+              </h3>
+              <p className="text-muted-foreground max-w-md">
+                Please connect your wallet to view your EduVerse dashboard with
+                real blockchain data.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </DashboardContainer>
+    );
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <DashboardContainer className="space-y-6">
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" />
+          <p className="text-muted-foreground">
+            Loading dashboard data from blockchain...
+          </p>
+        </div>
+      </DashboardContainer>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <DashboardContainer className="space-y-6">
+        <Card className="border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/50">
+          <CardContent className="pt-6">
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">
+                Failed to Load Dashboard
+              </h3>
+              <p className="text-muted-foreground max-w-md mb-4">{error}</p>
+              <p className="text-sm text-muted-foreground">
+                Make sure the Goldsky subgraph is deployed and
+                NEXT_PUBLIC_GOLDSKY_ENDPOINT is configured.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </DashboardContainer>
+    );
+  }
 
   return (
     <DashboardContainer className="space-y-6">
@@ -194,11 +229,11 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Stats Cards - Dynamic Rendering */}
+      {/* Stats Cards - Real Blockchain Data */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
-          const colors = colorSchemes[stat.colorScheme]
-          const Icon = stat.icon
+        {statsCards.map((stat, index) => {
+          const colors = colorSchemes[stat.colorScheme];
+          const Icon = stat.icon;
 
           return (
             <Card key={index} className={colors.card}>
@@ -213,13 +248,11 @@ export default function DashboardPage() {
                   {stat.value}
                 </div>
                 {stat.growth && (
-                  <p className={`text-xs ${colors.growth}`}>
-                    {stat.growth}
-                  </p>
+                  <p className={`text-xs ${colors.growth}`}>{stat.growth}</p>
                 )}
               </CardContent>
             </Card>
-          )
+          );
         })}
       </div>
 
@@ -244,18 +277,30 @@ export default function DashboardPage() {
                 <p className="text-sm">Explore courses to start learning</p>
               </div>
             ) : (
-              learningCourses.map((course) => (
+              learningCourses.slice(0, 5).map((course) => (
                 <div
                   key={course.id}
-                  className="flex items-center justify-between p-4 rounded-lg border bg-muted/50"
+                  className="flex items-center justify-between p-4 rounded-lg border bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1">
                     <p className="font-medium">{course.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Progress: {course.progress}%
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        Progress: {course.progress}%
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        ({course.completedSections}/{course.totalSections}{" "}
+                        sections)
+                      </span>
+                    </div>
                   </div>
-                  <Badge variant="secondary">{course.status}</Badge>
+                  <Badge
+                    variant={
+                      course.status === "Completed" ? "default" : "secondary"
+                    }
+                  >
+                    {course.status}
+                  </Badge>
                 </div>
               ))
             )}
@@ -278,21 +323,33 @@ export default function DashboardPage() {
               <div className="text-center py-8 text-muted-foreground">
                 <Users className="mx-auto h-12 w-12 mb-4 opacity-50" />
                 <p className="font-medium">No courses created yet</p>
-                <p className="text-sm">Create your first course to start teaching</p>
+                <p className="text-sm">
+                  Create your first course to start teaching
+                </p>
               </div>
             ) : (
-              teachingCourses.map((course) => (
+              teachingCourses.slice(0, 5).map((course) => (
                 <div
                   key={course.id}
-                  className="flex items-center justify-between p-4 rounded-lg border bg-muted/50"
+                  className="flex items-center justify-between p-4 rounded-lg border bg-muted/50 hover:bg-muted/70 transition-colors cursor-pointer"
                 >
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1">
                     <p className="font-medium">{course.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {course.studentCount} students enrolled
-                    </p>
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                      <span>{course.studentCount} students</span>
+                      <span>•</span>
+                      <span>{course.activeEnrollments} active</span>
+                      <span>•</span>
+                      <span>{course.totalRevenue} ETH</span>
+                    </div>
                   </div>
-                  <Badge variant="default">{course.status}</Badge>
+                  <Badge
+                    variant={
+                      course.status === "Active" ? "default" : "secondary"
+                    }
+                  >
+                    {course.status}
+                  </Badge>
                 </div>
               ))
             )}
@@ -316,32 +373,53 @@ export default function DashboardPage() {
               <p className="text-sm">Your activity will appear here</p>
             </div>
           ) : (
-              <div className="space-y-4">
-                {activities.map((activity) => {
-                  const Icon = activity.icon
+            <div className="space-y-4">
+              {activities.map((activity) => {
+                const { icon: Icon, color: iconColor } = getActivityIcon(
+                  activity.type
+                );
 
-                  return (
-                    <div
-                      key={activity.id}
-                      className="flex items-start space-x-4 p-4 rounded-lg bg-muted/50"
-                    >
-                      <Icon className={`h-5 w-5 ${activity.iconColor} mt-0.5`} />
-                      <div className="space-y-1">
-                        <p className="font-medium">{activity.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {activity.description}
-                        </p>
+                return (
+                  <div
+                    key={activity.id}
+                    className="flex items-start space-x-4 p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors"
+                  >
+                    <Icon
+                      className={`h-5 w-5 ${iconColor} mt-0.5 flex-shrink-0`}
+                    />
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <p className="font-medium">{activity.title}</p>
+                      <p className="text-sm text-muted-foreground truncate">
+                        {activity.description}
+                      </p>
+                      <div className="flex items-center gap-2">
                         <p className="text-xs text-muted-foreground">
-                          {activity.timestamp}
+                          {activity.relativeTime}
                         </p>
+                        {activity.transactionHash && (
+                          <>
+                            <span className="text-xs text-muted-foreground">
+                              •
+                            </span>
+                            <a
+                              href={`https://pacific-explorer.sepolia-testnet.manta.network/tx/${activity.transactionHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-500 hover:text-blue-600 hover:underline"
+                            >
+                              View Tx
+                            </a>
+                          </>
+                        )}
                       </div>
                     </div>
-                  )
-                })}
-              </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
     </DashboardContainer>
-  )
+  );
 }

@@ -52,6 +52,7 @@ import {
     type LearningJourney
 } from "@/services/certificate-blockchain.service";
 import { useCallback, useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import {
     useActiveAccount,
     useSendTransaction,
@@ -91,6 +92,7 @@ export interface UseCertificateReturn {
   isMinting: boolean;
   isUpdating: boolean;
   isAdding: boolean;
+  isTransactionPending: boolean;
 
   // Errors
   error: string | null;
@@ -222,6 +224,29 @@ export function useCertificate(
   }, [loadCertificateData]);
 
   /**
+   * Handle transaction results with toast notifications
+   */
+  useEffect(() => {
+    if (transactionResult) {
+      const txHash = transactionResult.transactionHash;
+      const explorerUrl = `https://pacific-explorer.manta.network/tx/${txHash}`;
+
+      toast.success(
+        `Transaction successful! View on Explorer: ${explorerUrl}`,
+        {
+          duration: 6000,
+          style: {
+            maxWidth: '500px',
+          },
+        }
+      );
+
+      // Refresh data after successful transaction
+      refreshData();
+    }
+  }, [transactionResult, refreshData]);
+
+  /**
    * Check eligibility for adding a course to certificate
    */
   const checkEligibility = useCallback(
@@ -272,11 +297,14 @@ export function useCertificate(
       baseRoute: string
     ) => {
       if (!account) {
+        toast.error("Please connect your wallet first");
         throw new Error("Wallet not connected");
       }
 
       setIsMinting(true);
       setError(null);
+
+      const loadingToast = toast.loading("Processing certificate transaction...");
 
       try {
         // 1. Check eligibility
@@ -325,11 +353,14 @@ export function useCertificate(
 
         // 6. Refresh data
         await refreshData();
+        toast.dismiss(loadingToast);
       } catch (err) {
         console.error("Error minting/updating certificate:", err);
         const errorMsg =
           err instanceof Error ? err.message : "Failed to process certificate";
         setError(errorMsg);
+        toast.dismiss(loadingToast);
+        toast.error(errorMsg);
         throw new Error(errorMsg);
       } finally {
         setIsMinting(false);
@@ -524,6 +555,7 @@ export function useCertificate(
     isMinting,
     isUpdating,
     isAdding,
+    isTransactionPending,
 
     // Errors
     error,

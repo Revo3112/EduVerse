@@ -29,18 +29,19 @@
 "use client";
 
 import {
-  calculateLicensePrice,
-  formatLicenseExpiry,
-  getLicenseStatus,
-  getRecommendedRenewalDuration,
-  isLicenseExpiringSoon,
-  preparePurchaseLicenseTransaction,
-  prepareRenewLicenseTransaction,
-  type License,
-  type LicensePriceInfo,
-  type LicenseStatus,
+    calculateLicensePrice,
+    formatLicenseExpiry,
+    getLicenseStatus,
+    getRecommendedRenewalDuration,
+    isLicenseExpiringSoon,
+    preparePurchaseLicenseTransaction,
+    prepareRenewLicenseTransaction,
+    type License,
+    type LicensePriceInfo,
+    type LicenseStatus,
 } from "@/services/license.service";
 import { useCallback, useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 
 // ============================================================================
@@ -73,6 +74,7 @@ export interface UseLicenseReturn {
   isPurchasing: boolean;
   isRenewing: boolean;
   isPriceLoading: boolean;
+  isTransactionPending: boolean;
 
   // Errors
   error: string | null;
@@ -197,6 +199,29 @@ export function useLicense(
     return () => clearInterval(interval);
   }, [autoRefresh, refreshInterval, fetchLicenseStatus]);
 
+  /**
+   * Handle transaction results with toast notifications
+   */
+  useEffect(() => {
+    if (transactionResult) {
+      const txHash = transactionResult.transactionHash;
+      const explorerUrl = `https://pacific-explorer.manta.network/tx/${txHash}`;
+
+      toast.success(
+        `License transaction successful! View on Explorer: ${explorerUrl}`,
+        {
+          duration: 6000,
+          style: {
+            maxWidth: '500px',
+          },
+        }
+      );
+
+      // Refresh license status after successful transaction
+      fetchLicenseStatus();
+    }
+  }, [transactionResult, fetchLicenseStatus]);
+
   // ============================================================================
   // FETCH PRICE INFORMATION
   // ============================================================================
@@ -232,12 +257,15 @@ export function useLicense(
       if (!account?.address) {
         const errorMsg = "Please connect your wallet first";
         setError(errorMsg);
+        toast.error(errorMsg);
         console.error("[useLicense]", errorMsg);
         return;
       }
 
       setIsPurchasing(true);
       setError(null);
+
+      const loadingToast = toast.loading(`Purchasing ${durationMonths} month license...`);
 
       try {
         // Calculate price
@@ -256,19 +284,22 @@ export function useLicense(
 
         // Send transaction
         sendTransaction(transaction, {
-          onSuccess: async (result) => {
+          onSuccess: async () => {
             console.log(
               `[useLicense] License purchased! ${durationMonths} months`
             );
 
             // Refresh status after successful purchase
             await fetchLicenseStatus();
+            toast.dismiss(loadingToast);
           },
           onError: (error) => {
             console.error("[useLicense] Purchase error:", error);
             const errorMsg =
               error instanceof Error ? error.message : "Transaction failed";
             setError(errorMsg);
+            toast.dismiss(loadingToast);
+            toast.error(errorMsg);
           },
         });
       } catch (err) {
@@ -276,6 +307,8 @@ export function useLicense(
         const errorMsg =
           err instanceof Error ? err.message : "Failed to prepare purchase";
         setError(errorMsg);
+        toast.dismiss(loadingToast);
+        toast.error(errorMsg);
       } finally {
         setIsPurchasing(false);
       }
@@ -292,12 +325,15 @@ export function useLicense(
       if (!account?.address) {
         const errorMsg = "Please connect your wallet first";
         setError(errorMsg);
+        toast.error(errorMsg);
         console.error("[useLicense]", errorMsg);
         return;
       }
 
       setIsRenewing(true);
       setError(null);
+
+      const loadingToast = toast.loading(`Renewing license for ${durationMonths} months...`);
 
       try {
         // Calculate price
@@ -316,19 +352,22 @@ export function useLicense(
 
         // Send transaction
         sendTransaction(transaction, {
-          onSuccess: async (result) => {
+          onSuccess: async () => {
             console.log(
               `[useLicense] License renewed! ${durationMonths} months`
             );
 
             // Refresh status after successful renewal
             await fetchLicenseStatus();
+            toast.dismiss(loadingToast);
           },
           onError: (error) => {
             console.error("[useLicense] Renewal error:", error);
             const errorMsg =
               error instanceof Error ? error.message : "Transaction failed";
             setError(errorMsg);
+            toast.dismiss(loadingToast);
+            toast.error(errorMsg);
           },
         });
       } catch (err) {
@@ -336,6 +375,8 @@ export function useLicense(
         const errorMsg =
           err instanceof Error ? err.message : "Failed to prepare renewal";
         setError(errorMsg);
+        toast.dismiss(loadingToast);
+        toast.error(errorMsg);
       } finally {
         setIsRenewing(false);
       }
@@ -394,6 +435,7 @@ export function useLicense(
     isPurchasing,
     isRenewing,
     isPriceLoading,
+    isTransactionPending,
 
     // Errors
     error,

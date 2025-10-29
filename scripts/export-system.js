@@ -356,10 +356,10 @@ EXPO_PUBLIC_NETWORK_NAME=${addresses.network}
       const envVars = {
         "NEXT_PUBLIC_CHAIN_ID": addresses.chainId.toString(),
         "NEXT_PUBLIC_RPC_URL": "https://pacific-rpc.sepolia-testnet.manta.network/http",
-        "NEXT_PUBLIC_COURSE_FACTORY": addresses.courseFactory,
-        "NEXT_PUBLIC_COURSE_LICENSE": addresses.courseLicense,
-        "NEXT_PUBLIC_PROGRESS_TRACKER": addresses.progressTracker,
-        "NEXT_PUBLIC_CERTIFICATE_MANAGER": addresses.certificateManager,
+        "NEXT_PUBLIC_COURSE_FACTORY_ADDRESS": addresses.courseFactory,
+        "NEXT_PUBLIC_COURSE_LICENSE_ADDRESS": addresses.courseLicense,
+        "NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS": addresses.progressTracker,
+        "NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS": addresses.certificateManager,
       };
 
       // Update environment content

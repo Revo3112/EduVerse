@@ -287,8 +287,7 @@ export async function isAssetReady(assetId: string): Promise<boolean> {
  */
 export async function uploadFromPinataIPFS(
   pinataCID: string,
-  filename: string,
-  pinataGateway: string
+  filename: string
 ): Promise<LivepeerUploadResult> {
   // Use IPFS protocol URL for better compatibility
   const ipfsUrl = `ipfs://${pinataCID}`;
