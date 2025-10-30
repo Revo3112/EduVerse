@@ -27,7 +27,8 @@ export interface BlockchainCertificateCourse {
 }
 
 // Goldsky endpoint configuration
-const GOLDSKY_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT || "";
+export const GOLDSKY_ENDPOINT =
+  process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT || "";
 
 if (!GOLDSKY_ENDPOINT && typeof window !== "undefined") {
   console.warn(
@@ -42,7 +43,7 @@ if (!GOLDSKY_ENDPOINT && typeof window !== "undefined") {
  * @param operationName - Name of operation for logging
  * @returns Parsed JSON response data
  */
-async function fetchGraphQL(
+export async function fetchGraphQL(
   query: string,
   variables: Record<string, unknown>,
   operationName: string

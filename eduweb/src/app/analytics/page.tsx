@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useMemo, useState } from "react";
 import { AnalyticsContainer } from "@/components/PageContainer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,8 +14,11 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { useTransactionHistory } from "@/hooks/useTransactionHistory";
-import { TransactionRecord } from "@/services/network-analytics.service";
+import { useAnalyticsMetrics } from "@/hooks/useAnalytics";
+import {
+  useRecentActivitiesAsTransactions,
+  type BlockchainTransactionEvent,
+} from "@/hooks/useRecentActivities";
 import {
   Activity,
   AlertTriangle,
@@ -41,15 +45,7 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 // ==================== EXACT SMART CONTRACT TYPES ====================
 
@@ -365,72 +361,6 @@ interface CourseCertificatePriceSetEventData {
 
 // ==================== COMPLETE TRANSACTION EVENT ====================
 
-interface BlockchainTransactionEvent {
-  // Transaction metadata
-  id: string;
-  transactionHash: string;
-  blockNumber: number;
-  blockHash: string;
-  transactionIndex: number;
-  logIndex: number;
-  timestamp: number;
-
-  // Gas info
-  gasUsed: string;
-  gasPrice: string;
-  gasCost: string; // gasUsed * gasPrice
-
-  // Transaction info
-  from: string; // Transaction sender
-  to: string; // Contract address
-  value: string; // ETH value sent (usually "0" for most calls)
-
-  // Contract & Event info
-  contractName:
-    | "CourseFactory"
-    | "CourseLicense"
-    | "ProgressTracker"
-    | "CertificateManager";
-  contractAddress: string; // Actual deployed contract address
-  eventName: string; // Exact event name from contract
-  eventSignature: string; // Event signature hash
-
-  // Event-specific data
-  eventData: TransactionEventData;
-
-  // Derived info for analytics
-  transactionType:
-    | "course_created"
-    | "course_updated"
-    | "course_deleted"
-    | "course_unpublished"
-    | "course_republished"
-    | "course_emergency_deactivated"
-    | "section_added"
-    | "section_updated"
-    | "section_deleted"
-    | "section_moved"
-    | "batch_sections_added"
-    | "sections_swapped"
-    | "sections_batch_reordered"
-    | "course_rated"
-    | "rating_updated"
-    | "rating_deleted"
-    | "license_minted"
-    | "license_renewed"
-    | "license_expired"
-    | "revenue_recorded"
-    | "section_started"
-    | "section_completed"
-    | "course_completed"
-    | "progress_reset"
-    | "certificate_minted"
-    | "course_added_to_certificate"
-    | "certificate_updated"
-    | "certificate_revoked"
-    | "certificate_payment_recorded";
-}
-
 // ==================== REAL CONTRACT CONSTANTS ====================
 
 // CRITICAL: These must match deployed contract addresses from deployed-contracts.json
@@ -611,7 +541,8 @@ const getGasUsageByContractAndFunction = (
   return gasUsage[contractName]?.[functionName] || 100000;
 };
 
-const _generateMockBlockchainTransaction = (): BlockchainTransactionEvent => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _generateMockBlockchainTransaction = (): Record<string, unknown> => {
   const now = Date.now();
   const blockNumber = 12500000 + Math.floor(Math.random() * 50000);
 
@@ -824,18 +755,9 @@ const _generateMockBlockchainTransaction = (): BlockchainTransactionEvent => {
       ] || generateRealisticAddress(),
     value: getTransactionValue(selectedType.type),
 
-    contractName:
-      selectedType.contract as BlockchainTransactionEvent["contractName"],
-    contractAddress:
-      DEPLOYED_CONTRACTS[
-        selectedType.contract as keyof typeof DEPLOYED_CONTRACTS
-      ] || generateRealisticAddress(),
-    eventName: selectedType.event,
-    eventSignature: generateRealisticHash().substr(0, 10), // First 4 bytes
-
-    eventData: generateEventData(selectedType.type),
-    transactionType:
-      selectedType.type as BlockchainTransactionEvent["transactionType"],
+    // Note: Removed contractName, contractAddress, eventName, eventSignature, transactionType
+    // These properties don't exist in BlockchainTransactionEvent from Goldsky
+    // This mock function is not used in production
   };
 };
 
@@ -1287,7 +1209,7 @@ const getContractName = (eventType: string): string => {
   return "Unknown";
 };
 
-const TransactionRow = memo<{ transaction: TransactionRecord }>(
+const TransactionRow = memo<{ transaction: BlockchainTransactionEvent }>(
   ({ transaction }) => {
     const formatTimestamp = useCallback((timestamp: number) => {
       return new Date(timestamp * 1000).toLocaleTimeString();
@@ -1300,65 +1222,68 @@ const TransactionRow = memo<{ transaction: TransactionRecord }>(
         .join(" ");
     }, []);
 
-    const getTransactionDetails = useCallback((tx: TransactionRecord) => {
-      // Simplified details since TransactionRecord doesn't have eventData
-      switch (tx.eventType) {
-        case "course_created":
-          return `New course created by ${tx.from.substring(0, 8)}...`;
-        case "course_deleted":
-          return `Course deleted by ${tx.from.substring(0, 8)}...`;
-        case "course_unpublished":
-          return `Course unpublished`;
-        case "course_republished":
-          return `Course republished`;
-        case "course_emergency_deactivated":
-          return `Course emergency deactivated`;
-        case "section_added":
-          return `New section added`;
-        case "section_updated":
-          return `Section updated`;
-        case "section_started":
-          return `Student started section`;
-        case "section_completed":
-          return `Section completed`;
-        case "license_minted":
-          return `License minted - ${(Number(tx.value) / 1e18).toFixed(
-            4
-          )} MANTA`;
-        case "license_renewed":
-          return `License renewed - ${(Number(tx.value) / 1e18).toFixed(
-            4
-          )} MANTA`;
-        case "license_expired":
-          return `License expired`;
-        case "revenue_recorded":
-          return `Revenue recorded - ${(Number(tx.value) / 1e18).toFixed(
-            4
-          )} MANTA`;
-        case "certificate_minted":
-          return `Certificate minted - ${(Number(tx.value) / 1e18).toFixed(
-            4
-          )} MANTA`;
-        case "course_rated":
-          return `Course rated`;
-        case "course_added_to_certificate":
-          return `Course added to certificate - ${(
-            Number(tx.value) / 1e18
-          ).toFixed(4)} MANTA`;
-        case "section_deleted":
-          return `Section deleted`;
-        case "sections_swapped":
-          return `Sections reordered`;
-        case "sections_batch_reordered":
-          return `Batch sections reordered`;
-        case "progress_reset":
-          return `Progress reset`;
-        case "certificate_revoked":
-          return `Certificate revoked`;
-        default:
-          return tx.eventAction || tx.functionName || "Transaction";
-      }
-    }, []);
+    const getTransactionDetails = useCallback(
+      (tx: BlockchainTransactionEvent) => {
+        // Simplified details since TransactionRecord doesn't have eventData
+        switch (tx.eventType) {
+          case "course_created":
+            return `New course created by ${tx.from.substring(0, 8)}...`;
+          case "course_deleted":
+            return `Course deleted by ${tx.from.substring(0, 8)}...`;
+          case "course_unpublished":
+            return `Course unpublished`;
+          case "course_republished":
+            return `Course republished`;
+          case "course_emergency_deactivated":
+            return `Course emergency deactivated`;
+          case "section_added":
+            return `New section added`;
+          case "section_updated":
+            return `Section updated`;
+          case "section_started":
+            return `Student started section`;
+          case "section_completed":
+            return `Section completed`;
+          case "license_minted":
+            return `License minted - ${(Number(tx.value) / 1e18).toFixed(
+              4
+            )} MANTA`;
+          case "license_renewed":
+            return `License renewed - ${(Number(tx.value) / 1e18).toFixed(
+              4
+            )} MANTA`;
+          case "license_expired":
+            return `License expired`;
+          case "revenue_recorded":
+            return `Revenue recorded - ${(Number(tx.value) / 1e18).toFixed(
+              4
+            )} MANTA`;
+          case "certificate_minted":
+            return `Certificate minted - ${(Number(tx.value) / 1e18).toFixed(
+              4
+            )} MANTA`;
+          case "course_rated":
+            return `Course rated`;
+          case "course_added_to_certificate":
+            return `Course added to certificate - ${(
+              Number(tx.value) / 1e18
+            ).toFixed(4)} MANTA`;
+          case "section_deleted":
+            return `Section deleted`;
+          case "sections_swapped":
+            return `Sections reordered`;
+          case "sections_batch_reordered":
+            return `Batch sections reordered`;
+          case "progress_reset":
+            return `Progress reset`;
+          case "certificate_revoked":
+            return `Certificate revoked`;
+          default:
+            return "Transaction";
+        }
+      },
+      []
+    );
 
     return (
       <div className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors">
@@ -1464,244 +1389,90 @@ MetricCard.displayName = "MetricCard";
  * NEXT STEP: Replace mock data dengan actual Web3 event listeners
  */
 export default function AnalyticsPage() {
-  const [_page, _setPage] = useState(1);
-  const { transactions } = useTransactionHistory({
-    pageSize: 50,
-    page: _page,
+  // Fetch real analytics data from Goldsky
+  const {
+    metrics: goldskyMetrics,
+    isLoading: metricsLoading,
+    isError: metricsError,
+    refresh: refreshMetrics,
+  } = useAnalyticsMetrics({
+    fetchOnMount: true,
+    autoRefresh: true,
+    refreshInterval: 30000, // Refresh every 30 seconds
+    debug: false,
   });
-  const [metrics, setMetrics] = useState<EduVerseAnalyticsMetrics>({
-    // Network
-    totalTransactions: 0,
-    totalGasUsed: "0",
-    totalGasCost: "0.000000",
-    averageGasPrice: "0",
-    averageBlockTime: 2.1, // Manta Pacific average
 
-    // Users
-    uniqueAddresses: 0,
-    activeStudents: 0,
-    activeCreators: 0,
-
-    // Courses
-    totalCourses: 0,
-    activeCourses: 0,
-    totalSections: 0,
-    coursesWithRatings: 0,
-    averagePlatformRating: 0,
-
-    // Progress
-    totalSectionsCompleted: 0,
-    totalCoursesCompleted: 0,
-    uniqueStudentsWithProgress: 0,
-
-    // Licensing
-    totalLicensesMinted: 0,
-    totalLicensesRenewed: 0,
-    activeLicenses: 0,
-    totalLicenseRevenue: "0.000000",
-
-    // Certificates
-    totalCertificateHolders: 0,
-    totalCourseAdditions: 0,
-    certificateUpdates: 0,
-    totalCertificateRevenue: "0.000000",
-
-    // Economics
-    totalPlatformRevenue: "0.000000",
-    totalCreatorPayouts: "0.000000",
-    averageCoursePrice: "0.000000",
+  // Fetch recent activities/transactions
+  const {
+    transactions,
+    isLoading: transactionsLoading,
+    refresh: refreshTransactions,
+    hasMore,
+    loadMore,
+  } = useRecentActivitiesAsTransactions({
+    initialLimit: 50,
+    autoRefresh: true,
+    refreshInterval: 15000, // Refresh every 15 seconds
+    debug: false,
   });
 
   const [isLive, setIsLive] = useState(true);
 
-  // Update metrics based on real transactions
-  useEffect(() => {
-    if (!transactions.length) return;
+  // Use goldskyMetrics directly or fallback to default values
+  const metrics: EduVerseAnalyticsMetrics = useMemo(() => {
+    return (
+      goldskyMetrics || {
+        // Network
+        totalTransactions: 0,
+        totalGasUsed: "0",
+        totalGasCost: "0.000000",
+        averageGasPrice: "0",
+        averageBlockTime: 2.1, // Manta Pacific average
 
-    setMetrics((prev) => {
-      const updated = { ...prev };
+        // Users
+        uniqueAddresses: 0,
+        activeStudents: 0,
+        activeCreators: 0,
 
-      // Network metrics from real transactions
-      updated.totalTransactions = transactions.length;
-      updated.totalGasUsed = transactions
-        .reduce((sum, tx) => sum + BigInt(tx.gasUsed), BigInt(0))
-        .toString();
-      updated.totalGasCost = transactions
-        .reduce((sum, tx) => sum + parseFloat(tx.value), 0)
-        .toFixed(9);
-      updated.averageGasPrice = (
-        transactions.reduce((sum, tx) => sum + parseFloat(tx.gasPrice), 0) /
-        transactions.length
-      ).toFixed(1);
+        // Courses
+        totalCourses: 0,
+        activeCourses: 0,
+        totalSections: 0,
+        coursesWithRatings: 0,
+        averagePlatformRating: 0,
 
-      // User engagement - unique addresses from transactions
-      updated.uniqueAddresses = new Set([
-        ...transactions.map((tx) => tx.from),
-        ...transactions.map((tx) => tx.to),
-      ]).size;
+        // Progress
+        totalSectionsCompleted: 0,
+        totalCoursesCompleted: 0,
+        uniqueStudentsWithProgress: 0,
 
-      // Contract-specific updates
-      const _eventCounts = transactions.reduce((counts, tx) => {
-        counts[tx.eventType] = (counts[tx.eventType] || 0) + 1;
-        return counts;
-      }, {} as Record<string, number>);
+        // Licensing
+        totalLicensesMinted: 0,
+        totalLicensesRenewed: 0,
+        activeLicenses: 0,
+        totalLicenseRevenue: "0.000000",
 
-      // Process each transaction to update metrics
-      transactions.forEach((tx) => {
-        switch (tx.eventType) {
-          case "course_created":
-            updated.totalCourses += 1;
-            updated.activeCourses += 1;
-            updated.activeCreators += Math.random() > 0.7 ? 1 : 0;
-            break;
+        // Certificates
+        totalCertificateHolders: 0,
+        totalCourseAdditions: 0,
+        certificateUpdates: 0,
+        totalCertificateRevenue: "0.000000",
 
-          case "course_deleted":
-            updated.totalCourses = Math.max(0, updated.totalCourses - 1);
-            updated.activeCourses = Math.max(0, updated.activeCourses - 1);
-            break;
-
-          case "course_unpublished":
-            updated.activeCourses = Math.max(0, updated.activeCourses - 1);
-            break;
-
-          case "course_republished":
-            updated.activeCourses += 1;
-            break;
-
-          case "section_added":
-            updated.totalSections += 1;
-            break;
-
-          case "section_started":
-            updated.activeStudents += Math.random() > 0.7 ? 1 : 0;
-            break;
-
-          case "batch_sections_added":
-            // Estimate batch size: typically 3-5 sections per batch
-            updated.totalSections += 4;
-            break;
-
-          case "section_completed":
-            updated.totalSectionsCompleted += 1;
-            updated.activeStudents += Math.random() > 0.6 ? 1 : 0;
-            break;
-
-          case "course_completed":
-            updated.totalCoursesCompleted += 1;
-            updated.uniqueStudentsWithProgress += Math.random() > 0.7 ? 1 : 0;
-            break;
-
-          case "license_minted":
-            updated.totalLicensesMinted += 1;
-            updated.activeLicenses += 1;
-            const licenseRevenue = parseFloat(tx.value);
-            const {
-              platformFee: licensePlatformFee,
-              creatorPayout: licenseCreatorPayout,
-            } = calculatePlatformFee(licenseRevenue, "LICENSE"); // 2% platform, 98% creator
-
-            updated.totalLicenseRevenue = (
-              parseFloat(updated.totalLicenseRevenue) + licenseRevenue
-            ).toFixed(6);
-            updated.totalCreatorPayouts = (
-              parseFloat(updated.totalCreatorPayouts) + licenseCreatorPayout
-            ).toFixed(6);
-            updated.totalPlatformRevenue = (
-              parseFloat(updated.totalPlatformRevenue) + licensePlatformFee
-            ).toFixed(6);
-            break;
-
-          case "license_renewed":
-            updated.totalLicensesRenewed += 1;
-            const renewalRevenue = parseFloat(tx.value);
-            const {
-              platformFee: renewalPlatformFee,
-              creatorPayout: renewalCreatorPayout,
-            } = calculatePlatformFee(renewalRevenue, "LICENSE"); // 2% platform, 98% creator
-
-            updated.totalLicenseRevenue = (
-              parseFloat(updated.totalLicenseRevenue) + renewalRevenue
-            ).toFixed(6);
-            updated.totalCreatorPayouts = (
-              parseFloat(updated.totalCreatorPayouts) + renewalCreatorPayout
-            ).toFixed(6);
-            updated.totalPlatformRevenue = (
-              parseFloat(updated.totalPlatformRevenue) + renewalPlatformFee
-            ).toFixed(6);
-            break;
-
-          case "license_expired":
-            updated.activeLicenses = Math.max(0, updated.activeLicenses - 1);
-            break;
-
-          case "revenue_recorded":
-            // Revenue already tracked in license_minted/renewed, this is just event logging
-            break;
-
-          case "certificate_minted":
-            updated.totalCertificateHolders += 1; // One certificate per user
-            const certRevenue = parseFloat(tx.value);
-            const {
-              platformFee: certPlatformFee,
-              creatorPayout: certCreatorPayout,
-            } = calculatePlatformFee(certRevenue, "CERTIFICATE_MINT"); // 10% platform, 90% creator
-
-            updated.totalCertificateRevenue = (
-              parseFloat(updated.totalCertificateRevenue) + certRevenue
-            ).toFixed(6);
-            updated.totalCreatorPayouts = (
-              parseFloat(updated.totalCreatorPayouts) + certCreatorPayout
-            ).toFixed(6);
-            updated.totalPlatformRevenue = (
-              parseFloat(updated.totalPlatformRevenue) + certPlatformFee
-            ).toFixed(6);
-            break;
-
-          case "course_added_to_certificate":
-            updated.totalCourseAdditions += 1;
-            const additionRevenue = parseFloat(tx.value);
-            const {
-              platformFee: additionPlatformFee,
-              creatorPayout: additionCreatorPayout,
-            } = calculatePlatformFee(additionRevenue, "CERTIFICATE_ADD"); // 2% platform, 98% recipient
-
-            updated.totalCertificateRevenue = (
-              parseFloat(updated.totalCertificateRevenue) + additionRevenue
-            ).toFixed(6);
-            updated.totalCreatorPayouts = (
-              parseFloat(updated.totalCreatorPayouts) + additionCreatorPayout
-            ).toFixed(6);
-            updated.totalPlatformRevenue = (
-              parseFloat(updated.totalPlatformRevenue) + additionPlatformFee
-            ).toFixed(6);
-            break;
-
-          case "certificate_updated":
-            updated.certificateUpdates += 1;
-            break;
-
-          case "course_rated":
-            updated.coursesWithRatings += Math.random() > 0.8 ? 1 : 0; // New course getting first rating
-            // Estimate average rating: typical range 3.5-4.5 stars
-            updated.averagePlatformRating = 4.2;
-            break;
-
-          default:
-            // Unknown event type
-            break;
-        }
-      });
-
-      // Calculate derived metrics
-      if (updated.totalLicensesMinted > 0) {
-        updated.averageCoursePrice = (
-          parseFloat(updated.totalLicenseRevenue) / updated.totalLicensesMinted
-        ).toFixed(6);
+        // Economics
+        totalPlatformRevenue: "0.000000",
+        totalCreatorPayouts: "0.000000",
+        averageCoursePrice: "0.000000",
       }
+    );
+  }, [goldskyMetrics]);
 
-      return updated;
-    });
-  }, [transactions]);
+  // Manual refresh function
+  const handleRefresh = async () => {
+    await Promise.all([refreshMetrics(), refreshTransactions()]);
+  };
+
+  // Show loading state
+  const isLoading = metricsLoading || transactionsLoading;
 
   // Computed analytics
   const contractActivity = useMemo(() => {
@@ -1714,15 +1485,18 @@ export default function AnalyticsPage() {
         tx.eventType.includes("rating")
       ) {
         contract = "CourseFactory";
-      } else if (tx.eventType.includes("license")) {
+      } else if (
+        tx.eventType.includes("license") ||
+        tx.eventType.includes("revenue")
+      ) {
         contract = "CourseLicense";
-      } else if (tx.eventType.includes("certificate")) {
-        contract = "CertificateManager";
       } else if (
         tx.eventType.includes("progress") ||
         tx.eventType.includes("completed")
       ) {
         contract = "ProgressTracker";
+      } else if (tx.eventType.includes("certificate")) {
+        contract = "CertificateManager";
       }
       acc[contract] = (acc[contract] || 0) + 1;
       return acc;
@@ -1807,7 +1581,7 @@ export default function AnalyticsPage() {
       acc[contractName].count += 1;
       acc[contractName].transactions.push(tx);
       return acc;
-    }, {} as Record<string, { totalGas: number; count: number; transactions: TransactionRecord[] }>);
+    }, {} as Record<string, { totalGas: number; count: number; transactions: BlockchainTransactionEvent[] }>);
 
     return Object.entries(gasData).map(([contract, data]) => ({
       contract,
