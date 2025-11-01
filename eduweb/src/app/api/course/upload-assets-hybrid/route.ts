@@ -1,21 +1,18 @@
 /**
  * @fileoverview Hybrid Course Asset Upload API Route (OPTION A)
- * @description Uploads course thumbnails to Pinata and videos to Livepeer with IPFS
+ * @description Uploads course thumbnails to Pinata and creates Livepeer upload endpoints
  * @author EduVerse Platform
- * @date 2025-01-18
+ * @date 2025-01-31
  *
  * This API endpoint implements OPTION A (Hybrid Separation):
  * - Thumbnails & Certificates → Pinata IPFS (existing)
  * - Videos → Livepeer with IPFS storage (new)
  *
  * Workflow:
- * 1. Receive thumbnail + video files via FormData
+ * 1. Receive thumbnail + video metadata via FormData
  * 2. Upload thumbnail to Pinata (for course cards, certificates)
- * 3. Upload each video to Livepeer:
- *    a. Upload video file
- *    b. Enable IPFS storage on asset
- *    c. Wait for IPFS CID generation
- * 4. Return CIDs compatible with smart contract format
+ * 3. Create Livepeer assets and return TUS endpoints for client-side upload
+ * 4. Client uploads videos directly to Livepeer using tus-js-client
  *
  * Smart Contract Storage:
  * - thumbnailCID: Pinata IPFS CID (for static images)
@@ -26,79 +23,82 @@
  * - IPFS CID (Qm or bafy prefix) → Pinata video → LegacyVideoPlayer
  */
 
-import { formatFileSize } from '@/lib/pinata';
-import { enableIPFSStorage } from '@/services/livepeer-upload.service';
-import { uploadCourseThumbnail } from '@/services/thumbnail.service';
-import { getVideoSizeRecommendation } from '@/services/video.service';
-import { NextRequest, NextResponse } from 'next/server';
-
-// ============================================================================
-// CONSTANTS
-// ============================================================================
+import { formatFileSize } from "@/lib/pinata";
+import { livepeerClient } from "@/lib/livepeer";
+import { uploadCourseThumbnail } from "@/services/thumbnail.service";
+import { NextRequest, NextResponse } from "next/server";
 
 const MAX_VIDEOS_PER_REQUEST = 20;
-const IPFS_POLLING_INTERVAL = 2000; // 2 seconds
-const IPFS_POLLING_MAX_ATTEMPTS = 60; // 2 minutes total
-
-// ============================================================================
-// REQUEST VALIDATION
-// ============================================================================
 
 interface UploadRequest {
   thumbnail: File;
-  videos: File[];
+  videoMetadata: Array<{
+    filename: string;
+    size: number;
+    type: string;
+    sectionId: string;
+  }>;
   courseId: string;
-  sectionIds: string[];
 }
 
-/**
- * Validates and parses the multipart form data
- */
-async function parseAndValidateRequest(request: NextRequest): Promise<{
-  success: true;
-  data: UploadRequest;
-} | {
-  success: false;
-  error: string;
-  status: number;
-}> {
+async function parseAndValidateRequest(request: NextRequest): Promise<
+  | {
+      success: true;
+      data: UploadRequest;
+    }
+  | {
+      success: false;
+      error: string;
+      status: number;
+    }
+> {
   try {
     const formData = await request.formData();
 
-    const courseId = formData.get('courseId') as string;
+    const courseId = formData.get("courseId") as string;
     if (!courseId) {
       return {
         success: false,
-        error: 'Missing required field: courseId',
+        error: "Missing required field: courseId",
         status: 400,
       };
     }
 
-    const thumbnail = formData.get('thumbnail') as File | null;
+    const thumbnail = formData.get("thumbnail") as File | null;
     if (!thumbnail) {
       return {
         success: false,
-        error: 'Missing required field: thumbnail',
+        error: "Missing required field: thumbnail",
         status: 400,
       };
     }
 
-    const videos = formData.getAll('videos') as File[];
-    const sectionIds = formData.getAll('sectionIds') as string[];
-
-    if (videos.length === 0) {
-      console.warn('[Hybrid Upload] No videos provided - course will have no content');
-    }
-
-    if (videos.length !== sectionIds.length) {
+    const videoMetadataJson = formData.get("videoMetadata") as string | null;
+    if (!videoMetadataJson) {
       return {
         success: false,
-        error: `Mismatch: ${videos.length} videos but ${sectionIds.length} section IDs`,
+        error: "Missing required field: videoMetadata",
         status: 400,
       };
     }
 
-    if (videos.length > MAX_VIDEOS_PER_REQUEST) {
+    const videoMetadata = JSON.parse(videoMetadataJson);
+
+    if (!Array.isArray(videoMetadata)) {
+      return {
+        success: false,
+        error: "videoMetadata must be an array",
+        status: 400,
+      };
+    }
+
+    if (videoMetadata.length === 0) {
+      console.warn(
+        "[Hybrid Upload] No videos provided - course will have no content"
+      );
+    }
+
+    if (videoMetadata.length > MAX_VIDEOS_PER_REQUEST) {
       return {
         success: false,
         error: `Too many videos: maximum ${MAX_VIDEOS_PER_REQUEST} per request`,
@@ -110,75 +110,30 @@ async function parseAndValidateRequest(request: NextRequest): Promise<{
       success: true,
       data: {
         thumbnail,
-        videos,
+        videoMetadata,
         courseId,
-        sectionIds,
       },
     };
   } catch (error) {
-    console.error('[Hybrid Upload] Failed to parse request:', error);
+    console.error("[Hybrid Upload] Failed to parse request:", error);
     return {
       success: false,
-      error: 'Invalid request format',
+      error: "Invalid request format",
       status: 400,
     };
   }
 }
 
-// ============================================================================
-// IPFS POLLING HELPER
-// ============================================================================
-
-/**
- * Polls Livepeer asset until IPFS CID is available
- */
-async function waitForIPFSCID(assetId: string): Promise<string | null> {
-  console.log(`[Hybrid Upload] Polling for IPFS CID (asset: ${assetId})...`);
-
-  for (let i = 0; i < IPFS_POLLING_MAX_ATTEMPTS; i++) {
-    try {
-      // Fetch asset details via API route
-      const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/livepeer/playback/${assetId}`);
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // Check if IPFS CID is available
-        if (data.asset?.storage?.ipfs?.cid) {
-          const ipfsCID = data.asset.storage.ipfs.cid;
-          console.log(`[Hybrid Upload] ✅ IPFS CID available: ${ipfsCID}`);
-          return ipfsCID;
-        }
-      }
-
-      // Wait before next attempt
-      if (i < IPFS_POLLING_MAX_ATTEMPTS - 1) {
-        await new Promise(resolve => setTimeout(resolve, IPFS_POLLING_INTERVAL));
-      }
-    } catch (error) {
-      console.error(`[Hybrid Upload] Polling attempt ${i + 1} failed:`, error);
-    }
-  }
-
-  console.warn(`[Hybrid Upload] ⚠️ IPFS CID not available after ${IPFS_POLLING_MAX_ATTEMPTS} attempts`);
-  return null;
-}
-
-// ============================================================================
-// POST HANDLER
-// ============================================================================
-
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    console.log('[Hybrid Upload] ========================================');
-    console.log('[Hybrid Upload] OPTION A: Pinata Thumbnail + Livepeer Videos');
+    console.log("[Hybrid Upload] ========================================");
+    console.log("[Hybrid Upload] OPTION A: Pinata Thumbnail + Livepeer Videos");
 
-    // Step 1: Parse and validate request
     const validation = await parseAndValidateRequest(request);
     if (!validation.success) {
-      console.error('[Hybrid Upload] Validation failed:', validation.error);
+      console.error("[Hybrid Upload] Validation failed:", validation.error);
       return NextResponse.json(
         {
           success: false,
@@ -188,22 +143,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { thumbnail, videos, courseId, sectionIds } = validation.data;
+    const { thumbnail, videoMetadata, courseId } = validation.data;
 
-    console.log('[Hybrid Upload] Course ID:', courseId);
-    console.log('[Hybrid Upload] Thumbnail:', thumbnail.name, formatFileSize(thumbnail.size));
-    console.log('[Hybrid Upload] Videos:', videos.length);
-    videos.forEach((video, i) => {
-      const recommendation = getVideoSizeRecommendation(video.size);
-      console.log(`[Hybrid Upload]   - Video ${i + 1}:`, video.name, formatFileSize(video.size));
-      if (!recommendation.isOptimal) {
-        console.warn(`[Hybrid Upload]     WARNING: ${recommendation.message}`);
-      }
+    console.log("[Hybrid Upload] Course ID:", courseId);
+    console.log(
+      "[Hybrid Upload] Thumbnail:",
+      thumbnail.name,
+      formatFileSize(thumbnail.size)
+    );
+    console.log("[Hybrid Upload] Videos:", videoMetadata.length);
+    videoMetadata.forEach((video, i) => {
+      console.log(
+        `[Hybrid Upload]   - Video ${i + 1}:`,
+        video.filename,
+        formatFileSize(video.size)
+      );
     });
 
-    // Step 2: Upload thumbnail to Pinata
-    console.log('[Hybrid Upload] ----------------------------------------');
-    console.log('[Hybrid Upload] Uploading thumbnail to Pinata...');
+    console.log("[Hybrid Upload] ----------------------------------------");
+    console.log("[Hybrid Upload] Uploading thumbnail to Pinata...");
 
     const thumbnailResult = await uploadCourseThumbnail(thumbnail, {
       courseId,
@@ -211,7 +169,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!thumbnailResult.success) {
-      console.error('[Hybrid Upload] Thumbnail upload failed:', thumbnailResult.error);
+      console.error(
+        "[Hybrid Upload] Thumbnail upload failed:",
+        thumbnailResult.error
+      );
       return NextResponse.json(
         {
           success: false,
@@ -222,85 +183,81 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[Hybrid Upload] ✅ Thumbnail uploaded to Pinata');
-    console.log('[Hybrid Upload]    CID:', thumbnailResult.data.cid);
+    console.log("[Hybrid Upload] ✅ Thumbnail uploaded to Pinata");
+    console.log("[Hybrid Upload]    CID:", thumbnailResult.data.cid);
 
-    // Step 3: Upload videos to Livepeer with IPFS
-    const videoResults: Array<{
+    const tusEndpoints: Array<{
       sectionId: string;
       filename: string;
-      cid: string; // Livepeer playback ID (will be used as contentCID)
-      ipfsCid: string | null; // Actual IPFS CID (optional, for reference)
-      duration: number;
+      assetId: string;
+      tusEndpoint: string;
+      playbackId: string;
     }> = [];
 
-    if (videos.length > 0) {
-      console.log('[Hybrid Upload] ----------------------------------------');
-      console.log('[Hybrid Upload] Uploading', videos.length, 'videos to Livepeer...');
+    if (videoMetadata.length > 0) {
+      console.log("[Hybrid Upload] ----------------------------------------");
+      console.log(
+        "[Hybrid Upload] Creating",
+        videoMetadata.length,
+        "Livepeer assets..."
+      );
 
-      for (let i = 0; i < videos.length; i++) {
-        const video = videos[i];
-        const sectionId = sectionIds[i];
+      for (let i = 0; i < videoMetadata.length; i++) {
+        const video = videoMetadata[i];
 
-        console.log(`[Hybrid Upload] Video ${i + 1}/${videos.length}: ${video.name}`);
+        console.log(
+          `[Hybrid Upload] Video ${i + 1}/${videoMetadata.length}: ${
+            video.filename
+          }`
+        );
 
         try {
-          // Upload video file to Livepeer via upload API
-          const videoFormData = new FormData();
-          videoFormData.append('file', video);
-          videoFormData.append('name', `${courseId}_${sectionId}_${video.name}`);
+          const videoName = `${courseId}_${video.sectionId}_${video.filename}`;
 
-          const uploadResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/livepeer/upload`, {
-            method: 'POST',
-            body: videoFormData,
+          console.log(`[Hybrid Upload] Creating asset with name: ${videoName}`);
+
+          const createResponse = await livepeerClient.asset.create({
+            name: videoName,
+            staticMp4: true,
+            storage: {
+              ipfs: true,
+            },
           });
 
-          if (!uploadResponse.ok) {
-            const errorData = await uploadResponse.json();
-            throw new Error(errorData.error || 'Upload failed');
+          const createData =
+            (createResponse as Record<string, unknown>).data || createResponse;
+          const dataObj = createData as Record<string, unknown>;
+
+          if (!dataObj || !dataObj.asset || !dataObj.tusEndpoint) {
+            throw new Error("Invalid response from Livepeer asset creation");
           }
 
-          const uploadResult = await uploadResponse.json();
-          const assetId = uploadResult.asset.id;
-          const playbackId = uploadResult.asset.playbackId;
-          const duration = uploadResult.asset.videoSpec?.duration || 0;
+          const assetObj = dataObj.asset as Record<string, unknown>;
+          const assetId = assetObj.id as string;
+          const playbackId = (assetObj.playbackId as string) || "";
+          const tusEndpoint = dataObj.tusEndpoint as string;
 
-          console.log(`[Hybrid Upload] ✅ Video uploaded to Livepeer`);
+          console.log(`[Hybrid Upload] Asset created:`);
           console.log(`[Hybrid Upload]    Asset ID: ${assetId}`);
           console.log(`[Hybrid Upload]    Playback ID: ${playbackId}`);
-          console.log(`[Hybrid Upload]    Duration: ${duration}s`);
+          console.log(`[Hybrid Upload]    TUS Endpoint: ${tusEndpoint}`);
 
-          // Enable IPFS storage
-          console.log(`[Hybrid Upload] Enabling IPFS storage...`);
-          const ipfsResult = await enableIPFSStorage(assetId);
-
-          if (ipfsResult.cid) {
-            console.log(`[Hybrid Upload] ✅ IPFS storage enabled: ${ipfsResult.cid}`);
-          } else {
-            console.warn(`[Hybrid Upload] ⚠️ IPFS CID not immediately available`);
-          }
-
-          // Poll for IPFS CID (optional - don't block if not available)
-          const ipfsCid = await waitForIPFSCID(assetId);
-
-          // Store result with playback ID as primary CID
-          // HybridVideoPlayer will detect this as Livepeer content
-          videoResults.push({
-            sectionId,
-            filename: video.name,
-            cid: playbackId, // ✅ Use playback ID as contentCID for smart contract
-            ipfsCid: ipfsCid || null, // Optional IPFS CID for reference
-            duration: Math.round(duration),
+          tusEndpoints.push({
+            sectionId: video.sectionId,
+            filename: video.filename,
+            assetId,
+            tusEndpoint,
+            playbackId,
           });
 
-          console.log(`[Hybrid Upload] ✅ Video ${i + 1} complete`);
+          console.log(`[Hybrid Upload] ✅ Asset ${i + 1} created`);
         } catch (error) {
-          console.error(`[Hybrid Upload] ❌ Video ${i + 1} failed:`, error);
+          console.error(`[Hybrid Upload] ❌ Asset ${i + 1} failed:`, error);
           return NextResponse.json(
             {
               success: false,
-              error: `Video upload failed: ${video.name}`,
-              details: error instanceof Error ? error.message : 'Unknown error',
+              error: `Asset creation failed: ${video.filename}`,
+              details: error instanceof Error ? error.message : "Unknown error",
             },
             { status: 500 }
           );
@@ -308,26 +265,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Step 4: Return results in compatible format
     const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log('[Hybrid Upload] ========================================');
-    console.log(`[Hybrid Upload] ✅ Upload complete in ${elapsedTime}s`);
-    console.log('[Hybrid Upload] Thumbnail CID:', thumbnailResult.data.cid);
-    console.log('[Hybrid Upload] Video Count:', videoResults.length);
+    console.log("[Hybrid Upload] ========================================");
+    console.log(`[Hybrid Upload] ✅ Setup complete in ${elapsedTime}s`);
+    console.log("[Hybrid Upload] Thumbnail CID:", thumbnailResult.data.cid);
+    console.log("[Hybrid Upload] TUS Endpoints:", tusEndpoints.length);
 
     return NextResponse.json({
       success: true,
-      thumbnailCID: thumbnailResult.data.cid, // Pinata CID for thumbnail
-      videos: videoResults, // Array with playback IDs as CIDs
-      uploadTime: elapsedTime,
+      thumbnailCID: thumbnailResult.data.cid,
+      tusEndpoints,
+      setupTime: elapsedTime,
     });
   } catch (error) {
-    console.error('[Hybrid Upload] Unexpected error:', error);
+    console.error("[Hybrid Upload] Unexpected error:", error);
     return NextResponse.json(
       {
         success: false,
-        error: 'Upload failed',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        error: "Upload failed",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
     );

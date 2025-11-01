@@ -21,6 +21,7 @@ import {
   UserBlacklisted,
   UserUnblacklisted,
   CourseEmergencyDeactivated,
+  CourseFactory,
 } from "../../generated/CourseFactory/CourseFactory";
 import { Course, UserProfile, CourseSection } from "../../generated/schema";
 
@@ -165,21 +166,45 @@ export function handleCourseCreated(event: CourseCreated): void {
   course.creator = event.params.creator;
   course.creatorName = event.params.creatorName;
 
-  // Course Metadata
+  // Course Metadata - Read from contract since event doesn't emit all fields
+  let courseFactoryContract = CourseFactory.bind(event.address);
+  let courseResult = courseFactoryContract.try_getCourse(event.params.courseId);
+
   course.title = event.params.title;
-  course.description = ""; // Not in event - must be set via contract call or update event
-  course.thumbnailCID = ""; // Not in event - must be set via contract call or update event
+
+  if (!courseResult.reverted) {
+    let courseData = courseResult.value;
+    course.description = courseData.description;
+    course.thumbnailCID = courseData.thumbnailCID;
+    course.price = courseData.pricePerMonth;
+    course.priceInEth = weiToEth(courseData.pricePerMonth);
+    course.isActive = courseData.isActive;
+  } else {
+    // Fallback if contract call fails
+    course.description = "";
+    course.thumbnailCID = "";
+    course.price = ZERO_BIGINT;
+    course.priceInEth = ZERO_BIGDECIMAL;
+    course.isActive = true;
+  }
+
   course.category = getCategoryString(event.params.category);
   course.difficulty = getDifficultyString(event.params.difficulty);
 
-  // Pricing & Access - Default values, should be updated via CourseUpdated event
-  course.price = ZERO_BIGINT;
-  course.priceInEth = ZERO_BIGDECIMAL;
-  course.isActive = true;
+  // Get sections count separately
+  let sectionsResult = courseFactoryContract.try_getCourseSections(
+    event.params.courseId,
+  );
+  if (!sectionsResult.reverted) {
+    course.sectionsCount = BigInt.fromI32(sectionsResult.value.length);
+  } else {
+    course.sectionsCount = ZERO_BIGINT;
+  }
+
+  // Status
   course.isDeleted = false;
 
-  // Content Structure
-  course.sectionsCount = ZERO_BIGINT;
+  // Content Structure - sectionsCount set above from contract call
   course.totalDuration = ZERO_BIGINT;
 
   // Rating System
@@ -254,13 +279,30 @@ export function handleCourseUpdated(event: CourseUpdated): void {
  * Soft delete: preserves data but marks as deleted
  */
 export function handleCourseDeleted(event: CourseDeleted): void {
-  let course = Course.load(event.params.courseId.toString());
+  let courseId = event.params.courseId.toString();
+  let course = Course.load(courseId);
 
   if (course != null) {
+    // Mark course as deleted
     course.isDeleted = true;
     course.isActive = false;
     course.updatedAt = event.block.timestamp;
     course.save();
+
+    // CRITICAL: Mark all sections as deleted to match smart contract behavior
+    // Smart contract does: delete courseSections[courseId]
+    // So we must mark all CourseSection entities as isDeleted = true
+    let maxSections = course.sectionsCount.toI32();
+    for (let i = 0; i < maxSections; i++) {
+      let sectionId = BigInt.fromI32(i);
+      let compositeSectionId = courseId + "-" + sectionId.toString();
+      let section = CourseSection.load(compositeSectionId);
+
+      if (section != null && !section.isDeleted) {
+        section.isDeleted = true;
+        section.save();
+      }
+    }
 
     // Update creator stats
     let creator = UserProfile.load(course.creator.toHexString());

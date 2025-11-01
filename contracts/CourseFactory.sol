@@ -1443,6 +1443,9 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         // Soft delete: Mark as inactive (preserve data for enrolled students)
         courses[courseId].isActive = false;
 
+        // Delete all sections for this course
+        delete courseSections[courseId];
+
         // Optional: Clear sensitive data while preserving structure
         // courses[courseId].description = "";
         // courses[courseId].thumbnailCID = "";

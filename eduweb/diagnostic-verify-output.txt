@@ -1,0 +1,59 @@
+
+> eduweb@0.1.0 verify:course
+> tsx scripts/verify-course-creation.ts 1
+
+🔍 COURSE CREATION VERIFICATION
+================================================================================
+Course ID: 1
+Thirdweb Client ID: ✅ Loaded
+================================================================================
+
+📡 Reading course data from contract...
+
+Course Data:
+   Creator: 0xb5075eB5734bc8A6a9bbC1Ca299Fd8C0bd4Cff58
+   ID: 1
+   Title: Next js Introduction
+   Creator Name: Revo
+   Description: Mulai dari dasar hingga siap rilis, kursus ini mengajarkan cara membangun aplikasi web modern dengan Next.js menggunakan App Router secara bertahap dan hands-on.​
+Anda akan mempelajari struktur proyek, routing dan layout, navigasi, styling, serta optimasi font dan gambar untuk performa yang lebih baik.​
+Kemudian mendalami fetching data, rendering statis dan dinamis, streaming, serta partial prerendering untuk pengalaman pengguna yang cepat.​
+Materi juga mencakup pagination dan pencarian, mutasi data (form/aksi), penanganan error, aksesibilitas, metadata/SEO, dan autentikasi.​
+Di akhir kelas, Anda akan memiliki aplikasi dashboard sederhana yang siap deploy dan fondasi kuat untuk melanjutkan ke proyek produksi.​
+   Thumbnail CID: bafybeiafu3kjvbangdj24nevwz4x5jfshyhptoc4qgpntlggisu5iiyod4
+   Category (enum): 0 Programming
+   Difficulty (enum): 0 Beginner
+   Price Per Month (wei): 500000000000000
+   Price Per Month (ETH): 0.0005
+   Active: true
+   Created At: 1761951954 (2025-10-31T23:05:54.000Z)
+
+================================================================================
+VALIDATION CHECKS
+================================================================================
+
+✅ All validation checks passed!
+
+================================================================================
+GOLDSKY EXPECTATIONS
+================================================================================
+
+Goldsky indexer should receive:
+   category: "Programming"
+   difficulty: "Beginner"
+   thumbnailCID: "bafybeiafu3kjvbangdj24nevwz4x5jfshyhptoc4qgpntlggisu5iiyod4"
+   priceInEth: "0.0005"
+
+Frontend will transform to:
+   categoryName: "Programming"
+   difficultyName: "Beginner"
+   category (index): 0
+   difficulty (index): 0
+
+================================================================================
+COURSE SECTIONS
+================================================================================
+Total sections: 0
+⚠️  No sections found
+
+✅ Verification complete!

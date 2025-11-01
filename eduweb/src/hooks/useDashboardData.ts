@@ -2,10 +2,10 @@
 
 import { isGraphQLConfigured } from "@/lib/graphql-client";
 import {
-    getDashboardStats,
-    getUserActivities,
-    getUserCreatedCourses,
-    getUserEnrollments,
+  getDashboardStats,
+  getUserActivities,
+  getUserCreatedCourses,
+  getUserEnrollments,
 } from "@/services/goldsky.service";
 import { useCallback, useEffect, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
@@ -76,7 +76,6 @@ export interface UseDashboardDataReturn {
 // HELPER FUNCTIONS
 // ============================================================================
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getRelativeTime(timestamp: string): string {
   const now = Math.floor(Date.now() / 1000);
   const diff = now - parseInt(timestamp);
@@ -173,8 +172,6 @@ export function useDashboardData(): UseDashboardDataReturn {
             sum + parseFloat(c.totalRevenueEth || "0"),
           0
         ) || 0;
-      const certificatesCount = dashboardData.certificates?.length || 0;
-
       setStats({
         coursesEnrolled: totalEnrollments,
         coursesCreated: dashboardData.courses?.length || 0,
@@ -211,8 +208,8 @@ export function useDashboardData(): UseDashboardDataReturn {
             enrollment.status === "COMPLETED"
               ? "Completed"
               : parseInt(enrollment.completionPercentage) > 0
-                ? "In Progress"
-                : "Not Started",
+              ? "In Progress"
+              : "Not Started",
           thumbnailCID: enrollment.course.thumbnailCID,
           courseId: enrollment.courseId,
           totalSections: parseInt(enrollment.course.sectionsCount),
@@ -291,7 +288,7 @@ export function useDashboardData(): UseDashboardDataReturn {
             transformedActivities.push({
               id: `activity-${activity.id}`,
               type: activity.type.toLowerCase(),
-              title: activity.type.replace(/_/g, ' '),
+              title: activity.type.replace(/_/g, " "),
               description: activity.description,
               timestamp: activity.timestamp,
               relativeTime: getRelativeTime(activity.timestamp),

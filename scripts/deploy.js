@@ -28,7 +28,9 @@ async function verifyContract(address, constructorArgs, contractName) {
     } else {
       console.log(`⚠️ ${contractName} verification failed:`, error.message);
       console.log(`   You can verify manually later with:`);
-      console.log(`   npx hardhat verify --network mantaPacificTestnet ${address}`);
+      console.log(
+        `   npx hardhat verify --network mantaPacificTestnet ${address}`
+      );
       return false;
     }
   }
@@ -43,40 +45,56 @@ async function deployContract(contractName, ...args) {
   await contract.waitForDeployment();
 
   const address = await contract.getAddress();
-  console.log(`✅ ${contractName} deployed successfully to: ${address}`);
+  const deployTx = contract.deploymentTransaction();
+  const receipt = await deployTx.wait();
+  const blockNumber = receipt.blockNumber;
 
-  return contract;
+  console.log(`✅ ${contractName} deployed successfully to: ${address}`);
+  console.log(`📦 Deployment block: ${blockNumber}`);
+
+  return { contract, blockNumber };
 }
 
 async function main() {
-  console.log("🚀 Starting EduVerse Platform Deployment to Manta Pacific Testnet...");
+  console.log(
+    "🚀 Starting EduVerse Platform Deployment to Manta Pacific Testnet..."
+  );
 
   const [deployer] = await ethers.getSigners();
   console.log(`📝 Deploying with account: ${deployer.address}`);
-  console.log(`💰 Account balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
-  console.log(`🌐 Network: ${network.name} (Chain ID: ${network.config.chainId})`);
+  console.log(
+    `💰 Account balance: ${ethers.formatEther(
+      await ethers.provider.getBalance(deployer.address)
+    )} ETH`
+  );
+  console.log(
+    `🌐 Network: ${network.name} (Chain ID: ${network.config.chainId})`
+  );
 
   try {
     // Deploy all contracts
-    const courseFactory = await deployContract("CourseFactory");
+    const { contract: courseFactory, blockNumber: courseFactoryBlock } =
+      await deployContract("CourseFactory");
     await verifyContract(courseFactory.target, [], "CourseFactory");
 
-    const courseLicense = await deployContract(
-      "CourseLicense",
-      courseFactory.target,
-      deployer.address
-    );
+    const { contract: courseLicense, blockNumber: courseLicenseBlock } =
+      await deployContract(
+        "CourseLicense",
+        courseFactory.target,
+        deployer.address
+      );
     await verifyContract(
       courseLicense.target,
       [courseFactory.target, deployer.address],
       "CourseLicense"
     );
 
-    const progressTracker = await deployContract(
-      "ProgressTracker",
-      courseFactory.target,
-      courseLicense.target
-    );
+    const { contract: progressTracker, blockNumber: progressTrackerBlock } =
+      await deployContract(
+        "ProgressTracker",
+        courseFactory.target,
+        courseLicense.target
+      );
     await verifyContract(
       progressTracker.target,
       [courseFactory.target, courseLicense.target],
@@ -94,7 +112,10 @@ async function main() {
 
     const NEXT_PUBLIC_APP_URL = process.env.NEXT_PUBLIC_APP_URL;
     const CERTIFICATE_BASE_ROUTE = process.env.CERTIFICATE_BASE_ROUTE;
-    const PLATFORM_NAME = process.env.PLATFORM_NAME || process.env.NEXT_PUBLIC_PLATFORM_NAME || "EduVerse Academy";
+    const PLATFORM_NAME =
+      process.env.PLATFORM_NAME ||
+      process.env.NEXT_PUBLIC_PLATFORM_NAME ||
+      "EduVerse Academy";
 
     // Construct base route with proper fallback chain
     let baseRoute;
@@ -112,24 +133,35 @@ async function main() {
     console.log(`   Platform Name: ${PLATFORM_NAME}`);
 
     if (!CERTIFICATE_BASE_ROUTE && !NEXT_PUBLIC_APP_URL) {
-      console.log(`\n⚠️  WARNING: Using localhost BASE_ROUTE for development only!`);
-      console.log(`   For production deployment, set one of these environment variables:`);
-      console.log(`   - CERTIFICATE_BASE_ROUTE=https://your-domain.com/certificates`);
+      console.log(
+        `\n⚠️  WARNING: Using localhost BASE_ROUTE for development only!`
+      );
+      console.log(
+        `   For production deployment, set one of these environment variables:`
+      );
+      console.log(
+        `   - CERTIFICATE_BASE_ROUTE=https://your-domain.com/certificates`
+      );
       console.log(`   - NEXT_PUBLIC_APP_URL=https://your-domain.com`);
       console.log(`\n   QR codes will be generated with this BASE_ROUTE!`);
-      console.log(`   Changing domains later requires calling updateDefaultBaseRoute() on contract.`);
+      console.log(
+        `   Changing domains later requires calling updateDefaultBaseRoute() on contract.`
+      );
     } else {
       console.log(`   ✅ Using environment-configured BASE_ROUTE`);
     }
 
-    const certificateManager = await deployContract(
+    const {
+      contract: certificateManager,
+      blockNumber: certificateManagerBlock,
+    } = await deployContract(
       "CertificateManager",
       courseFactory.target,
       progressTracker.target,
       courseLicense.target,
       deployer.address, // platformWallet
-      baseRoute,        // ✅ Dynamic base route (updatable via updateDefaultBaseRoute)
-      PLATFORM_NAME     // ✅ Platform name (updatable via setDefaultPlatformName)
+      baseRoute, // ✅ Dynamic base route (updatable via updateDefaultBaseRoute)
+      PLATFORM_NAME // ✅ Platform name (updatable via setDefaultPlatformName)
     );
     await verifyContract(
       certificateManager.target,
@@ -139,7 +171,7 @@ async function main() {
         courseLicense.target,
         deployer.address,
         baseRoute,
-        PLATFORM_NAME
+        PLATFORM_NAME,
       ],
       "CertificateManager"
     );
@@ -159,19 +191,27 @@ async function main() {
 
       // Set ProgressTracker address in CourseFactory
       console.log(`   Setting ProgressTracker in CourseFactory...`);
-      const tx2 = await courseFactory.setProgressTracker(progressTracker.target);
+      const tx2 = await courseFactory.setProgressTracker(
+        progressTracker.target
+      );
       await tx2.wait();
       console.log(`   ✅ ProgressTracker configured`);
 
       console.log(`\n✅ Post-deployment configuration completed successfully!`);
     } catch (configError) {
       console.error(`\n❌ Post-deployment configuration failed:`, configError);
-      console.error(`   You MUST manually configure these before system is operational:`);
-      console.error(`   1. courseFactory.setCourseLicense(${courseLicense.target})`);
-      console.error(`   2. courseFactory.setProgressTracker(${progressTracker.target})`);
+      console.error(
+        `   You MUST manually configure these before system is operational:`
+      );
+      console.error(
+        `   1. courseFactory.setCourseLicense(${courseLicense.target})`
+      );
+      console.error(
+        `   2. courseFactory.setProgressTracker(${progressTracker.target})`
+      );
     }
 
-    // Save contract addresses
+    // Save contract addresses with block numbers
     const addresses = {
       network: network.name,
       chainId: network.config.chainId,
@@ -180,6 +220,10 @@ async function main() {
       courseLicense: courseLicense.target,
       progressTracker: progressTracker.target,
       certificateManager: certificateManager.target,
+      courseFactoryBlock: courseFactoryBlock,
+      courseLicenseBlock: courseLicenseBlock,
+      progressTrackerBlock: progressTrackerBlock,
+      certificateManagerBlock: certificateManagerBlock,
       deployDate: new Date().toISOString(),
     };
 
@@ -189,7 +233,10 @@ async function main() {
       fs.mkdirSync(deployedContractsDir, { recursive: true });
     }
 
-    fs.writeFileSync(PATHS.deployedContracts, JSON.stringify(addresses, null, 2));
+    fs.writeFileSync(
+      PATHS.deployedContracts,
+      JSON.stringify(addresses, null, 2)
+    );
     console.log(`\n💾 Contract addresses saved to ${PATHS.deployedContracts}`);
 
     // Auto-export ABIs and update environments using unified system
@@ -198,16 +245,30 @@ async function main() {
 
     console.log("\n🎉 Complete deployment and setup finished successfully!");
     console.log("\n📋 Deployment Summary:");
-    console.log(`  Network: ${addresses.network} (Chain ID: ${addresses.chainId})`);
+    console.log(
+      `  Network: ${addresses.network} (Chain ID: ${addresses.chainId})`
+    );
     console.log(`  Deployer: ${addresses.deployer}`);
     console.log(`\n📝 Contract Addresses:`);
-    console.log(`  CourseFactory: ${addresses.courseFactory}`);
-    console.log(`  CourseLicense: ${addresses.courseLicense}`);
-    console.log(`  ProgressTracker: ${addresses.progressTracker}`);
+    console.log(`  CourseFactory:      ${addresses.courseFactory}`);
+    console.log(`  CourseLicense:      ${addresses.courseLicense}`);
+    console.log(`  ProgressTracker:    ${addresses.progressTracker}`);
     console.log(`  CertificateManager: ${addresses.certificateManager}`);
+    console.log(`\n🏁 Deployment Blocks:`);
+    console.log(`  CourseFactory:      ${addresses.courseFactoryBlock}`);
+    console.log(`  CourseLicense:      ${addresses.courseLicenseBlock}`);
+    console.log(`  ProgressTracker:    ${addresses.progressTrackerBlock}`);
+    console.log(`  CertificateManager: ${addresses.certificateManagerBlock}`);
     console.log("\n✅ All contracts deployed, verified, and ABIs exported!");
     console.log("✅ Environment files updated for mobile and frontend!");
-
+    console.log("\n📋 Next Steps:");
+    console.log("  1. Run: node scripts/update-indexer-config.js");
+    console.log(
+      "  2. Build indexer: cd goldsky-indexer/subgraph-custom && npm run codegen && npm run build"
+    );
+    console.log(
+      "  3. Deploy indexer: goldsky subgraph deploy eduverse-manta-pacific-sepolia/1.4.0 --path ."
+    );
   } catch (error) {
     console.error("\n❌ Deployment failed:", error);
     if (error.code) console.error(`Error code: ${error.code}`);

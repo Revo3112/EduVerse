@@ -210,12 +210,15 @@ export async function getNetworkAnalytics(): Promise<NetworkAnalytics> {
  * TODO: Implement actual GraphQL query to TransactionRecord entity
  * Currently returns empty data as TransactionRecord entity needs proper event handlers
  */
-export async function getTransactionHistory(_params: {
-  first: number;
-  skip: number;
-  orderBy: string;
-  orderDirection: string;
-}): Promise<TransactionHistoryResponse> {
+export async function getTransactionHistory(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _params: {
+    first: number;
+    skip: number;
+    orderBy: string;
+    orderDirection: string;
+  }
+): Promise<TransactionHistoryResponse> {
   // Stub implementation - return empty data
   // In future, this should query the TransactionRecord entity from the subgraph
   console.warn(

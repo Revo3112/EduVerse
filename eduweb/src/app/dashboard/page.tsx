@@ -208,7 +208,7 @@ export default function DashboardPage() {
               <p className="text-muted-foreground max-w-md mb-4">{error}</p>
               <p className="text-sm text-muted-foreground">
                 Make sure the Goldsky subgraph is deployed and
-                NEXT_PUBLIC_GOLDSKY_ENDPOINT is configured.
+                NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT is configured.
               </p>
             </div>
           </CardContent>

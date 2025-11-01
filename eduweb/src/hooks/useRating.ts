@@ -1,246 +1,318 @@
 /**
  * Web3 hooks for EduVerse course rating system
  * Handles interaction with CourseFactory smart contract for rating functionality
+ *
+ * ✅ INTEGRATED WITH:
+ * - Thirdweb SDK for contract interactions
+ * - Goldsky GraphQL for read-optimized rating data
+ * - CourseFactory contract on Manta Pacific Sepolia
  */
 
-import { CourseRatingData, RatingError, contractRatingToDisplay, getRatingErrorMessage } from '@/lib/rating-utils';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  CourseRatingData,
+  RatingError,
+  contractRatingToDisplay,
+  displayRatingToContract,
+  getRatingErrorMessage,
+  getRemainingCooldown,
+} from "@/lib/rating-utils";
+import { useCallback, useEffect, useState } from "react";
+import { useReadContract } from "thirdweb/react";
+import { prepareContractCall } from "thirdweb";
+import { useSendTransaction } from "thirdweb/react";
+import { useActiveAccount } from "thirdweb/react";
+import { courseFactory } from "@/lib/contracts";
+import toast from "react-hot-toast";
 
-// Contract addresses and ABI - TODO: Import when Web3 setup is complete
-// import CourseFactoryABI from '@/abis/CourseFactory.json';
-// import contractAddresses from '@/abis/contract-addresses.json';
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
 
-// For now, we'll use mock data for the hooks since thirdweb setup isn't complete
-// This provides the interface structure for when Web3 integration is added
+interface GetCourseRatingResult {
+  totalRatings: bigint;
+  averageRating: bigint;
+  ratingSum: bigint;
+}
+
+// ============================================================================
+// HOOK: useCourseRating
+// ============================================================================
 
 /**
  * Hook to fetch course rating data from the smart contract
  * @param courseId - The course ID to fetch rating for
  * @returns Course rating data and loading state
+ *
+ * NOTE: For browse/list views, prefer using Goldsky data (CourseBrowseData.averageRating)
+ * This hook is for detailed views or when contract data is explicitly needed
  */
 export function useCourseRating(courseId: bigint | undefined) {
   const [data, setData] = useState<CourseRatingData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchRating = useCallback(async () => {
-    if (!courseId) return;
+  // Read course rating from contract
+  const {
+    data: contractData,
+    isLoading,
+    isError,
+    error: contractError,
+    refetch,
+  } = useReadContract({
+    contract: courseFactory,
+    method:
+      "function getCourseRating(uint256 courseId) view returns (uint256 totalRatings, uint256 averageRating, uint256 ratingSum)",
+    params: [courseId ?? BigInt(0)] as const,
+  });
 
-    setIsLoading(true);
-    setError(null);
+  useEffect(() => {
+    if (isError) {
+      const errorMessage = getRatingErrorMessage(
+        contractError?.message || "Failed to fetch course rating"
+      );
+      setError(errorMessage);
+      setData(null);
+      return;
+    }
 
-    try {
-      // TODO: Replace with actual thirdweb contract call
-      // const contract = getContract({
-      //   client: thirdwebClient,
-      //   chain: mantaPacific,
-      //   address: contractAddresses.addresses.courseFactory,
-      //   abi: CourseFactoryABI,
-      // });
-      //
-      // const result = await readContract({
-      //   contract,
-      //   method: "getCourseRating",
-      //   params: [courseId]
-      // });
-
-      // Mock data for now - matches contract return structure
-      const mockResult = {
-        totalRatings: Math.floor(Math.random() * 100) + 1,
-        averageRating: Math.floor(Math.random() * 40000) + 10000, // 1.0 to 5.0 in contract scale
-        ratingSum: 0, // This would be calculated
-      };
+    if (contractData && courseId !== undefined) {
+      const result = contractData as unknown as GetCourseRatingResult;
 
       // Convert contract scale to display scale
       const ratingData: CourseRatingData = {
-        totalRatings: mockResult.totalRatings,
-        averageRating: contractRatingToDisplay(mockResult.averageRating),
-        ratingSum: mockResult.ratingSum,
-        averageRatingRaw: mockResult.averageRating,
+        totalRatings: Number(result.totalRatings),
+        averageRating: contractRatingToDisplay(Number(result.averageRating)),
+        ratingSum: Number(result.ratingSum),
+        averageRatingRaw: Number(result.averageRating),
       };
 
       setData(ratingData);
-    } catch (err) {
-      const errorMessage = getRatingErrorMessage(err as string);
-      setError(errorMessage);
-      console.error('Error fetching course rating:', err);
-    } finally {
-      setIsLoading(false);
+      setError(null);
     }
-  }, [courseId]);
-
-  useEffect(() => {
-    fetchRating();
-  }, [fetchRating]);
+  }, [contractData, isError, contractError, courseId]);
 
   return {
     data,
     isLoading,
     error,
-    refetch: fetchRating,
+    refetch,
   };
 }
+
+// ============================================================================
+// HOOK: useUserRating
+// ============================================================================
 
 /**
  * Hook to fetch user's rating for a specific course
  * @param courseId - The course ID
- * @param userAddress - The user's wallet address
+ * @param userAddress - The user's wallet address (optional, uses active account if not provided)
  * @returns User's rating and loading state
  */
-export function useUserRating(courseId: bigint | undefined, userAddress: string | undefined) {
+export function useUserRating(
+  courseId: bigint | undefined,
+  userAddress?: string
+) {
+  const activeAccount = useActiveAccount();
+  const effectiveAddress = userAddress || activeAccount?.address;
+
   const [rating, setRating] = useState<number>(0);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchUserRating = useCallback(async () => {
-    if (!courseId || !userAddress) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // TODO: Replace with actual thirdweb contract call
-      // const contract = getContract({
-      //   client: thirdwebClient,
-      //   chain: mantaPacific,
-      //   address: contractAddresses.addresses.courseFactory,
-      //   abi: CourseFactoryABI,
-      // });
-      //
-      // const result = await readContract({
-      //   contract,
-      //   method: "getUserRating",
-      //   params: [courseId, userAddress]
-      // });
-
-      // Mock data for now
-      const mockRating = Math.floor(Math.random() * 5) + 1; // 1-5
-      setRating(mockRating);
-    } catch (err) {
-      const errorMessage = getRatingErrorMessage(err as string);
-      setError(errorMessage);
-      console.error('Error fetching user rating:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [courseId, userAddress]);
+  // Read user rating from contract
+  const {
+    data: contractRating,
+    isLoading,
+    isError,
+    error: contractError,
+    refetch,
+  } = useReadContract({
+    contract: courseFactory,
+    method:
+      "function getUserRating(uint256 courseId, address user) view returns (uint256 rating)",
+    params: [
+      courseId ?? BigInt(0),
+      effectiveAddress ?? "0x0000000000000000000000000000000000000000",
+    ] as const,
+  });
 
   useEffect(() => {
-    fetchUserRating();
-  }, [fetchUserRating]);
+    if (isError) {
+      const errorMessage = getRatingErrorMessage(
+        contractError?.message || "Failed to fetch user rating"
+      );
+      setError(errorMessage);
+      setRating(0);
+      return;
+    }
+
+    if (
+      contractRating !== undefined &&
+      courseId !== undefined &&
+      effectiveAddress
+    ) {
+      // Contract returns 1-5 for user rating (not scaled)
+      setRating(Number(contractRating));
+      setError(null);
+    }
+  }, [contractRating, isError, contractError, courseId, effectiveAddress]);
 
   return {
     rating,
     isLoading,
     error,
-    refetch: fetchUserRating,
+    refetch,
   };
 }
+
+// ============================================================================
+// HOOK: useSubmitRating
+// ============================================================================
 
 /**
  * Hook to submit a rating for a course
  * @returns Functions to submit and delete ratings
  */
 export function useSubmitRating() {
+  const { mutate: sendTransaction, isPending } = useSendTransaction();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeAccount = useActiveAccount();
 
-  const submitRating = useCallback(async (courseId: bigint, rating: number) => {
-    setIsSubmitting(true);
-    setError(null);
+  const submitRating = useCallback(
+    async (
+      courseId: bigint,
+      rating: number
+    ): Promise<{ success: boolean; transactionHash?: string }> => {
+      if (!activeAccount) {
+        const errorMsg = "Please connect your wallet to rate this course";
+        setError(errorMsg);
+        toast.error(errorMsg);
+        throw new Error(errorMsg);
+      }
 
-    try {
-      // TODO: Replace with actual thirdweb contract call
-      // const contract = getContract({
-      //   client: thirdwebClient,
-      //   chain: mantaPacific,
-      //   address: contractAddresses.addresses.courseFactory,
-      //   abi: CourseFactoryABI,
-      // });
-      //
-      // const transaction = prepareContractCall({
-      //   contract,
-      //   method: "rateCourse",
-      //   params: [courseId, rating]
-      // });
-      //
-      // const result = await sendTransaction({
-      //   transaction,
-      //   account: activeAccount
-      // });
+      // Validate rating value (1-5)
+      if (rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+        const errorMsg = RatingError.INVALID_RATING;
+        setError(errorMsg);
+        toast.error(errorMsg);
+        throw new Error(errorMsg);
+      }
 
-      // Mock success for now
-      console.log(`Mock: Submitting rating ${rating} for course ${courseId}`);
+      setIsSubmitting(true);
+      setError(null);
 
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      return new Promise((resolve, reject) => {
+        try {
+          const contractRating = displayRatingToContract(rating);
 
-      return { success: true, transactionHash: '0x...' };
-    } catch (err) {
-      const errorMessage = getRatingErrorMessage(err as string);
-      setError(errorMessage);
-      console.error('Error submitting rating:', err);
-      throw new Error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, []);
+          const transaction = prepareContractCall({
+            contract: courseFactory,
+            method: "function rateCourse(uint256 courseId, uint256 rating)",
+            params: [courseId, BigInt(contractRating)],
+          });
 
-  const deleteRating = useCallback(async (courseId: bigint) => {
-    setIsDeleting(true);
-    setError(null);
+          sendTransaction(transaction, {
+            onSuccess: (result) => {
+              setIsSubmitting(false);
+              toast.success(`Rating submitted: ${rating} stars!`);
+              resolve({
+                success: true,
+                transactionHash: result.transactionHash,
+              });
+            },
+            onError: (err) => {
+              setIsSubmitting(false);
+              const errorMessage = getRatingErrorMessage(err.message);
+              setError(errorMessage);
+              toast.error(errorMessage);
+              reject(new Error(errorMessage));
+            },
+          });
+        } catch (err) {
+          setIsSubmitting(false);
+          const errorMessage = getRatingErrorMessage(
+            (err as Error).message || "Failed to submit rating"
+          );
+          setError(errorMessage);
+          toast.error(errorMessage);
+          reject(new Error(errorMessage));
+        }
+      });
+    },
+    [activeAccount, sendTransaction]
+  );
 
-    try {
-      // TODO: Replace with actual thirdweb contract call
-      // const contract = getContract({
-      //   client: thirdwebClient,
-      //   chain: mantaPacific,
-      //   address: contractAddresses.addresses.courseFactory,
-      //   abi: CourseFactoryABI,
-      // });
-      //
-      // const transaction = prepareContractCall({
-      //   contract,
-      //   method: "deleteMyRating",
-      //   params: [courseId]
-      // });
-      //
-      // const result = await sendTransaction({
-      //   transaction,
-      //   account: activeAccount
-      // });
+  const deleteRating = useCallback(
+    async (
+      courseId: bigint
+    ): Promise<{ success: boolean; transactionHash?: string }> => {
+      if (!activeAccount) {
+        const errorMsg = "Please connect your wallet to delete rating";
+        setError(errorMsg);
+        toast.error(errorMsg);
+        throw new Error(errorMsg);
+      }
 
-      // Mock success for now
-      console.log(`Mock: Deleting rating for course ${courseId}`);
+      setIsDeleting(true);
+      setError(null);
 
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      return new Promise((resolve, reject) => {
+        try {
+          const transaction = prepareContractCall({
+            contract: courseFactory,
+            method: "function deleteMyRating(uint256 courseId)",
+            params: [courseId],
+          });
 
-      return { success: true, transactionHash: '0x...' };
-    } catch (err) {
-      const errorMessage = getRatingErrorMessage(err as string);
-      setError(errorMessage);
-      console.error('Error deleting rating:', err);
-      throw new Error(errorMessage);
-    } finally {
-      setIsDeleting(false);
-    }
-  }, []);
+          sendTransaction(transaction, {
+            onSuccess: (result) => {
+              setIsDeleting(false);
+              toast.success("Rating deleted successfully");
+              resolve({
+                success: true,
+                transactionHash: result.transactionHash,
+              });
+            },
+            onError: (err) => {
+              setIsDeleting(false);
+              const errorMessage = getRatingErrorMessage(err.message);
+              setError(errorMessage);
+              toast.error(errorMessage);
+              reject(new Error(errorMessage));
+            },
+          });
+        } catch (err) {
+          setIsDeleting(false);
+          const errorMessage = getRatingErrorMessage(
+            (err as Error).message || "Failed to delete rating"
+          );
+          setError(errorMessage);
+          toast.error(errorMessage);
+          reject(new Error(errorMessage));
+        }
+      });
+    },
+    [activeAccount, sendTransaction]
+  );
 
   return {
     submitRating,
     deleteRating,
-    isSubmitting,
-    isDeleting,
+    isSubmitting: isSubmitting || isPending,
+    isDeleting: isDeleting || isPending,
     error,
   };
 }
 
+// ============================================================================
+// HOOK: useCanRate
+// ============================================================================
+
 /**
  * Hook to check if user can rate a course
  * @param courseId - The course ID
- * @param userAddress - The user's wallet address
+ * @param userAddress - The user's wallet address (optional)
  * @param creatorAddress - The course creator's address
  * @returns Whether user can rate and reason if they can't
  */
@@ -249,99 +321,178 @@ export function useCanRate(
   userAddress: string | undefined,
   creatorAddress: string | undefined
 ) {
-  const [canRate, setCanRate] = useState(true);
+  const activeAccount = useActiveAccount();
+  const effectiveAddress = userAddress || activeAccount?.address;
+
+  const [canRate, setCanRate] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
 
+  // Check if user is blacklisted
+  const { data: isBlacklisted, isLoading: isLoadingBlacklist } =
+    useReadContract({
+      contract: courseFactory,
+      method: "function userBlacklisted(address) view returns (bool)",
+      params: [
+        effectiveAddress ?? "0x0000000000000000000000000000000000000000",
+      ] as const,
+    });
+
+  // Check if ratings are disabled for this course
+  const { data: ratingsDisabled, isLoading: isLoadingRatingsStatus } =
+    useReadContract({
+      contract: courseFactory,
+      method: "function ratingsDisabled(uint256) view returns (bool)",
+      params: [courseId ?? BigInt(0)] as const,
+    });
+
   useEffect(() => {
-    if (!courseId || !userAddress || !creatorAddress) {
+    // Wait for all checks to complete
+    if (isLoadingBlacklist || isLoadingRatingsStatus) {
+      return;
+    }
+
+    // Check wallet connection
+    if (!effectiveAddress) {
       setCanRate(false);
-      setReason('Missing required information');
+      setReason("Please connect your wallet to rate");
+      return;
+    }
+
+    // Check if course ID is valid
+    if (!courseId || !creatorAddress) {
+      setCanRate(false);
+      setReason("Missing required information");
       return;
     }
 
     // Check if user is the course creator
-    if (userAddress.toLowerCase() === creatorAddress.toLowerCase()) {
+    if (effectiveAddress.toLowerCase() === creatorAddress.toLowerCase()) {
       setCanRate(false);
       setReason(RatingError.USER_IS_CREATOR);
       return;
     }
 
-    // TODO: Add additional checks when Web3 integration is complete
-    // - Check if user is blacklisted (call contract.userBlacklisted)
-    // - Check if ratings are disabled for course (call contract.ratingsDisabled)
-    // - Check cooldown period (call contract.lastRatingTime)
+    // Check if user is blacklisted
+    if (isBlacklisted) {
+      setCanRate(false);
+      setReason(RatingError.USER_BLACKLISTED);
+      return;
+    }
 
+    // Check if ratings are disabled for this course
+    if (ratingsDisabled) {
+      setCanRate(false);
+      setReason(RatingError.RATINGS_DISABLED);
+      return;
+    }
+
+    // All checks passed
     setCanRate(true);
     setReason(null);
-  }, [courseId, userAddress, creatorAddress]);
+  }, [
+    courseId,
+    effectiveAddress,
+    creatorAddress,
+    isBlacklisted,
+    ratingsDisabled,
+    isLoadingBlacklist,
+    isLoadingRatingsStatus,
+  ]);
 
   return {
     canRate,
     reason,
+    isLoading: isLoadingBlacklist || isLoadingRatingsStatus,
   };
 }
+
+// ============================================================================
+// HOOK: useRatingCooldown
+// ============================================================================
 
 /**
  * Hook to check rating cooldown status
  * @param courseId - The course ID
- * @param userAddress - The user's wallet address
+ * @param userAddress - The user's wallet address (optional)
  * @returns Cooldown information
  */
 export function useRatingCooldown(
   courseId: bigint | undefined,
-  userAddress: string | undefined
+  userAddress?: string
 ) {
+  const activeAccount = useActiveAccount();
+  const effectiveAddress = userAddress || activeAccount?.address;
+
   const [isInCooldown, setIsInCooldown] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const checkCooldown = useCallback(async () => {
-    if (!courseId || !userAddress) return;
+  // Read cooldown constant
+  const { data: cooldownPeriod } = useReadContract({
+    contract: courseFactory,
+    method: "function RATING_COOLDOWN() view returns (uint256)",
+    params: [],
+  });
 
-    setIsLoading(true);
-
-    try {
-      // TODO: Replace with actual thirdweb contract call
-      // const contract = getContract({
-      //   client: thirdwebClient,
-      //   chain: mantaPacific,
-      //   address: contractAddresses.addresses.courseFactory,
-      //   abi: CourseFactoryABI,
-      // });
-      //
-      // const lastRatingTime = await readContract({
-      //   contract,
-      //   method: "lastRatingTime",
-      //   params: [userAddress, courseId]
-      // });
-      //
-      // const COOLDOWN_PERIOD = 86400; // 24 hours in seconds
-      // const now = Math.floor(Date.now() / 1000);
-      // const remaining = (lastRatingTime + COOLDOWN_PERIOD) - now;
-
-      // Mock data for now - simulate no cooldown
-      const remaining = 0;
-
-      setIsInCooldown(remaining > 0);
-      setRemainingSeconds(remaining > 0 ? remaining : 0);
-    } catch (err) {
-      console.error('Error checking cooldown:', err);
-      // On error, assume no cooldown (contract will validate anyway)
-      setIsInCooldown(false);
-      setRemainingSeconds(0);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [courseId, userAddress]);
+  // Read last rating time for this user and course
+  const {
+    data: lastRatingTime,
+    isLoading,
+    refetch,
+  } = useReadContract({
+    contract: courseFactory,
+    method: "function lastRatingTime(address, uint256) view returns (uint256)",
+    params: [
+      effectiveAddress ?? "0x0000000000000000000000000000000000000000",
+      courseId ?? BigInt(0),
+    ] as const,
+  });
 
   useEffect(() => {
-    checkCooldown();
-  }, [checkCooldown]);
+    if (
+      lastRatingTime === undefined ||
+      cooldownPeriod === undefined ||
+      !effectiveAddress ||
+      courseId === undefined
+    ) {
+      setIsInCooldown(false);
+      setRemainingSeconds(0);
+      return;
+    }
+
+    const lastTime = Number(lastRatingTime);
+    const cooldown = Number(cooldownPeriod);
+
+    // Calculate remaining cooldown
+    const remaining = getRemainingCooldown(lastTime, cooldown);
+
+    setIsInCooldown(remaining > 0);
+    setRemainingSeconds(remaining);
+
+    // Set up interval to update remaining time
+    if (remaining > 0) {
+      const interval = setInterval(() => {
+        const newRemaining = getRemainingCooldown(lastTime, cooldown);
+        if (newRemaining <= 0) {
+          setIsInCooldown(false);
+          setRemainingSeconds(0);
+          clearInterval(interval);
+        } else {
+          setRemainingSeconds(newRemaining);
+        }
+      }, 1000); // Update every second
+
+      return () => clearInterval(interval);
+    }
+  }, [lastRatingTime, cooldownPeriod, courseId, effectiveAddress]);
 
   return {
     isInCooldown,
     remainingSeconds,
     isLoading,
-    refetch: checkCooldown,
+    refetch,
   };
 }
+
+// ============================================================================
+// END OF FILE
+// ============================================================================

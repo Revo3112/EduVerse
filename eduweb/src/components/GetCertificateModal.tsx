@@ -1,8 +1,9 @@
 "use client";
 
-import { Award, Check, Download, ExternalLink, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { Award, Check, Download, ExternalLink, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
+import { keccak256, encodePacked, stringToHex } from "thirdweb/utils";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,27 +18,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
+import { useCertificate } from "@/hooks/useCertificateBlockchain";
+import {
+  getCertificatePrice,
+  getUserCertificateId,
+  getCertificateCompletedCourses,
+} from "@/services/certificate-blockchain.service";
+
 interface GetCertificateModalProps {
   isOpen: boolean;
   onClose: () => void;
   courseId: bigint;
   courseTitle: string;
-  certificatePrice: bigint;
+  certificatePrice: bigint; // Legacy prop, will be overridden by actual fetch
   onSuccess?: () => void;
 }
 
 /**
  * GetCertificateModal Component
  *
- * A beautiful, theme-aware modal for minting blockchain certificates.
- * Supports dark/light modes, integrates with smart contracts, and
- * handles dynamic certificate generation via backend API.
+ * A blockchain-integrated modal for minting/updating certificates.
+ * - Fetches actual price from smart contract
+ * - Checks existing certificate status
+ * - Generates proper payment hash (bytes32 keccak256)
+ * - Integrates with CertificateManager via useCertificate hook
+ * - Uploads image/metadata to Pinata IPFS
+ * - Emits events for Goldsky indexing
  *
  * @param {boolean} isOpen - Controls modal visibility
  * @param {Function} onClose - Callback when modal closes
  * @param {bigint} courseId - Course ID for certificate
  * @param {string} courseTitle - Course title for display
- * @param {bigint} certificatePrice - Price in Wei
+ * @param {bigint} certificatePrice - Legacy prop (overridden by fetch)
  * @param {Function} onSuccess - Callback after successful mint
  */
 export function GetCertificateModal({
@@ -45,21 +57,119 @@ export function GetCertificateModal({
   onClose,
   courseId,
   courseTitle,
-  certificatePrice,
-  onSuccess
+  onSuccess,
 }: GetCertificateModalProps) {
   const account = useActiveAccount();
   const address = account?.address;
 
+  // Use certificate hook for blockchain operations
+  const {
+    mintOrUpdateCertificate,
+    checkEligibility,
+    isMinting,
+    loading: hookLoading,
+  } = useCertificate();
+
   // State Management
-  const [recipientName, setRecipientName] = useState('');
+  const [recipientName, setRecipientName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<'input' | 'generating' | 'minting' | 'success'>('input');
+  const [step, setStep] = useState<
+    "input" | "generating" | "minting" | "success"
+  >("input");
   const [certificateData, setCertificateData] = useState<{
     ipfsCID: string;
     previewUrl: string;
-    paymentHash: string;
+    metadataCID: string;
   } | null>(null);
+
+  // Price and certificate status
+  const [actualPrice, setActualPrice] = useState<bigint>(BigInt(0));
+  const [priceLoading, setPriceLoading] = useState(true);
+  const [existingTokenId, setExistingTokenId] = useState<bigint>(BigInt(0));
+  const [existingCourses, setExistingCourses] = useState<bigint[]>([]);
+  const [isFirstCertificate, setIsFirstCertificate] = useState(true);
+
+  // Eligibility state
+  const [eligible, setEligible] = useState(true);
+  const [eligibilityReason, setEligibilityReason] = useState<string | null>(
+    null
+  );
+  const [checkingEligibility, setCheckingEligibility] = useState(true);
+
+  /**
+   * Fetch actual certificate price and existing certificate status on mount
+   */
+  useEffect(() => {
+    async function fetchPriceAndStatus() {
+      if (!address || !isOpen) {
+        setPriceLoading(false);
+        setCheckingEligibility(false);
+        return;
+      }
+
+      try {
+        setPriceLoading(true);
+        setCheckingEligibility(true);
+
+        // Check eligibility FIRST (before any other operations)
+        const eligibilityResult = await checkEligibility(courseId);
+        setEligible(eligibilityResult.eligible);
+        setEligibilityReason(eligibilityResult.reason || null);
+
+        if (!eligibilityResult.eligible) {
+          console.log("[GetCertificateModal] User not eligible:", {
+            reason: eligibilityResult.reason,
+            courseId: courseId.toString(),
+          });
+          // Still fetch price for display, but user cannot proceed
+        }
+
+        // Check if user already has a certificate
+        const tokenId = await getUserCertificateId(address);
+        setExistingTokenId(tokenId);
+        setIsFirstCertificate(tokenId === BigInt(0));
+
+        // Get completed courses if certificate exists
+        if (tokenId > BigInt(0)) {
+          const courses = await getCertificateCompletedCourses(tokenId);
+          setExistingCourses(courses);
+        } else {
+          setExistingCourses([]);
+        }
+
+        // Fetch actual price from contract
+        const price = await getCertificatePrice(
+          courseId,
+          tokenId === BigInt(0)
+        );
+        setActualPrice(price);
+
+        console.log("[GetCertificateModal] Price and status fetched:", {
+          courseId: courseId.toString(),
+          eligible: eligibilityResult.eligible,
+          eligibilityReason: eligibilityResult.reason,
+          isFirstCertificate: tokenId === BigInt(0),
+          priceWei: price.toString(),
+          priceEth: Number(price) / 1e18,
+          existingTokenId: tokenId.toString(),
+          existingCoursesCount: existingCourses.length,
+        });
+      } catch (error) {
+        console.error(
+          "[GetCertificateModal] Error fetching price/status:",
+          error
+        );
+        toast.error("Failed to fetch certificate information");
+        setEligible(false);
+        setEligibilityReason("Failed to check eligibility. Please try again.");
+      } finally {
+        setPriceLoading(false);
+        setCheckingEligibility(false);
+      }
+    }
+
+    fetchPriceAndStatus();
+  }, [address, courseId, isOpen, checkEligibility, existingCourses.length]);
 
   // Format price from Wei to ETH
   const formatPrice = (priceWei: bigint): string => {
@@ -67,137 +177,170 @@ export function GetCertificateModal({
     return `${priceEth.toFixed(5)} ETH`;
   };
 
-  // Handle certificate generation
+  /**
+   * Generate proper payment hash (bytes32 keccak256)
+   * Matches CertificateManager.sol expectation
+   */
+  const generatePaymentHash = (
+    userAddress: string,
+    courseId: bigint,
+    timestamp: number,
+    nonce: string
+  ): string => {
+    // Generate nonce hash (equivalent to ethers.id which is keccak256 of string)
+    const nonceHash = keccak256(stringToHex(nonce));
+
+    // Pack the data using thirdweb's encodePacked
+    const packed = encodePacked(
+      ["address", "uint256", "uint256", "bytes32"],
+      [userAddress, courseId, BigInt(timestamp), nonceHash]
+    );
+
+    // Return keccak256 hash of packed data
+    return keccak256(packed);
+  };
+
+  /**
+   * Handle certificate generation and blockchain minting
+   * Complete flow: validate → generate image → upload IPFS → mint contract
+   */
   const handleGenerateCertificate = async () => {
     if (!recipientName.trim()) {
-      toast.error('Please enter your name');
+      toast.error("Please enter your name");
       return;
     }
 
     if (recipientName.length > 100) {
-      toast.error('Name must be 100 characters or less');
+      toast.error("Name must be 100 characters or less");
       return;
     }
 
     if (!address) {
-      toast.error('Please connect your wallet');
+      toast.error("Please connect your wallet");
       return;
     }
 
     setIsLoading(true);
-    setStep('generating');
+    setStep("generating");
 
     try {
-      // ==================== BLOCKCHAIN-COMPATIBLE REQUEST ====================
-      // Matches CertificateManager.sol Certificate struct and generate-pinata API
+      // ==================== STEP 1: GENERATE CERTIFICATE IMAGE & METADATA ====================
+      console.log("[GetCertificateModal] Generating certificate...");
 
-      // Prepare request body with proper field mapping
+      // Prepare request body with blockchain-compatible structure
       const requestBody = {
-        // Required fields (API validation)
-        studentName: recipientName.trim(),           // ✅ Maps to recipientName in smart contract
-        courseName: courseTitle,                      // ✅ Required for certificate generation
-        courseId: courseId.toString(),                // ✅ Primary course ID
+        // Required fields for certificate generation
+        studentName: recipientName.trim(),
+        courseName: courseTitle,
+        courseId: courseId.toString(),
 
-        // Blockchain fields (for proper metadata generation)
-        recipientAddress: address,                    // ✅ User's wallet address for QR code
-        // ✅ DYNAMIC: Read from environment variable (matches deployment script)
-        platformName: process.env.NEXT_PUBLIC_PLATFORM_NAME || 'EduVerse Academy',
-        baseRoute: typeof window !== 'undefined'
-          ? `${window.location.origin}/certificates`  // ✅ QR code base URL (auto-detects production domain)
-          : 'http://localhost:3000/certificates',
+        // Blockchain fields for metadata/QR
+        recipientAddress: address,
+        platformName:
+          process.env.NEXT_PUBLIC_PLATFORM_NAME || "EduVerse Academy",
+        baseRoute:
+          typeof window !== "undefined"
+            ? `${window.location.origin}/certificates`
+            : "http://localhost:3000/certificates",
 
-        // Optional: Add tokenId if user already has a certificate
-        // This would come from smart contract query: userCertificates[address]
-        // tokenId: existingTokenId,
-
-        // Optional: Add all completed courses for proper metadata
-        // This would come from Goldsky indexer query
-        // completedCourses: [1, 2, 3],
-
-        isValid: true,                                // ✅ Certificate validity
-        lifetimeFlag: true,                          // ✅ Lifetime certificate
+        // Certificate metadata
+        tokenId: existingTokenId.toString(),
+        completedCourses:
+          existingTokenId > BigInt(0)
+            ? existingCourses.map((c) => c.toString())
+            : [courseId.toString()],
+        isValid: true,
+        lifetimeFlag: true,
       };
 
-      console.log('[GetCertificateModal] Sending request to generate-pinata API:', {
-        ...requestBody,
-        recipientAddress: `${requestBody.recipientAddress.slice(0, 6)}...${requestBody.recipientAddress.slice(-4)}`,
-      });
+      console.log(
+        "[GetCertificateModal] Sending request to generate-pinata API:",
+        {
+          ...requestBody,
+          recipientAddress: `${requestBody.recipientAddress.slice(
+            0,
+            6
+          )}...${requestBody.recipientAddress.slice(-4)}`,
+        }
+      );
 
-      // Call correct API endpoint (generate-pinata, not generate)
-      const response = await fetch('/api/certificate/generate-pinata', {
-        method: 'POST',
+      // Call Pinata upload API
+      const response = await fetch("/api/certificate/generate-pinata", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('[GetCertificateModal] API Error:', errorData);
-        throw new Error(errorData.error || 'Failed to generate certificate');
+        console.error("[GetCertificateModal] API Error:", errorData);
+        throw new Error(errorData.error || "Failed to generate certificate");
       }
 
       const data = await response.json();
-      console.log('[GetCertificateModal] Certificate generation successful:', {
+      console.log("[GetCertificateModal] Certificate generation successful:", {
         cid: data.data?.cid,
-        tokenId: data.data?.tokenId,
+        metadataCID: data.data?.metadataCID,
         verificationUrl: data.data?.verificationUrl,
       });
 
-      // Store certificate data with proper structure
+      // Store certificate data
       setCertificateData({
-        ipfsCID: data.data.cid,                      // ✅ Plain CID for smart contract
-        previewUrl: data.data.signedUrl,             // ✅ IPFS gateway URL
-        paymentHash: data.data.certificateId,        // Temporary payment hash (in production: use tx hash)
+        ipfsCID: data.data.cid, // Plain CID for smart contract
+        previewUrl: data.data.signedUrl, // IPFS gateway URL
+        metadataCID: data.data.metadataCID || "", // Metadata CID
       });
 
-      setStep('minting');
-      toast.success('Certificate generated! Ready to mint.');
+      setStep("minting");
+      toast.success("Certificate generated! Proceeding to blockchain...");
 
-      // Proceed to mint (in production, would call smart contract here)
-      await handleMintCertificate();
+      // ==================== STEP 2: MINT/UPDATE ON BLOCKCHAIN ====================
+      console.log("[GetCertificateModal] Minting certificate on blockchain...");
 
-    } catch (error) {
-      console.error('[GetCertificateModal] Certificate generation error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to generate certificate. Please try again.');
-      setStep('input');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      // Generate payment hash (bytes32 keccak256)
+      const paymentHash = generatePaymentHash(
+        address,
+        courseId,
+        Date.now(),
+        crypto.randomUUID()
+      );
 
-  // Handle blockchain minting
-  const handleMintCertificate = async () => {
-    setIsLoading(true);
+      console.log("[GetCertificateModal] Payment hash generated:", {
+        hash: paymentHash,
+        length: paymentHash.length,
+        format: "bytes32",
+      });
 
-    try {
-      // TODO: Integrate with actual smart contract
-      // const contract = new ethers.Contract(CERTIFICATE_MANAGER_ADDRESS, ABI, signer);
-      // const tx = await contract.mintOrUpdateCertificate(
-      //   courseId,
-      //   recipientName,
-      //   certData.ipfsCID,
-      //   certData.paymentHash,
-      //   'https://verify.eduverse.com/certificate',
-      //   { value: certificatePrice }
-      // );
-      // await tx.wait();
+      // Construct baseRoute for QR code
+      const baseRoute =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/certificates`
+          : "http://localhost:3000/certificates";
 
-      // Simulate blockchain transaction
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Call blockchain mint/update via hook
+      await mintOrUpdateCertificate(
+        courseId,
+        recipientName.trim(),
+        data.data.cid,
+        baseRoute
+      );
 
-      setStep('success');
-      toast.success('Certificate minted successfully! 🎉');
+      console.log("[GetCertificateModal] Certificate minted successfully!");
+
+      setStep("success");
+      toast.success("Certificate minted successfully! 🎉");
 
       if (onSuccess) {
         onSuccess();
       }
-
     } catch (error) {
-      console.error('Minting error:', error);
-      toast.error('Failed to mint certificate. Please try again.');
-      setStep('generating');
+      console.error("[GetCertificateModal] Certificate process error:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to process certificate"
+      );
+      setStep("input");
     } finally {
       setIsLoading(false);
     }
@@ -206,17 +349,15 @@ export function GetCertificateModal({
   // Handle download certificate
   const handleDownload = () => {
     if (!certificateData) return;
-
-    // Open IPFS URL in new tab for download
-    window.open(certificateData.previewUrl, '_blank');
-    toast.success('Opening certificate...');
+    window.open(certificateData.previewUrl, "_blank");
+    toast.success("Opening certificate...");
   };
 
   // Reset and close modal
   const handleClose = () => {
-    if (!isLoading) {
-      setRecipientName('');
-      setStep('input');
+    if (!isLoading && !isMinting) {
+      setRecipientName("");
+      setStep("input");
       setCertificateData(null);
       onClose();
     }
@@ -231,12 +372,17 @@ export function GetCertificateModal({
               <Award className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <DialogTitle className="text-xl">Get Your Certificate</DialogTitle>
+              <DialogTitle className="text-xl">
+                Get Your Certificate
+              </DialogTitle>
               <DialogDescription>
-                {step === 'input' && 'Complete your learning journey with a blockchain-verified certificate'}
-                {step === 'generating' && 'Generating your personalized certificate...'}
-                {step === 'minting' && 'Minting your certificate on blockchain...'}
-                {step === 'success' && 'Your certificate is ready! 🎉'}
+                {step === "input" &&
+                  "Complete your learning journey with a blockchain-verified certificate"}
+                {step === "generating" &&
+                  "Generating your personalized certificate..."}
+                {step === "minting" &&
+                  "Minting your certificate on blockchain..."}
+                {step === "success" && "Your certificate is ready! 🎉"}
               </DialogDescription>
             </div>
           </div>
@@ -245,12 +391,14 @@ export function GetCertificateModal({
         <div className="space-y-6 py-4">
           {/* Course Information */}
           <div className="rounded-lg border border-border bg-muted/50 p-4">
-            <h3 className="font-semibold text-sm text-muted-foreground mb-2">Course</h3>
+            <h3 className="font-semibold text-sm text-muted-foreground mb-2">
+              Course
+            </h3>
             <p className="font-medium">{courseTitle}</p>
           </div>
 
           {/* Input Step */}
-          {step === 'input' && (
+          {step === "input" && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="recipientName" className="text-base">
@@ -267,23 +415,55 @@ export function GetCertificateModal({
                   maxLength={100}
                   className="text-lg"
                   autoFocus
+                  disabled={priceLoading || hookLoading}
                 />
                 <p className="text-xs text-muted-foreground text-right">
                   {recipientName.length}/100 characters
                 </p>
               </div>
 
+              {/* Eligibility Error Alert */}
+              {!eligible && eligibilityReason && !checkingEligibility && (
+                <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-destructive/20 p-1">
+                      <ExternalLink className="h-4 w-4 text-destructive" />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm font-medium text-destructive">
+                        Not Eligible for Certificate
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {eligibilityReason}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Certificate Fee Breakdown */}
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Certificate Fee</span>
-                  <span className="text-lg font-bold text-primary">
-                    {formatPrice(certificatePrice)}
-                  </span>
+                  {priceLoading ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Loading...</span>
+                    </div>
+                  ) : (
+                    <span className="text-lg font-bold text-primary">
+                      {formatPrice(actualPrice)}
+                    </span>
+                  )}
                 </div>
                 <div className="space-y-2 text-xs text-muted-foreground">
                   <div className="flex items-start gap-2">
                     <Check className="h-4 w-4 mt-0.5 text-green-500 flex-shrink-0" />
-                    <span>90% goes to course creator (first certificate mint)</span>
+                    <span>
+                      {isFirstCertificate
+                        ? "90% goes to course creator (first certificate mint)"
+                        : "Adding course to your existing certificate"}
+                    </span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Check className="h-4 w-4 mt-0.5 text-green-500 flex-shrink-0" />
@@ -295,7 +475,13 @@ export function GetCertificateModal({
                   </div>
                   <div className="flex items-start gap-2">
                     <Check className="h-4 w-4 mt-0.5 text-green-500 flex-shrink-0" />
-                    <span>Cumulative learning credential (grows with your courses)</span>
+                    <span>
+                      {isFirstCertificate
+                        ? "Cumulative learning credential (grows with your courses)"
+                        : `Currently includes ${existingCourses.length} course${
+                            existingCourses.length > 1 ? "s" : ""
+                          }`}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -303,7 +489,7 @@ export function GetCertificateModal({
           )}
 
           {/* Generating/Minting Step */}
-          {(step === 'generating' || step === 'minting') && (
+          {(step === "generating" || step === "minting") && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
               <div className="relative">
                 <Loader2 className="h-16 w-16 text-primary animate-spin" />
@@ -311,19 +497,22 @@ export function GetCertificateModal({
               </div>
               <div className="text-center space-y-2">
                 <p className="font-medium">
-                  {step === 'generating' && 'Creating your personalized certificate...'}
-                  {step === 'minting' && 'Minting certificate on blockchain...'}
+                  {step === "generating" &&
+                    "Creating your personalized certificate..."}
+                  {step === "minting" && "Minting certificate on blockchain..."}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {step === 'generating' && 'This may take a few moments'}
-                  {step === 'minting' && 'Confirm the transaction in your wallet'}
+                  {step === "generating" &&
+                    "Uploading to IPFS and preparing metadata"}
+                  {step === "minting" &&
+                    "Confirm the transaction in your wallet"}
                 </p>
               </div>
             </div>
           )}
 
           {/* Success Step */}
-          {step === 'success' && certificateData && (
+          {step === "success" && certificateData && (
             <div className="space-y-4">
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <div className="p-4 rounded-full bg-green-500/10">
@@ -332,7 +521,8 @@ export function GetCertificateModal({
                 <div className="text-center space-y-2">
                   <h3 className="text-xl font-bold">Certificate Minted!</h3>
                   <p className="text-sm text-muted-foreground max-w-md">
-                    Your certificate has been successfully minted on the blockchain. You can now view, download, or share it.
+                    Your certificate has been successfully minted on the
+                    blockchain. You can now view, download, or share it.
                   </p>
                 </div>
               </div>
@@ -348,7 +538,9 @@ export function GetCertificateModal({
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => window.open(certificateData.previewUrl, '_blank')}
+                  onClick={() =>
+                    window.open(certificateData.previewUrl, "_blank")
+                  }
                   className="w-full"
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
@@ -360,24 +552,36 @@ export function GetCertificateModal({
         </div>
 
         <DialogFooter>
-          {step === 'input' && (
+          {step === "input" && (
             <>
               <Button
                 variant="outline"
                 onClick={handleClose}
-                disabled={isLoading}
+                disabled={isLoading || isMinting || priceLoading}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleGenerateCertificate}
-                disabled={!recipientName.trim() || isLoading}
+                disabled={
+                  !recipientName.trim() ||
+                  isLoading ||
+                  isMinting ||
+                  priceLoading ||
+                  checkingEligibility ||
+                  !eligible
+                }
                 className="min-w-[140px]"
               >
-                {isLoading ? (
+                {isLoading || isMinting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Generating...
+                    Processing...
+                  </>
+                ) : priceLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Loading...
                   </>
                 ) : (
                   <>
@@ -389,11 +593,8 @@ export function GetCertificateModal({
             </>
           )}
 
-          {step === 'success' && (
-            <Button
-              onClick={handleClose}
-              className="w-full"
-            >
+          {step === "success" && (
+            <Button onClick={handleClose} className="w-full">
               Done
             </Button>
           )}

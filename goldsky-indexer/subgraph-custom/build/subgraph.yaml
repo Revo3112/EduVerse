@@ -9,9 +9,9 @@ dataSources:
     name: CourseFactory
     network: manta-pacific-sepolia
     source:
-      address: "0x44661459e3c092358559d8459e585EA201D04231"
+      address: "0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd"
       abi: CourseFactory
-      startBlock: 5326332
+      startBlock: 5383608
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -71,9 +71,9 @@ dataSources:
     name: CourseLicense
     network: manta-pacific-sepolia
     source:
-      address: "0x3aad55E0E88C4594643fEFA837caFAe1723403C8"
+      address: "0x3Bc646Cd8813D024483b7b0f18de6C47E219EDb9"
       abi: CourseLicense
-      startBlock: 5326335
+      startBlock: 5383613
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -99,9 +99,9 @@ dataSources:
     name: ProgressTracker
     network: manta-pacific-sepolia
     source:
-      address: "0xaB2adB0F4D800971Ee095e2bC26f9d4AdBeDe930"
+      address: "0x7947cf6a0b1CA5827804206Fb3De7877574d0b65"
       abi: ProgressTracker
-      startBlock: 5326340
+      startBlock: 5383619
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -127,9 +127,9 @@ dataSources:
     name: CertificateManager
     network: manta-pacific-sepolia
     source:
-      address: "0x0a7750524B826E09a27B98564E98AF77fe78f600"
+      address: "0x7D30da5F3188bB6D8db940A80a97237Db0C56FA6"
       abi: CertificateManager
-      startBlock: 5326345
+      startBlock: 5383624
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7

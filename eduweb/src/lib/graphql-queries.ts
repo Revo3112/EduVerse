@@ -756,6 +756,85 @@ export const GET_COURSE_DETAILS = gql`
   }
 `;
 
+/**
+ * Get specific section details with course metadata
+ * Used for section learning page
+ */
+export const GET_SECTION_DETAILS = gql`
+  query GetSectionDetails($courseId: String!, $sectionId: String!) {
+    course(id: $courseId) {
+      id
+      title
+      description
+      thumbnailCID
+      creator
+      creatorName
+      category
+      difficulty
+      priceInEth
+      sectionsCount
+      totalEnrollments
+      averageRating
+      totalRatings
+      createdAt
+
+      sections(orderBy: orderId, orderDirection: asc) {
+        id
+        sectionId
+        title
+        contentCID
+        description
+        duration
+        orderId
+        createdAt
+      }
+    }
+
+    section: courseSection(id: $sectionId) {
+      id
+      sectionId
+      title
+      contentCID
+      description
+      duration
+      orderId
+      createdAt
+      course {
+        id
+        title
+        sectionsCount
+      }
+    }
+  }
+`;
+
+/**
+ * Get enrollment details for student and course
+ * Used to check license status and access permissions
+ */
+export const GET_ENROLLMENT_BY_STUDENT_COURSE = gql`
+  query GetEnrollmentByStudentAndCourse($enrollmentId: ID!) {
+    studentCourseEnrollment(id: $enrollmentId) {
+      id
+      student
+      courseId
+      enrollment {
+        id
+        durationMonths
+        licenseExpiry
+        isActive
+        status
+        pricePaid
+        pricePaidEth
+        purchasedAt
+        isCompleted
+        completionDate
+        sectionsCompleted
+      }
+    }
+  }
+`;
+
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================

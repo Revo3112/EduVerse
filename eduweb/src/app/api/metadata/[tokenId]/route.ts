@@ -17,7 +17,7 @@
  * ```
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
 /**
  * TypeScript interfaces for certificate data structure
@@ -48,10 +48,10 @@ interface Certificate {
  * Goldsky GraphQL query to fetch certificate data from blockchain
  */
 async function getCertificateFromGoldsky(tokenId: string) {
-  const GOLDSKY_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_ENDPOINT;
+  const GOLDSKY_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
 
   if (!GOLDSKY_ENDPOINT) {
-    throw new Error('NEXT_PUBLIC_GOLDSKY_ENDPOINT not configured');
+    throw new Error("NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT not configured");
   }
 
   const query = `
@@ -79,16 +79,16 @@ async function getCertificateFromGoldsky(tokenId: string) {
   `;
 
   const response = await fetch(GOLDSKY_ENDPOINT, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       query,
       variables: { tokenId },
     }),
     // Cache for 1 minute to reduce load on Goldsky
-    next: { revalidate: 60 }
+    next: { revalidate: 60 },
   });
 
   if (!response.ok) {
@@ -98,8 +98,8 @@ async function getCertificateFromGoldsky(tokenId: string) {
   const result = await response.json();
 
   if (result.errors) {
-    console.error('[Metadata API] Goldsky errors:', result.errors);
-    throw new Error('Failed to fetch certificate data from blockchain');
+    console.error("[Metadata API] Goldsky errors:", result.errors);
+    throw new Error("Failed to fetch certificate data from blockchain");
   }
 
   return result.data?.certificate;
@@ -130,7 +130,9 @@ function constructMetadata(certificate: Certificate) {
   return {
     // Standard ERC-1155 fields
     name: `${platformName} Certificate #${tokenId}`,
-    description: `This evolving certificate represents the complete learning journey of ${recipientName} on ${platformName}. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${totalCoursesCompleted} verified course${totalCoursesCompleted > 1 ? 's' : ''}.`,
+    description: `This evolving certificate represents the complete learning journey of ${recipientName} on ${platformName}. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${totalCoursesCompleted} verified course${
+      totalCoursesCompleted > 1 ? "s" : ""
+    }.`,
     image: `ipfs://${ipfsCID}`,
     external_url: verificationUrl,
     decimals: 0, // Non-fungible (ERC-1155 with supply=1)
@@ -138,57 +140,57 @@ function constructMetadata(certificate: Certificate) {
     // Blockchain-compatible attributes matching Certificate struct
     attributes: [
       {
-        trait_type: 'Token ID',
-        display_type: 'number',
+        trait_type: "Token ID",
+        display_type: "number",
         value: parseInt(tokenId),
       },
       {
-        trait_type: 'Platform Name',
+        trait_type: "Platform Name",
         value: platformName,
       },
       {
-        trait_type: 'Recipient Name',
+        trait_type: "Recipient Name",
         value: recipientName,
       },
       {
-        trait_type: 'Recipient Address',
+        trait_type: "Recipient Address",
         value: recipientAddress,
       },
       {
-        trait_type: 'Lifetime Flag',
-        display_type: 'boolean',
+        trait_type: "Lifetime Flag",
+        display_type: "boolean",
         value: lifetimeFlag,
       },
       {
-        trait_type: 'Is Valid',
-        display_type: 'boolean',
+        trait_type: "Is Valid",
+        display_type: "boolean",
         value: isValid,
       },
       {
-        trait_type: 'Status',
-        value: isValid ? 'Active' : 'Revoked',
+        trait_type: "Status",
+        value: isValid ? "Active" : "Revoked",
       },
       {
-        trait_type: 'Total Courses Completed',
-        display_type: 'number',
+        trait_type: "Total Courses Completed",
+        display_type: "number",
         value: totalCoursesCompleted,
       },
       {
-        trait_type: 'Completed Course IDs',
-        value: courses.map((c: CertificateCourse) => c.courseId).join(', '),
+        trait_type: "Completed Course IDs",
+        value: courses.map((c: CertificateCourse) => c.courseId).join(", "),
       },
       {
-        trait_type: 'Issued At',
-        display_type: 'date',
+        trait_type: "Issued At",
+        display_type: "date",
         value: parseInt(issuedAt),
       },
       {
-        trait_type: 'Last Updated',
-        display_type: 'date',
+        trait_type: "Last Updated",
+        display_type: "date",
         value: parseInt(lastUpdated),
       },
       {
-        trait_type: 'Base Route',
+        trait_type: "Base Route",
         value: baseRoute,
       },
     ],
@@ -197,11 +199,11 @@ function constructMetadata(certificate: Certificate) {
     properties: {
       qr_verification_url: verificationUrl,
       base_route: baseRoute,
-      certificate_version: '2.0',
+      certificate_version: "2.0",
       supports_multiple_courses: true,
       is_soulbound: true, // Cannot be transferred
-      blockchain_network: 'Manta Pacific',
-      certificate_type: 'Evolving Learning Certificate',
+      blockchain_network: "Manta Pacific",
+      certificate_type: "Evolving Learning Certificate",
       courses: courses.map((c: CertificateCourse) => ({
         courseId: c.courseId,
         addedAt: c.addedAt,
@@ -230,8 +232,8 @@ export async function GET(
     if (isNaN(parseInt(tokenId))) {
       return NextResponse.json(
         {
-          error: 'Invalid token ID',
-          message: 'Token ID must be a valid number',
+          error: "Invalid token ID",
+          message: "Token ID must be a valid number",
         },
         { status: 400 }
       );
@@ -244,7 +246,7 @@ export async function GET(
       console.log(`[Metadata API] Certificate #${tokenId} not found`);
       return NextResponse.json(
         {
-          error: 'Certificate not found',
+          error: "Certificate not found",
           message: `No certificate exists with token ID ${tokenId}`,
         },
         { status: 404 }
@@ -266,19 +268,24 @@ export async function GET(
     // Return metadata with proper caching headers
     return NextResponse.json(metadata, {
       headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300', // Cache 1 min, stale 5 min
+        "Content-Type": "application/json",
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300", // Cache 1 min, stale 5 min
       },
     });
-
   } catch (error) {
-    console.error(`[Metadata API] Error fetching metadata for token #${tokenId}:`, error);
+    console.error(
+      `[Metadata API] Error fetching metadata for token #${tokenId}:`,
+      error
+    );
 
     // Return error response
     return NextResponse.json(
       {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Failed to fetch certificate metadata',
+        error: "Internal server error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch certificate metadata",
       },
       { status: 500 }
     );
@@ -304,13 +311,13 @@ export async function HEAD(
     return new NextResponse(null, {
       status: 200,
       headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, s-maxage=60',
+        "Content-Type": "application/json",
+        "Cache-Control": "public, s-maxage=60",
       },
     });
   } catch (error) {
     // Log error for debugging
-    console.error('[Metadata API] HEAD request error:', error);
+    console.error("[Metadata API] HEAD request error:", error);
     return new NextResponse(null, { status: 500 });
   }
 }

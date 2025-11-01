@@ -366,10 +366,10 @@ interface CourseCertificatePriceSetEventData {
 // CRITICAL: These must match deployed contract addresses from deployed-contracts.json
 const DEPLOYED_CONTRACTS = {
   // Updated with actual deployment addresses from contract-addresses.json
-  CourseFactory: "0x44661459e3c092358559d8459e585EA201D04231",
-  CourseLicense: "0x3aad55E0E88C4594643fEFA837caFAe1723403C8",
-  ProgressTracker: "0xaB2adB0F4D800971Ee095e2bC26f9d4AdBeDe930",
-  CertificateManager: "0x0a7750524B826E09a27B98564E98AF77fe78f600",
+  CourseFactory: "0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd",
+  CourseLicense: "0x3Bc646Cd8813D024483b7b0f18de6C47E219EDb9",
+  ProgressTracker: "0x7947cf6a0b1CA5827804206Fb3De7877574d0b65",
+  CertificateManager: "0x7D30da5F3188bB6D8db940A80a97237Db0C56FA6",
 } as const;
 
 // Smart contract limits (from actual contracts) - Used for validation
@@ -386,6 +386,7 @@ const DEPLOYED_CONTRACTS = {
 // CourseLicense.sol line 42: platformFeePercentage = 200 (2%)
 // CertificateManager.sol line 775: platformFee = (totalAmount * 1000) / 10000 (10%)
 // CertificateManager.sol line 805: platformFee = (totalAmount * 200) / 10000 (2%)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const PLATFORM_FEE_BASIS_POINTS = {
   LICENSE: 200, // 2% for license mint/renewal (CourseLicense.sol)
   CERTIFICATE_MINT: 1000, // 10% for initial certificate minting (CertificateManager.sol line 775)
@@ -393,16 +394,17 @@ const PLATFORM_FEE_BASIS_POINTS = {
 } as const;
 
 // Helper function to calculate exact platform fees matching smart contracts
-const calculatePlatformFee = (
-  totalAmount: number,
-  feeType: keyof typeof PLATFORM_FEE_BASIS_POINTS
-): { platformFee: number; creatorPayout: number } => {
-  const basisPoints = PLATFORM_FEE_BASIS_POINTS[feeType];
-  const platformFee = (totalAmount * basisPoints) / 10000;
-  const creatorPayout = totalAmount - platformFee;
-
-  return { platformFee, creatorPayout };
-};
+// Currently unused but kept for future revenue breakdown features
+// const calculatePlatformFee = (
+//   totalAmount: number,
+//   feeType: keyof typeof PLATFORM_FEE_BASIS_POINTS
+// ): { platformFee: number; creatorPayout: number } => {
+//   const basisPoints = PLATFORM_FEE_BASIS_POINTS[feeType];
+//   const platformFee = (totalAmount * basisPoints) / 10000;
+//   const creatorPayout = totalAmount - platformFee;
+//
+//   return { platformFee, creatorPayout };
+// };
 
 // ==================== ANALYTICS METRICS ====================
 
@@ -451,30 +453,31 @@ interface EduVerseAnalyticsMetrics {
 
 // ==================== MOCK DATA GENERATION (REALISTIC) ====================
 
-const COURSE_CATEGORIES_NAMES = [
-  "Programming",
-  "Design",
-  "Business",
-  "Marketing",
-  "Data Science",
-  "Finance",
-  "Healthcare",
-  "Language",
-  "Arts",
-  "Mathematics",
-  "Science",
-  "Engineering",
-  "Technology",
-  "Education",
-  "Psychology",
-  "Culinary",
-  "Personal Development",
-  "Legal",
-  "Sports",
-  "Other",
-];
+// Currently unused but kept for future mock data generation features
+// const COURSE_CATEGORIES_NAMES = [
+//   "Programming",
+//   "Design",
+//   "Business",
+//   "Marketing",
+//   "Data Science",
+//   "Finance",
+//   "Healthcare",
+//   "Language",
+//   "Arts",
+//   "Mathematics",
+//   "Science",
+//   "Engineering",
+//   "Technology",
+//   "Education",
+//   "Psychology",
+//   "Culinary",
+//   "Personal Development",
+//   "Legal",
+//   "Sports",
+//   "Other",
+// ];
 
-const DIFFICULTY_NAMES = ["Beginner", "Intermediate", "Advanced"];
+// const DIFFICULTY_NAMES = ["Beginner", "Intermediate", "Advanced"];
 
 const WEB3_COURSE_TITLES = [
   "Smart Contract Security Fundamentals",
@@ -775,6 +778,7 @@ const getTransactionValue = (transactionType: string): string => {
   }
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const generateEventData = (transactionType: string): TransactionEventData => {
   const courseId = Math.floor(Math.random() * 500) + 1;
   const userAddress = generateRealisticAddress();
@@ -1393,8 +1397,10 @@ export default function AnalyticsPage() {
   const {
     metrics: goldskyMetrics,
     isLoading: metricsLoading,
-    isError: metricsError,
-    refresh: refreshMetrics,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    isError: _metricsError,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    refresh: _refreshMetrics,
   } = useAnalyticsMetrics({
     fetchOnMount: true,
     autoRefresh: true,
@@ -1406,9 +1412,12 @@ export default function AnalyticsPage() {
   const {
     transactions,
     isLoading: transactionsLoading,
-    refresh: refreshTransactions,
-    hasMore,
-    loadMore,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    refresh: _refreshTransactions,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    hasMore: _hasMore,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    loadMore: _loadMore,
   } = useRecentActivitiesAsTransactions({
     initialLimit: 50,
     autoRefresh: true,
@@ -1466,13 +1475,14 @@ export default function AnalyticsPage() {
     );
   }, [goldskyMetrics]);
 
-  // Manual refresh function
-  const handleRefresh = async () => {
-    await Promise.all([refreshMetrics(), refreshTransactions()]);
-  };
+  // Manual refresh function (currently unused but kept for future manual refresh button)
+  // const handleRefresh = async () => {
+  //   await Promise.all([refreshMetrics(), refreshTransactions()]);
+  // };
 
   // Show loading state
-  const isLoading = metricsLoading || transactionsLoading;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _isLoading = metricsLoading || transactionsLoading;
 
   // Computed analytics
   const contractActivity = useMemo(() => {

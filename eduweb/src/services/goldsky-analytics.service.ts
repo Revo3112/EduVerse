@@ -209,24 +209,6 @@ interface GraphQLCertificate {
   totalCourses?: string;
 }
 
-interface GraphQLProgress {
-  id: string;
-  studentAddress?: string;
-  courseId?: string;
-  sectionId?: string;
-  isCompleted?: boolean;
-  timestamp?: string;
-}
-
-interface GraphQLLicense {
-  id: string;
-  owner?: string;
-  isActive?: boolean;
-  price?: string;
-  soldCount?: string;
-  totalRevenue?: string;
-}
-
 interface GraphQLActivityEvent {
   id: string;
   type: string;
@@ -268,16 +250,6 @@ function parseBigIntSafe(
   } catch {
     return 0;
   }
-}
-
-/**
- * Safely parse decimal string to string with fallback
- */
-function parseDecimalSafe(
-  value: string | number | bigint | null | undefined
-): string {
-  if (!value) return "0";
-  return value.toString();
 }
 
 /**

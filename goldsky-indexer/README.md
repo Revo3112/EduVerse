@@ -64,9 +64,9 @@ goldsky subgraph deploy eduverse/v1.0.0 \
 
 ```bash
 goldsky subgraph init eduverse/v1.0.0 \
-  --contract 0x44661459e3c092358559d8459e585EA201D04231 \
+  --contract 0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd \
   --network manta-pacific-sepolia \
-  --start-block 5326332 \
+  --start-block 5383608 \
   --contract-name CourseFactory \
   --deploy
 ```
@@ -99,8 +99,8 @@ The config file (`configs/eduverse-subgraph-config.json`) contains:
   "instances": [
     {
       "abi": "courseFactory",
-      "address": "0x44661459e3c092358559d8459e585EA201D04231",
-      "startBlock": 5326332,
+      "address": "0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd",
+      "startBlock": 5383608,
       "chain": "manta-pacific-sepolia"
     }
   ]
@@ -133,10 +133,10 @@ The config file (`configs/eduverse-subgraph-config.json`) contains:
 
 | Contract | Address | Start Block |
 |----------|---------|-------------|
-| CourseFactory | 0x44661459e3c092358559d8459e585EA201D04231 | 5326332 |
-| CourseLicense | 0x3aad55E0E88C4594643fEFA837caFAe1723403C8 | 5326335 |
-| ProgressTracker | 0xaB2adB0F4D800971Ee095e2bC26f9d4AdBeDe930 | 5326340 |
-| CertificateManager | 0x0a7750524B826E09a27B98564E98AF77fe78f600 | 5326345 |
+| CourseFactory | 0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd | 5383608 |
+| CourseLicense | 0x3Bc646Cd8813D024483b7b0f18de6C47E219EDb9 | 5383613 |
+| ProgressTracker | 0x7947cf6a0b1CA5827804206Fb3De7877574d0b65 | 5383619 |
+| CertificateManager | 0x7D30da5F3188bB6D8db940A80a97237Db0C56FA6 | 5383624 |
 
 ---
 

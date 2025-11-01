@@ -59,15 +59,15 @@
  */
 
 import {
-    certificateManager,
-    courseLicense,
-    progressTracker,
+  certificateManager,
+  courseLicense,
+  progressTracker,
 } from "@/lib/contracts";
-import { ethers } from "ethers";
+import { keccak256, encodePacked, stringToHex, toEther } from "thirdweb/utils";
 import {
-    prepareContractCall,
-    readContract,
-    type PreparedTransaction,
+  prepareContractCall,
+  readContract,
+  type PreparedTransaction,
 } from "thirdweb";
 
 // ============================================================================
@@ -191,7 +191,13 @@ export async function prepareMintOrUpdateCertificateTransaction(
     contract: certificateManager,
     method:
       "function mintOrUpdateCertificate(uint256 courseId, string recipientName, string ipfsCID, bytes32 paymentHash, string baseRoute) payable",
-    params: [courseId, recipientName, ipfsCID, paymentHash as `0x${string}`, baseRoute],
+    params: [
+      courseId,
+      recipientName,
+      ipfsCID,
+      paymentHash as `0x${string}`,
+      baseRoute,
+    ],
     value: totalPrice,
   });
 }
@@ -580,7 +586,9 @@ export async function getCertificatePrice(
 
   // Log pricing context for debugging
   console.log(
-    `[Certificate] Price for course ${courseId}: ${price} wei (${isFirstCertificate ? "first mint" : "addition"})`
+    `[Certificate] Price for course ${courseId}: ${price} wei (${
+      isFirstCertificate ? "first mint" : "addition"
+    })`
   );
 
   return price;
@@ -648,14 +656,17 @@ export function generatePaymentHash(
   timestamp: number,
   nonce: string
 ): string {
-  // Pack data using ethers v6 solidityPacked
-  const packed = ethers.solidityPacked(
+  // Generate nonce hash (equivalent to ethers.id which is keccak256 of string)
+  const nonceHash = keccak256(stringToHex(nonce));
+
+  // Pack data using thirdweb's encodePacked
+  const packed = encodePacked(
     ["address", "uint256", "uint256", "bytes32"],
-    [userAddress, courseId, timestamp, ethers.id(nonce)]
+    [userAddress, courseId, BigInt(timestamp), nonceHash]
   );
 
   // Hash with keccak256
-  return ethers.keccak256(packed);
+  return keccak256(packed);
 }
 
 /**
@@ -783,6 +794,6 @@ export async function calculateCertificatePrice(
     platformFee,
     creatorFee,
     totalRequired: basePrice,
-    priceInEth: ethers.formatEther(basePrice),
+    priceInEth: toEther(basePrice),
   };
 }

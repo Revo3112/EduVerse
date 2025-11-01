@@ -21,8 +21,12 @@
  * - Components execute transactions with useSendTransaction() hook
  */
 
-import { courseFactory } from "@/lib/contracts";
-import { prepareContractCall, readContract, type PreparedTransaction } from "thirdweb";
+import { courseFactory, courseLicense } from "@/lib/contracts";
+import {
+  prepareContractCall,
+  readContract,
+  type PreparedTransaction,
+} from "thirdweb";
 
 // ============================================================================
 // TYPES
@@ -69,9 +73,8 @@ export interface CourseMetadata {
 
 export interface SectionData {
   title: string;
-  description: string; // Frontend only, not sent to smart contract
-  contentCID: string; // Video CID from Pinata
-  duration: number; // Duration in seconds (60-10800)
+  contentCID: string; // Livepeer playback ID (16-char hex) stored as section.contentCID in smart contract
+  duration: number; // Duration in seconds (60-10800) - validated range by smart contract
 }
 
 export interface CreateCourseParams {
@@ -101,6 +104,12 @@ export interface UpdateCourseParams {
 
 export interface DeleteCourseParams {
   courseId: bigint;
+}
+
+export interface MintLicenseParams {
+  courseId: bigint;
+  durationMonths: bigint;
+  priceInEth: string; // Total price in ETH (e.g., "0.01")
 }
 
 export interface Course {
@@ -182,22 +191,82 @@ export function difficultyToEnum(difficulty: string): number {
 /**
  * Validate section duration meets smart contract requirements
  */
-export function validateDuration(duration: number): { valid: boolean; error?: string } {
+export function validateDuration(duration: number): {
+  valid: boolean;
+  error?: string;
+} {
   if (duration < 60) {
-    return { valid: false, error: 'Duration must be at least 60 seconds (1 minute)' };
+    return {
+      valid: false,
+      error: "Duration must be at least 60 seconds (1 minute)",
+    };
   }
   if (duration > 10800) {
-    return { valid: false, error: 'Duration must not exceed 10800 seconds (3 hours)' };
+    return {
+      valid: false,
+      error: "Duration must not exceed 10800 seconds (3 hours)",
+    };
   }
   return { valid: true };
 }
 
 /**
- * Validate all sections have valid durations
+ * Validate IPFS CID format
  */
-export function validateSections(sections: SectionData[]): { valid: boolean; error?: string } {
+export function validateCID(cid: string): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!cid || cid.trim().length === 0) {
+    return { valid: false, error: "CID cannot be empty" };
+  }
+
+  const trimmed = cid.trim();
+
+  if (trimmed.length > 100) {
+    return { valid: false, error: "CID is too long (maximum 100 characters)" };
+  }
+
+  const livepeerPlaybackIdRegex = /^[a-f0-9]{16}$/;
+  if (livepeerPlaybackIdRegex.test(trimmed)) {
+    return { valid: true };
+  }
+
+  if (trimmed.length < 46) {
+    return {
+      valid: false,
+      error:
+        "CID is too short (minimum 46 characters for IPFS CID or 16 for Livepeer playback ID)",
+    };
+  }
+
+  const cidV0Regex = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
+  const cidV1Regex = /^[a-z0-9]{59}$/;
+  const cidV1Base32Regex = /^b[a-z2-7]{58}$/;
+
+  if (
+    !cidV0Regex.test(trimmed) &&
+    !cidV1Regex.test(trimmed) &&
+    !cidV1Base32Regex.test(trimmed)
+  ) {
+    return {
+      valid: false,
+      error: "Invalid IPFS CID or Livepeer playback ID format",
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate all sections have valid durations and CIDs
+ */
+export function validateSections(sections: SectionData[]): {
+  valid: boolean;
+  error?: string;
+} {
   if (sections.length === 0) {
-    return { valid: false, error: 'At least one section is required' };
+    return { valid: false, error: "At least one section is required" };
   }
 
   for (let i = 0; i < sections.length; i++) {
@@ -208,12 +277,26 @@ export function validateSections(sections: SectionData[]): { valid: boolean; err
     }
 
     if (!section.contentCID || section.contentCID.trim().length === 0) {
-      return { valid: false, error: `Section ${i + 1}: Content CID is required` };
+      return {
+        valid: false,
+        error: `Section ${i + 1}: Content CID is required`,
+      };
+    }
+
+    const cidCheck = validateCID(section.contentCID);
+    if (!cidCheck.valid) {
+      return {
+        valid: false,
+        error: `Section ${i + 1}: ${cidCheck.error}`,
+      };
     }
 
     const durationCheck = validateDuration(section.duration);
     if (!durationCheck.valid) {
-      return { valid: false, error: `Section ${i + 1}: ${durationCheck.error}` };
+      return {
+        valid: false,
+        error: `Section ${i + 1}: ${durationCheck.error}`,
+      };
     }
   }
 
@@ -227,12 +310,27 @@ export function ethToWei(ethAmount: string): bigint {
   try {
     const eth = parseFloat(ethAmount);
     if (isNaN(eth) || eth < 0) {
-      throw new Error('Invalid ETH amount');
+      throw new Error("Invalid ETH amount");
     }
-    // Convert to wei: multiply by 10^18
-    return BigInt(Math.floor(eth * 1e18));
+
+    const MAX_ETH = 1000000;
+    if (eth > MAX_ETH) {
+      throw new Error(`ETH amount exceeds maximum (${MAX_ETH} ETH)`);
+    }
+
+    const weiString = (eth * 1e18).toFixed(0);
+    const weiValue = BigInt(weiString);
+
+    const MAX_UINT256 = BigInt(
+      "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    );
+    if (weiValue > MAX_UINT256) {
+      throw new Error("Amount exceeds uint256 max value");
+    }
+
+    return weiValue;
   } catch (error) {
-    console.error('[Contract Service] Failed to convert ETH to wei:', error);
+    console.error("[Contract Service] Failed to convert ETH to wei:", error);
     throw error;
   }
 }
@@ -242,12 +340,22 @@ export function ethToWei(ethAmount: string): bigint {
  */
 export function weiToEth(weiAmount: bigint): string {
   try {
-    // Convert wei to ETH: divide by 10^18
-    const eth = Number(weiAmount) / 1e18;
-    return eth.toFixed(18).replace(/\.?0+$/, ''); // Remove trailing zeros
+    const weiStr = weiAmount.toString();
+    const len = weiStr.length;
+
+    if (len <= 18) {
+      const padded = weiStr.padStart(18, "0");
+      const eth = `0.${padded}`;
+      return eth.replace(/\.?0+$/, "") || "0";
+    }
+
+    const intPart = weiStr.slice(0, len - 18);
+    const decPart = weiStr.slice(len - 18);
+    const eth = `${intPart}.${decPart}`;
+    return eth.replace(/\.?0+$/, "");
   } catch (error) {
-    console.error('[Contract Service] Failed to convert wei to ETH:', error);
-    return '0';
+    console.error("[Contract Service] Failed to convert wei to ETH:", error);
+    return "0";
   }
 }
 
@@ -275,43 +383,62 @@ export function weiToEth(weiAmount: bigint): string {
 export function prepareCreateCourseTransaction(
   params: CreateCourseParams
 ): PreparedTransaction {
-  console.log('[Contract Service] ========================================');
-  console.log('[Contract Service] Preparing course creation transaction...');
-  console.log('[Contract Service] Title:', params.metadata.title);
-  console.log('[Contract Service] Sections:', params.sections.length);
-  console.log('[Contract Service] Price:', params.pricePerMonth, 'ETH');
+  console.log("[Contract Service] ========================================");
+  console.log("[Contract Service] Preparing course creation transaction...");
+  console.log("[Contract Service] Title:", params.metadata.title);
+  console.log("[Contract Service] Sections:", params.sections.length);
+  console.log("[Contract Service] Price:", params.pricePerMonth, "ETH");
 
-  // Validate sections
-  const validation = validateSections(params.sections);
-  if (!validation.valid) {
-    throw new Error(`Validation failed: ${validation.error}`);
+  if (!params.metadata.title?.trim()) {
+    throw new Error("Course title is required");
   }
 
-  // Convert price to wei
+  if (!params.metadata.description?.trim()) {
+    throw new Error("Course description is required");
+  }
+
+  const thumbnailCidCheck = validateCID(params.metadata.thumbnailCID);
+  if (!thumbnailCidCheck.valid) {
+    throw new Error(`Invalid thumbnail CID: ${thumbnailCidCheck.error}`);
+  }
+
+  if (!params.metadata.creatorName?.trim()) {
+    throw new Error("Creator name is required");
+  }
+
   const priceInWei = ethToWei(params.pricePerMonth);
 
-  // Convert category and difficulty strings to enum numbers
   const categoryEnum = categoryToEnum(params.metadata.category);
   const difficultyEnum = difficultyToEnum(params.metadata.difficulty);
 
-  // Prepare transaction
   const transaction = prepareContractCall({
     contract: courseFactory,
-    method: "function createCourse(string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, uint8 category, uint8 difficulty) returns (uint256)",
+    method:
+      "function createCourse(string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, uint8 category, uint8 difficulty) returns (uint256)",
     params: [
-      params.metadata.title,
-      params.metadata.description,
-      params.metadata.thumbnailCID,
-      params.metadata.creatorName,
+      params.metadata.title.trim(),
+      params.metadata.description.trim(),
+      params.metadata.thumbnailCID.trim(),
+      params.metadata.creatorName.trim(),
       priceInWei,
       categoryEnum,
       difficultyEnum,
     ],
   });
 
-  console.log('[Contract Service] ✅ Transaction prepared successfully');
-  console.log('[Contract Service] Category:', params.metadata.category, '→', categoryEnum);
-  console.log('[Contract Service] Difficulty:', params.metadata.difficulty, '→', difficultyEnum);
+  console.log("[Contract Service] ✅ Transaction prepared successfully");
+  console.log(
+    "[Contract Service] Category:",
+    params.metadata.category,
+    "→",
+    categoryEnum
+  );
+  console.log(
+    "[Contract Service] Difficulty:",
+    params.metadata.difficulty,
+    "→",
+    difficultyEnum
+  );
   return transaction;
 }
 
@@ -348,45 +475,49 @@ export function prepareCreateCourseTransaction(
 export function prepareBatchAddSectionsTransaction(
   params: BatchAddSectionsParams
 ): PreparedTransaction {
-  console.log('[Contract Service] ========================================');
-  console.log('[Contract Service] Preparing batch add sections transaction...');
-  console.log('[Contract Service] Course ID:', params.courseId);
-  console.log('[Contract Service] Sections:', params.sections.length);
+  console.log("[Contract Service] ========================================");
+  console.log("[Contract Service] Preparing batch add sections transaction...");
+  console.log("[Contract Service] Course ID:", params.courseId);
+  console.log("[Contract Service] Sections:", params.sections.length);
 
-  // Validate batch size (max 50 per transaction)
   if (params.sections.length === 0) {
-    throw new Error('At least one section is required');
+    throw new Error("At least one section is required");
   }
 
   if (params.sections.length > 50) {
-    throw new Error(`Batch limit exceeded: ${params.sections.length} sections (max 50 per transaction). Split into multiple batches.`);
+    throw new Error(
+      `Batch limit exceeded: ${params.sections.length} sections (max 50 per transaction). Split into multiple batches.`
+    );
   }
 
-  // Validate sections
   const validation = validateSections(params.sections);
   if (!validation.valid) {
     throw new Error(`Validation failed: ${validation.error}`);
   }
 
-  // Convert SectionData[] to smart contract format (remove description field)
-  const sectionsForBlockchain = params.sections.map(section => [
-    section.title,
-    section.contentCID,
-    BigInt(section.duration),
-  ]);
-
-  // Prepare transaction
-  const transaction = prepareContractCall({
-    contract: courseFactory,
-    method: "function batchAddSections(uint256 courseId, tuple(string,string,uint256)[] sectionsData) returns (bool)",
-    params: [
-      params.courseId,
-      sectionsForBlockchain,
-    ],
+  const sectionsForBlockchain = params.sections.map((section) => {
+    if (!section.title?.trim()) {
+      throw new Error("Section title cannot be empty");
+    }
+    if (!section.contentCID?.trim()) {
+      throw new Error("Section content CID cannot be empty");
+    }
+    return {
+      title: section.title.trim(),
+      contentCID: section.contentCID.trim(),
+      duration: BigInt(section.duration),
+    };
   });
 
-  console.log('[Contract Service] ✅ Batch transaction prepared successfully');
-  console.log('[Contract Service] Sections to add:', params.sections.length);
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method:
+      "function batchAddSections(uint256 courseId, (string title, string contentCID, uint256 duration)[] sectionsData) returns (bool success)",
+    params: [params.courseId, sectionsForBlockchain],
+  });
+
+  console.log("[Contract Service] ✅ Batch transaction prepared successfully");
+  console.log("[Contract Service] Sections to add:", params.sections.length);
   return transaction;
 }
 
@@ -418,11 +549,11 @@ export function prepareBatchAddSectionsTransaction(
 export function prepareAddSectionTransaction(
   params: AddSectionParams
 ): PreparedTransaction {
-  console.log('[Contract Service] ========================================');
-  console.log('[Contract Service] Preparing add section transaction...');
-  console.log('[Contract Service] Course ID:', params.courseId);
-  console.log('[Contract Service] Section Title:', params.title);
-  console.log('[Contract Service] Duration:', params.duration, 'seconds');
+  console.log("[Contract Service] ========================================");
+  console.log("[Contract Service] Preparing add section transaction...");
+  console.log("[Contract Service] Course ID:", params.courseId);
+  console.log("[Contract Service] Section Title:", params.title);
+  console.log("[Contract Service] Duration:", params.duration, "seconds");
 
   // Validate duration
   const durationCheck = validateDuration(params.duration);
@@ -432,17 +563,18 @@ export function prepareAddSectionTransaction(
 
   // Validate required fields
   if (!params.title || params.title.trim().length === 0) {
-    throw new Error('Section title is required');
+    throw new Error("Section title is required");
   }
 
   if (!params.contentCID || params.contentCID.trim().length === 0) {
-    throw new Error('Content CID is required');
+    throw new Error("Content CID is required");
   }
 
   // Prepare transaction
   const transaction = prepareContractCall({
     contract: courseFactory,
-    method: "function addCourseSection(uint256 courseId, string title, string contentCID, uint256 duration) returns (uint256)",
+    method:
+      "function addCourseSection(uint256,string,string,uint256) returns (bool)",
     params: [
       params.courseId,
       params.title,
@@ -451,7 +583,7 @@ export function prepareAddSectionTransaction(
     ],
   });
 
-  console.log('[Contract Service] ✅ Transaction prepared successfully');
+  console.log("[Contract Service] ✅ Transaction prepared successfully");
   return transaction;
 }
 
@@ -482,37 +614,50 @@ export function prepareAddSectionTransaction(
 export function prepareUpdateCourseTransaction(
   params: UpdateCourseParams
 ): PreparedTransaction {
-  console.log('[Contract Service] ========================================');
-  console.log('[Contract Service] Preparing update course transaction...');
-  console.log('[Contract Service] Course ID:', params.courseId);
-  console.log('[Contract Service] Title:', params.metadata.title);
-  console.log('[Contract Service] Price:', params.pricePerMonth, 'ETH');
-  console.log('[Contract Service] Is Active:', params.isActive);
+  console.log("[Contract Service] ========================================");
+  console.log("[Contract Service] Preparing update course transaction...");
+  console.log("[Contract Service] Course ID:", params.courseId);
+  console.log("[Contract Service] Title:", params.metadata.title);
+  console.log("[Contract Service] Price:", params.pricePerMonth, "ETH");
+  console.log("[Contract Service] Is Active:", params.isActive);
 
   // Convert category and difficulty to enums
   const categoryEnum = categoryToEnum(params.metadata.category);
   const difficultyEnum = difficultyToEnum(params.metadata.difficulty);
 
-  console.log('[Contract Service] Category:', params.metadata.category, '→', categoryEnum);
-  console.log('[Contract Service] Difficulty:', params.metadata.difficulty, '→', difficultyEnum);
+  console.log(
+    "[Contract Service] Category:",
+    params.metadata.category,
+    "→",
+    categoryEnum
+  );
+  console.log(
+    "[Contract Service] Difficulty:",
+    params.metadata.difficulty,
+    "→",
+    difficultyEnum
+  );
 
   // Convert ETH to wei
   const priceInWei = ethToWei(params.pricePerMonth);
-  console.log('[Contract Service] Price in wei:', priceInWei.toString());
+  console.log("[Contract Service] Price in wei:", priceInWei.toString());
 
   // Validate price
   const MAX_PRICE_WEI = BigInt("1000000000000000000"); // 1 ETH
   if (priceInWei === BigInt(0)) {
-    throw new Error('Price cannot be zero');
+    throw new Error("Price cannot be zero");
   }
   if (priceInWei > MAX_PRICE_WEI) {
-    throw new Error(`Price exceeds maximum of 1 ETH (provided: ${params.pricePerMonth} ETH)`);
+    throw new Error(
+      `Price exceeds maximum of 1 ETH (provided: ${params.pricePerMonth} ETH)`
+    );
   }
 
   // Prepare transaction
   const transaction = prepareContractCall({
     contract: courseFactory,
-    method: "function updateCourse(uint256 courseId, string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, bool isActive, uint8 category, uint8 difficulty)",
+    method:
+      "function updateCourse(uint256 courseId, string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, bool isActive, uint8 category, uint8 difficulty)",
     params: [
       params.courseId,
       params.metadata.title,
@@ -526,7 +671,7 @@ export function prepareUpdateCourseTransaction(
     ],
   });
 
-  console.log('[Contract Service] ✅ Update transaction prepared successfully');
+  console.log("[Contract Service] ✅ Update transaction prepared successfully");
   return transaction;
 }
 
@@ -547,10 +692,12 @@ export function prepareUpdateCourseTransaction(
 export function prepareDeleteCourseTransaction(
   params: DeleteCourseParams
 ): PreparedTransaction {
-  console.log('[Contract Service] ========================================');
-  console.log('[Contract Service] Preparing delete course transaction...');
-  console.log('[Contract Service] Course ID:', params.courseId);
-  console.log('[Contract Service] NOTE: This is a soft delete (marks as inactive)');
+  console.log("[Contract Service] ========================================");
+  console.log("[Contract Service] Preparing delete course transaction...");
+  console.log("[Contract Service] Course ID:", params.courseId);
+  console.log(
+    "[Contract Service] NOTE: This is a soft delete (marks as inactive)"
+  );
 
   // Prepare transaction
   const transaction = prepareContractCall({
@@ -559,7 +706,68 @@ export function prepareDeleteCourseTransaction(
     params: [params.courseId],
   });
 
-  console.log('[Contract Service] ✅ Delete transaction prepared successfully');
+  console.log("[Contract Service] ✅ Delete transaction prepared successfully");
+  return transaction;
+}
+
+/**
+ * Prepare transaction to mint a course license (student purchases course)
+ * This is the MAIN function for students to buy course access
+ *
+ * @param params - License parameters (courseId, duration, price)
+ * @returns Prepared transaction with payable value
+ *
+ * @example
+ * ```tsx
+ * const { mutate: sendTransaction } = useSendTransaction();
+ *
+ * const transaction = prepareMintLicenseTransaction({
+ *   courseId: 1n,
+ *   durationMonths: 1n,
+ *   priceInEth: "0.01"
+ * });
+ *
+ * sendTransaction(transaction, {
+ *   onSuccess: (result) => {
+ *     console.log("License minted! Token ID:", result);
+ *   }
+ * });
+ * ```
+ */
+export function prepareMintLicenseTransaction(
+  params: MintLicenseParams
+): PreparedTransaction {
+  console.log("[Contract Service] ========================================");
+  console.log("[Contract Service] Preparing mint license transaction...");
+  console.log("[Contract Service] Course ID:", params.courseId);
+  console.log("[Contract Service] Duration:", params.durationMonths, "months");
+  console.log("[Contract Service] Price:", params.priceInEth, "ETH");
+
+  if (params.durationMonths < BigInt(1)) {
+    throw new Error("Duration must be at least 1 month");
+  }
+
+  const MAX_DURATION = BigInt(36);
+  if (params.durationMonths > MAX_DURATION) {
+    throw new Error(`Duration cannot exceed ${MAX_DURATION} months`);
+  }
+
+  const priceInWei = ethToWei(params.priceInEth);
+
+  if (priceInWei === BigInt(0)) {
+    throw new Error("Price must be greater than 0");
+  }
+
+  const transaction = prepareContractCall({
+    contract: courseLicense,
+    method:
+      "function mintLicense(uint256 courseId, uint256 durationMonths) payable returns (uint256)",
+    params: [params.courseId, params.durationMonths],
+    value: priceInWei,
+  });
+
+  console.log("[Contract Service] ✅ Mint license transaction prepared");
+  console.log("[Contract Service] Value (wei):", priceInWei.toString());
   return transaction;
 }
 
@@ -580,18 +788,32 @@ export function prepareDeleteCourseTransaction(
  * console.log('Price:', weiToEth(course?.pricePerMonth));
  * ```
  */
-export async function getCourseDetails(courseId: bigint): Promise<Course | null> {
-  console.log('[Contract Service] ========================================');
-  console.log('[Contract Service] Fetching course details...');
-  console.log('[Contract Service] Course ID:', courseId);
+export async function getCourseDetails(
+  courseId: bigint
+): Promise<Course | null> {
+  console.log("[Contract Service] ========================================");
+  console.log("[Contract Service] Fetching course details...");
+  console.log("[Contract Service] Course ID:", courseId);
 
   try {
-    // @ts-expect-error - readContract types are strict, but method signature provides the ABI
-    const result: readonly [string, string, string, string, string, bigint, string, string, boolean, bigint, bigint] = await readContract({
+    const result = (await readContract({
       contract: courseFactory,
-      method: "function getCourse(uint256 courseId) view returns (tuple(string title, string description, string thumbnailCID, address creator, string creatorName, uint256 pricePerMonth, string category, string difficulty, bool isActive, uint256 totalRevenue, uint256 createdAt))",
+      method:
+        "function getCourse(uint256) view returns (string,string,string,address,string,uint256,string,string,bool,uint256,uint256)",
       params: [courseId],
-    });
+    })) as readonly [
+      string,
+      string,
+      string,
+      string,
+      string,
+      bigint,
+      string,
+      string,
+      boolean,
+      bigint,
+      bigint
+    ];
 
     // Transform result to Course interface
     const course: Course = {
@@ -608,13 +830,13 @@ export async function getCourseDetails(courseId: bigint): Promise<Course | null>
       createdAt: result[10],
     };
 
-    console.log('[Contract Service] ✅ Course details retrieved');
-    console.log('[Contract Service] Title:', course.title);
-    console.log('[Contract Service] Creator:', course.creatorName);
+    console.log("[Contract Service] ✅ Course details retrieved");
+    console.log("[Contract Service] Title:", course.title);
+    console.log("[Contract Service] Creator:", course.creatorName);
 
     return course;
   } catch (error) {
-    console.error('[Contract Service] Failed to get course details:', error);
+    console.error("[Contract Service] Failed to get course details:", error);
     return null;
   }
 }
@@ -638,18 +860,18 @@ export async function getSectionDetails(
   courseId: bigint,
   sectionId: bigint
 ): Promise<Section | null> {
-  console.log('[Contract Service] ========================================');
-  console.log('[Contract Service] Fetching section details...');
-  console.log('[Contract Service] Course ID:', courseId);
-  console.log('[Contract Service] Section ID:', sectionId);
+  console.log("[Contract Service] ========================================");
+  console.log("[Contract Service] Fetching section details...");
+  console.log("[Contract Service] Course ID:", courseId);
+  console.log("[Contract Service] Section ID:", sectionId);
 
   try {
-    // @ts-expect-error - readContract types are strict, but method signature provides the ABI
-    const result: readonly [string, string, bigint, boolean] = await readContract({
+    const result = (await readContract({
       contract: courseFactory,
-      method: "function getCourseSection(uint256 courseId, uint256 sectionId) view returns (tuple(string title, string contentCID, uint256 duration, bool isActive))",
+      method:
+        "function getCourseSection(uint256,uint256) view returns (string,string,uint256,bool)",
       params: [courseId, sectionId],
-    });
+    })) as readonly [string, string, bigint, boolean];
 
     // Transform result to Section interface
     const section: Section = {
@@ -659,14 +881,14 @@ export async function getSectionDetails(
       isActive: result[3],
     };
 
-    console.log('[Contract Service] ✅ Section details retrieved');
-    console.log('[Contract Service] Title:', section.title);
-    console.log('[Contract Service] Duration:', section.duration, 'seconds');
-    console.log('[Contract Service] CID:', section.contentCID);
+    console.log("[Contract Service] ✅ Section details retrieved");
+    console.log("[Contract Service] Title:", section.title);
+    console.log("[Contract Service] Duration:", section.duration, "seconds");
+    console.log("[Contract Service] CID:", section.contentCID);
 
     return section;
   } catch (error) {
-    console.error('[Contract Service] Failed to get section details:', error);
+    console.error("[Contract Service] Failed to get section details:", error);
     return null;
   }
 }

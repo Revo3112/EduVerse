@@ -1,0 +1,69 @@
+
+> eduweb@0.1.0 diagnose:goldsky
+> tsx scripts/diagnose-goldsky.ts
+
+🔍 GOLDSKY DIAGNOSTIC TOOL
+================================================================================
+Endpoint: https://api.goldsky.com/api/public/project_cmezpe79yxzxt01sxhkaz5fq2/subgraphs/eduverse-manta-pacific-sepolia/1.3.0/gn
+================================================================================
+
+📡 Fetching courses from Goldsky...
+
+✅ Found 1 courses
+
+Course #1: Next js Introduction
+   ID: 1
+   Creator: 0xb5075eb5734bc8a6a9bbc1ca299fd8c0bd4cff58
+   Category: Programming ✅
+   Difficulty: Beginner ✅
+   Price: 500000000000000 wei
+   Price ETH: 0.0005 ✅
+   Thumbnail: bafybeiafu3kjvbangdj24nevwz4x5jfshyhptoc4qgpntlggisu5iiyod4 ✅ Valid CID
+   Description: ✅ Present
+   Active: true
+   Deleted: false
+   Sections: 0
+   Enrollments: 0
+
+
+================================================================================
+TRANSFORMATION TEST
+================================================================================
+
+Raw GraphQL Data:
+{
+  "id": "1",
+  "title": "Next js Introduction",
+  "creator": "0xb5075eb5734bc8a6a9bbc1ca299fd8c0bd4cff58",
+  "category": "Programming",
+  "difficulty": "Beginner",
+  "price": "500000000000000",
+  "priceInEth": "0.0005",
+  "thumbnailCID": "bafybeiafu3kjvbangdj24nevwz4x5jfshyhptoc4qgpntlggisu5iiyod4",
+  "description": "Mulai dari dasar hingga siap rilis, kursus ini mengajarkan cara membangun aplikasi web modern dengan Next.js menggunakan App Router secara bertahap dan hands-on.​\nAnda akan mempelajari struktur proyek, routing dan layout, navigasi, styling, serta optimasi font dan gambar untuk performa yang lebih baik.​\nKemudian mendalami fetching data, rendering statis dan dinamis, streaming, serta partial prerendering untuk pengalaman pengguna yang cepat.​\nMateri juga mencakup pagination dan pencarian, mutasi data (form/aksi), penanganan error, aksesibilitas, metadata/SEO, dan autentikasi.​\nDi akhir kelas, Anda akan memiliki aplikasi dashboard sederhana yang siap deploy dan fondasi kuat untuk melanjutkan ke proyek produksi.​",
+  "isActive": true,
+  "isDeleted": false,
+  "sectionsCount": "0",
+  "totalEnrollments": "0",
+  "createdAt": "1761951954"
+}
+
+
+Transformed Data:
+{
+  "id": "1",
+  "title": "Next js Introduction",
+  "description": "Mulai dari dasar hingga siap rilis, kursus ini mengajarkan cara membangun aplikasi web modern dengan Next.js menggunakan App Router secara bertahap dan hands-on.​\nAnda akan mempelajari struktur proyek, routing dan layout, navigasi, styling, serta optimasi font dan gambar untuk performa yang lebih baik.​\nKemudian mendalami fetching data, rendering statis dan dinamis, streaming, serta partial prerendering untuk pengalaman pengguna yang cepat.​\nMateri juga mencakup pagination dan pencarian, mutasi data (form/aksi), penanganan error, aksesibilitas, metadata/SEO, dan autentikasi.​\nDi akhir kelas, Anda akan memiliki aplikasi dashboard sederhana yang siap deploy dan fondasi kuat untuk melanjutkan ke proyek produksi.​",
+  "thumbnailCID": "bafybeiafu3kjvbangdj24nevwz4x5jfshyhptoc4qgpntlggisu5iiyod4",
+  "creator": "0xb5075eb5734bc8a6a9bbc1ca299fd8c0bd4cff58",
+  "category": 0,
+  "categoryName": "Programming",
+  "difficulty": 0,
+  "difficultyName": "Beginner",
+  "price": "500000000000000",
+  "priceInEth": "0.0005",
+  "isActive": true
+}
+
+
+✅ Diagnostic complete!

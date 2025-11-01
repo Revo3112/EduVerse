@@ -2,11 +2,11 @@
   "networkName": "mantaPacificTestnet",
   "chainId": 3441006,
   "deployer": "0xb5075eB5734bc8A6a9bbC1Ca299Fd8C0bd4Cff58",
-  "deployDate": "2025-10-25T13:02:46.261Z",
+  "deployDate": "2025-11-01T04:08:57.376Z",
   "addresses": {
-    "courseFactory": "0x44661459e3c092358559d8459e585EA201D04231",
-    "courseLicense": "0x3aad55E0E88C4594643fEFA837caFAe1723403C8",
-    "progressTracker": "0xaB2adB0F4D800971Ee095e2bC26f9d4AdBeDe930",
-    "certificateManager": "0x0a7750524B826E09a27B98564E98AF77fe78f600"
+    "courseFactory": "0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd",
+    "courseLicense": "0x3Bc646Cd8813D024483b7b0f18de6C47E219EDb9",
+    "progressTracker": "0x7947cf6a0b1CA5827804206Fb3De7877574d0b65",
+    "certificateManager": "0x7D30da5F3188bB6D8db940A80a97237Db0C56FA6"
   }
 }
