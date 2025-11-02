@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Rating, RatingButton } from "@/components/ui/rating";
 import { useCourseRating } from "@/hooks/useRating";
-import { Users } from "lucide-react";
+import { Users, CheckCircle2 } from "lucide-react";
 
 import {
   Course,
@@ -13,17 +13,13 @@ import {
 } from "@/lib/mock-data";
 import { formatRatingDisplay } from "@/lib/rating-utils";
 import { BookOpen, Clock, ImageIcon, Loader2, Star } from "lucide-react";
-import dynamic from "next/dynamic";
+
 import Image from "next/image";
 import { memo, useCallback, useMemo, useState } from "react";
 import type { CourseBrowseData } from "@/services/goldsky-courses.service";
 import { useThumbnailUrl } from "@/hooks/useThumbnailUrl";
-
-// Lazy load EnrollModal to improve initial page load
-const EnrollModal = dynamic(() => import("@/components/EnrollModal"), {
-  ssr: false,
-  loading: () => null,
-});
+import { useLicense } from "@/hooks/useLicense";
+import EnrollModal from "@/components/EnrollModal";
 
 /**
  * CourseCard Component
@@ -56,7 +52,7 @@ function normalizeCourse(course: CourseData) {
       description: course.description,
       thumbnailCID: course.thumbnailCID,
       creator: course.creator,
-      creatorName: course.creator, // Use address as name for Goldsky
+      creatorName: course.creatorName, // Use creator name from Goldsky
       category: course.category,
       categoryName: course.categoryName,
       difficulty: course.difficulty,
@@ -96,10 +92,6 @@ function normalizeCourse(course: CourseData) {
 }
 
 // Memoized helper functions
-const formatAddress = (address: string): string => {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
-
 const formatDate = (timestamp: bigint): string => {
   return new Date(Number(timestamp) * 1000).toLocaleDateString("en-US", {
     year: "numeric",
@@ -187,6 +179,10 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
     3600 // 1 hour expiry
   );
 
+  // Use license hook for enrollment functionality
+  const { isValid, purchaseLicense, isPurchasing, isTransactionPending } =
+    useLicense(normalizedCourse.id);
+
   // Fetch course rating data (only if not from Goldsky - Goldsky already has rating)
   const shouldFetchRating = !isGoldskyCourse(course);
   const { data: ratingData, isLoading: isRatingLoading } = useCourseRating(
@@ -208,7 +204,6 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
       categoryName: normalizedCourse.categoryName,
       difficultyName: normalizedCourse.difficultyName,
       priceInEth: normalizedCourse.priceInEth,
-      formattedCreator: formatAddress(normalizedCourse.creator),
       formattedDate: formatDate(normalizedCourse.createdAt),
       difficultyStyle: getDifficultyBadgeVariant(normalizedCourse.difficulty),
     }),
@@ -229,13 +224,14 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
   }, []);
 
   const handleModalEnroll = useCallback(
-    (courseId: bigint, duration: number) => {
+    async (courseId: bigint, duration: number) => {
+      await purchaseLicense(duration);
+      setIsModalOpen(false);
       if (onEnroll) {
         onEnroll(courseId, duration);
       }
-      setIsModalOpen(false);
     },
-    [onEnroll]
+    [purchaseLicense, onEnroll]
   );
 
   return (
@@ -317,7 +313,7 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
           {/* Creator Information */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Users className="h-4 w-4" />
-            <span>by {courseData.formattedCreator}</span>
+            <span>by {normalizedCourse.creatorName}</span>
           </div>
 
           {/* Course Metadata */}
@@ -361,9 +357,19 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
 
           {/* Course Status Indicator */}
           <div className="flex justify-start items-center text-xs mb-3">
-            <Badge variant="default" className="text-xs">
-              Active
-            </Badge>
+            {isValid ? (
+              <Badge
+                variant="default"
+                className="text-xs bg-green-500 hover:bg-green-600"
+              >
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Enrolled
+              </Badge>
+            ) : (
+              <Badge variant="default" className="text-xs">
+                Active
+              </Badge>
+            )}
           </div>
 
           {/* Price and Enroll Button - Always at Bottom with Edge Alignment */}
@@ -378,18 +384,51 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
             <Button
               className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white flex-shrink-0 ml-4"
               onClick={handleEnrollClick}
+              disabled={isPurchasing || isTransactionPending}
             >
-              <BookOpen className="h-4 w-4 mr-2" />
-              Enroll
+              {isPurchasing || isTransactionPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {isPurchasing ? "Processing..." : "Confirming..."}
+                </>
+              ) : isValid ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  View Course
+                </>
+              ) : (
+                <>
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Enroll
+                </>
+              )}
             </Button>
           </div>
         </div>
       </div>
 
       {/* Course Enrollment Modal - Only render when open */}
-      {isModalOpen && !isGoldskyCourse(course) && (
+      {isModalOpen && (
         <EnrollModal
-          course={course}
+          course={
+            isGoldskyCourse(course)
+              ? {
+                  id: normalizedCourse.id,
+                  title: normalizedCourse.title,
+                  description: normalizedCourse.description,
+                  creator: normalizedCourse.creator as `0x${string}`,
+                  creatorName: normalizedCourse.creatorName,
+                  pricePerMonth: BigInt(
+                    Math.round(parseFloat(normalizedCourse.priceInEth) * 1e18)
+                  ),
+                  category: normalizedCourse.category,
+                  difficulty: normalizedCourse.difficulty,
+                  thumbnailCID: normalizedCourse.thumbnailCID,
+                  isActive: true,
+                  createdAt: normalizedCourse.createdAt,
+                }
+              : course
+          }
           isOpen={isModalOpen}
           onClose={handleModalClose}
           onEnroll={handleModalEnroll}

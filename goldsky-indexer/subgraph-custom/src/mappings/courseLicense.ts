@@ -107,6 +107,13 @@ function getOrCreateUserProfile(
     profile.revenueThisMonth = ZERO_BI;
     profile.revenueThisMonthEth = ZERO_BD;
 
+    // Initialize moderation status
+    profile.isBlacklisted = false;
+    profile.blacklistedAt = ZERO_BI;
+    profile.blacklistedBy = Bytes.fromHexString(
+      "0x0000000000000000000000000000000000000000",
+    );
+
     // Timestamps
     profile.createdAt = timestamp;
     profile.updatedAt = timestamp;

@@ -13,7 +13,7 @@ import {
   ALL_CATEGORIES,
   ALL_DIFFICULTIES,
 } from "@/services/goldsky-courses.service";
-import toast from "react-hot-toast";
+
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -88,20 +88,6 @@ export default function CoursesPage() {
     clearFilters();
   };
 
-  // ============================================================================
-  // THIRDWEB LICENSE PURCHASE - Handle course enrollment
-  // ============================================================================
-  const handleEnroll = async (courseId: bigint, duration: number) => {
-    console.log(
-      `[Courses] Enrolling in course ${courseId} for ${duration} months`
-    );
-
-    // Note: License purchase is handled by CourseCard component using useLicense hook
-    // This handler is kept for compatibility, actual purchase logic is in CourseCard
-    toast.loading(`Course enrollment will be handled by CourseCard component`);
-  };
-
-  // Get categories and difficulties from service (contract canonical)
   const availableCategories = ALL_CATEGORIES;
   const availableDifficulties = ALL_DIFFICULTIES;
 
@@ -326,11 +312,7 @@ export default function CoursesPage() {
       ) : filteredCourses.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredCourses.map((course) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              onEnroll={handleEnroll}
-            />
+            <CourseCard key={course.id} course={course} />
           ))}
         </div>
       ) : (

@@ -159,6 +159,7 @@ export interface CourseBrowseData {
   description: string;
   thumbnailCID: string;
   creator: string; // lowercase hex address
+  creatorName: string; // creator's display name
   category: number;
   categoryName: string;
   difficulty: number;
@@ -223,6 +224,7 @@ const GET_ALL_COURSES_QUERY = `
       description
       thumbnailCID
       creator
+      creatorName
       category
       difficulty
       price
@@ -259,6 +261,7 @@ const GET_COURSES_BY_CATEGORY_QUERY = `
       description
       thumbnailCID
       creator
+      creatorName
       category
       difficulty
       price
@@ -295,6 +298,7 @@ const GET_COURSES_BY_DIFFICULTY_QUERY = `
       description
       thumbnailCID
       creator
+      creatorName
       category
       difficulty
       price
@@ -321,6 +325,7 @@ const GET_COURSE_BY_ID_QUERY = `
       description
       thumbnailCID
       creator
+      creatorName
       category
       difficulty
       price
@@ -333,7 +338,6 @@ const GET_COURSE_BY_ID_QUERY = `
       sectionsCount
       totalDuration
       isActive
-      isDeleted
       createdAt
       updatedAt
     }
@@ -539,6 +543,7 @@ function transformCourse(
     description: raw.description as string,
     thumbnailCID: raw.thumbnailCID as string,
     creator: (raw.creator as string).toLowerCase(),
+    creatorName: raw.creatorName as string,
     category: categoryEnumToNumber(categoryEnum),
     categoryName: categoryEnumToDisplayName(categoryEnum),
     difficulty: difficultyEnumToNumber(difficultyEnum),

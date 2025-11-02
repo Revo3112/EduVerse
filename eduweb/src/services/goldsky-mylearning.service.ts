@@ -26,6 +26,7 @@ import {
   type GetUserCertificatesVariables,
   type GetUserStatsVariables,
 } from "@/graphql/goldsky-mycourse.queries";
+import { normalizeAddress, debugAddress } from "@/lib/address-helper";
 
 // ============================================================================
 // CONFIGURATION
@@ -616,7 +617,9 @@ export async function getMyCourses(studentAddress: string): Promise<{
     };
   }
 
-  const normalizedAddress = studentAddress.toLowerCase();
+  const normalizedAddress = normalizeAddress(studentAddress);
+
+  debugAddress("getMyCourses input", studentAddress);
 
   const cacheKey = `my-courses-${normalizedAddress}`;
   const cached = getCachedData<{
@@ -634,12 +637,40 @@ export async function getMyCourses(studentAddress: string): Promise<{
       studentAddress: normalizedAddress,
     };
 
+    console.log("[Goldsky Debug] Querying address:", normalizedAddress);
+    console.log("[Goldsky Debug] Variables:", JSON.stringify(variables));
+
     const data = await executeWithRetry(async () => {
       return await client.request<MyCoursesResponse>(
         GET_MY_COURSES_QUERY,
         variables
       );
     });
+
+    console.log(
+      "[Goldsky Debug] Response enrollments count:",
+      data.enrollments?.length || 0
+    );
+
+    if (data.enrollments && data.enrollments.length > 0) {
+      console.log(
+        "[Goldsky Debug] Found enrollments for address:",
+        normalizedAddress
+      );
+      console.log(
+        "[Goldsky Debug] Enrollment IDs:",
+        data.enrollments.map((e) => e.id).join(", ")
+      );
+    } else {
+      console.log(
+        "[Goldsky Debug] No enrollments found for address:",
+        normalizedAddress
+      );
+      console.log(
+        "[Goldsky Debug] This could mean:",
+        "1) No courses enrolled yet, 2) Address mismatch, 3) Subgraph not fully synced"
+      );
+    }
 
     const result = {
       enrollments: (data.enrollments || []).map(transformEnrollment),
@@ -651,7 +682,11 @@ export async function getMyCourses(studentAddress: string): Promise<{
 
     return result;
   } catch (error) {
-    console.error("getMyCourses error:", error);
+    console.error(
+      "[Goldsky Debug] getMyCourses error for address:",
+      normalizedAddress
+    );
+    console.error("[Goldsky Debug] Error details:", error);
 
     return {
       enrollments: [],
@@ -715,7 +750,7 @@ export async function checkEnrollmentStatus(
     return { isEnrolled: false, enrollment: null };
   }
 
-  const normalizedAddress = studentAddress.toLowerCase();
+  const normalizedAddress = normalizeAddress(studentAddress);
   const cacheKey = `enrollment-status-${normalizedAddress}-${courseId}`;
 
   const cached = getCachedData<{
@@ -771,7 +806,7 @@ export async function getUserCertificates(
     return [];
   }
 
-  const normalizedAddress = studentAddress.toLowerCase();
+  const normalizedAddress = normalizeAddress(studentAddress);
   const cacheKey = `certificates-${normalizedAddress}`;
 
   const cached = getCachedData<CertificateData[]>(cacheKey);
@@ -812,7 +847,7 @@ export async function getUserStats(
     return transformUserStats(null);
   }
 
-  const normalizedAddress = studentAddress.toLowerCase();
+  const normalizedAddress = normalizeAddress(studentAddress);
   const cacheKey = `user-stats-${normalizedAddress}`;
 
   const cached = getCachedData<UserStatsData>(cacheKey);
@@ -847,7 +882,7 @@ export async function getUserStats(
  * Refresh/invalidate cache untuk specific user
  */
 export function refreshUserData(studentAddress: string): void {
-  const normalizedAddress = studentAddress.toLowerCase();
+  const normalizedAddress = normalizeAddress(studentAddress);
   clearCache(`my-courses-${normalizedAddress}`);
   clearCache(`user-stats-${normalizedAddress}`);
   clearCache(`certificates-${normalizedAddress}`);
