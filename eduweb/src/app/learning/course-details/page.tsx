@@ -137,10 +137,10 @@ function CourseDetailsContent() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const contractAddresses = {
-    CourseFactory: "0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd",
-    CourseLicense: "0x3Bc646Cd8813D024483b7b0f18de6C47E219EDb9",
-    ProgressTracker: "0x7947cf6a0b1CA5827804206Fb3De7877574d0b65",
-    CertificateManager: "0x7D30da5F3188bB6D8db940A80a97237Db0C56FA6",
+    CourseFactory: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72",
+    CourseLicense: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578",
+    ProgressTracker: "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2",
+    CertificateManager: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5",
   };
 
   const copyToClipboard = async (address: string, contractName: string) => {

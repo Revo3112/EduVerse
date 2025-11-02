@@ -462,7 +462,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         nonReentrant
         validStringLength(title, 200, "title")
         validStringLength(description, 2000, "description")
-        validStringLength(thumbnailCID, 150, "thumbnailCID")
+        validStringLength(thumbnailCID, 2000, "thumbnailCID")
         validStringLength(creatorName, 100, "creatorName")
         validCategory(category)
         validDifficulty(difficulty)
@@ -551,7 +551,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         onlyCreator(courseId)
         validStringLength(title, 200, "title")
         validStringLength(description, 1000, "description")
-        validStringLength(thumbnailCID, 100, "thumbnailCID")
+        validStringLength(thumbnailCID, 2000, "thumbnailCID")
         validStringLength(creatorName, 100, "creatorName")
         validCategory(category)
         validDifficulty(difficulty)
@@ -598,7 +598,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         courseExists(courseId)
         onlyCreator(courseId)
         validStringLength(title, 200, "title")
-        validStringLength(contentCID, 150, "contentCID")
+        validStringLength(contentCID, 2000, "contentCID")
         returns (uint256)
     {
         // CRITICAL: Anti-DoS protection
@@ -642,7 +642,7 @@ contract CourseFactory is Ownable, ReentrancyGuard {
         courseExists(courseId)
         onlyCreator(courseId)
         validStringLength(title, 200, "title")
-        validStringLength(contentCID, 150, "contentCID")
+        validStringLength(contentCID, 2000, "contentCID")
     {
         if (sectionId >= courseSections[courseId].length) {
             revert SectionNotFound(courseId, sectionId);

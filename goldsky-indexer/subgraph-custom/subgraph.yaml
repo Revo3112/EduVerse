@@ -41,9 +41,9 @@ dataSources:
     name: CourseFactory
     network: manta-pacific-sepolia
     source:
-      address: "0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd"
+      address: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72"
       abi: CourseFactory
-      startBlock: 5383608 # ✅ ACTUAL DEPLOYMENT BLOCK
+      startBlock: 5386706 # ✅ ACTUAL DEPLOYMENT BLOCK
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -118,9 +118,9 @@ dataSources:
     name: CourseLicense
     network: manta-pacific-sepolia
     source:
-      address: "0x3Bc646Cd8813D024483b7b0f18de6C47E219EDb9"
+      address: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578"
       abi: CourseLicense
-      startBlock: 5383613 # ✅ ACTUAL DEPLOYMENT BLOCK
+      startBlock: 5386710 # ✅ ACTUAL DEPLOYMENT BLOCK
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -153,9 +153,9 @@ dataSources:
     name: ProgressTracker
     network: manta-pacific-sepolia
     source:
-      address: "0x7947cf6a0b1CA5827804206Fb3De7877574d0b65"
+      address: "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2"
       abi: ProgressTracker
-      startBlock: 5383619 # ✅ ACTUAL DEPLOYMENT BLOCK
+      startBlock: 5386715 # ✅ ACTUAL DEPLOYMENT BLOCK
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -186,9 +186,9 @@ dataSources:
     name: CertificateManager
     network: manta-pacific-sepolia
     source:
-      address: "0x7D30da5F3188bB6D8db940A80a97237Db0C56FA6"
+      address: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5"
       abi: CertificateManager
-      startBlock: 5383624 # ✅ ACTUAL DEPLOYMENT BLOCK
+      startBlock: 5386719 # ✅ ACTUAL DEPLOYMENT BLOCK
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -263,15 +263,15 @@ features:
 # ============================================================================
 # DEPLOYMENT VERIFICATION
 # ============================================================================
-# ✅ CourseFactory:      0x0DB09a3c87d2F9a7508f7F8495bC69f5F3cCe2bd (Block 5383608)
-# ✅ CourseLicense:      0x3Bc646Cd8813D024483b7b0f18de6C47E219EDb9 (Block 5383613)
-# ✅ ProgressTracker:    0x7947cf6a0b1CA5827804206Fb3De7877574d0b65 (Block 5383619)
-# ✅ CertificateManager: 0x7D30da5F3188bB6D8db940A80a97237Db0C56FA6 (Block 5383624)
+# ✅ CourseFactory:      0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72 (Block 5386706)
+# ✅ CourseLicense:      0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578 (Block 5386710)
+# ✅ ProgressTracker:    0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2 (Block 5386715)
+# ✅ CertificateManager: 0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5 (Block 5386719)
 #
 # Total blocks to index: ~50 blocks (very fast sync!)
 # Expected sync time: 2-5 minutes (optimal)
 #
 # Build & Deploy:
 # 1. npm run codegen && npm run build
-# 2. goldsky subgraph deploy eduverse-manta-pacific-sepolia/1.1.0 --path .
+# 2. goldsky subgraph deploy eduverse-manta-pacific-sepolia/1.5.0 --path .
 # ============================================================================

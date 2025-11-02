@@ -41,7 +41,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     error InvalidAddress(address addr);
     error CertificateNotFound(uint256 tokenId);
     error PaymentHashAlreadyUsed();
-    error InvalidCIDFormat();
+
     error ZeroAmount();
     error EmptyCoursesArray();
     error NoLicenseOwnership();
@@ -55,11 +55,11 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
 
     uint256 private _nextTokenId = 1;
     uint256 public constant MAX_CERTIFICATE_PRICE = 0.002 ether; // Maximum 100k IDR equivalent
-    uint256 public defaultCertificateFee = 0.001 ether;      // Default fee for minting first certificate
+    uint256 public defaultCertificateFee = 0.001 ether; // Default fee for minting first certificate
     uint256 public defaultCourseAdditionFee = 0.0001 ether; // Default fee for adding courses to existing certificate
     address public platformWallet;
-    string public defaultPlatformName;                // Configurable platform name
-    string public defaultBaseRoute;                   // ✅ NEW: Global default base route (updatable by admin)
+    string public defaultPlatformName; // Configurable platform name
+    string public defaultBaseRoute; // ✅ NEW: Global default base route (updatable by admin)
 
     // ==================== STRUCTS ====================
     /**
@@ -67,29 +67,30 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @notice Optimized for gas efficiency with struct packing
      */
     struct Certificate {
-        uint256 tokenId;                    // Unique certificate ID
-        string platformName;               // Platform name (e.g., "EduVerse Academy")
-        string recipientName;              // User's display name
-        address recipientAddress;          // User's wallet address (20 bytes)
-        bool lifetimeFlag;                 // Always true for lifetime validity (1 byte)
-        bool isValid;                      // For revocation capability (1 byte)
-        string ipfsCID;                    // Main certificate image CID (updated as courses are added)
-        string baseRoute;                  // QR code base URL for learning history website
-        uint256 issuedAt;                  // Timestamp of first certificate mint
-        uint256 lastUpdated;               // Timestamp of last course addition
-        uint256 totalCoursesCompleted;     // Counter for completed courses
-        bytes32 paymentReceiptHash;        // Payment verification for last action
-        uint256[] completedCourses;        // Array of all completed course IDs
+        uint256 tokenId; // Unique certificate ID
+        string platformName; // Platform name (e.g., "EduVerse Academy")
+        string recipientName; // User's display name
+        address recipientAddress; // User's wallet address (20 bytes)
+        bool lifetimeFlag; // Always true for lifetime validity (1 byte)
+        bool isValid; // For revocation capability (1 byte)
+        string ipfsCID; // Main certificate image CID (updated as courses are added)
+        string baseRoute; // QR code base URL for learning history website
+        uint256 issuedAt; // Timestamp of first certificate mint
+        uint256 lastUpdated; // Timestamp of last course addition
+        uint256 totalCoursesCompleted; // Counter for completed courses
+        bytes32 paymentReceiptHash; // Payment verification for last action
+        uint256[] completedCourses; // Array of all completed course IDs
     }
 
     // ==================== MAPPINGS ====================
     mapping(uint256 => Certificate) public certificates;
-    mapping(address => uint256) public userCertificates;          // user => single certificate tokenId
-    mapping(bytes32 => bool) public usedPaymentHashes;           // Replay protection
-    mapping(uint256 => string) private _tokenURIs;               // Custom token URIs
+    mapping(address => uint256) public userCertificates; // user => single certificate tokenId
+    mapping(bytes32 => bool) public usedPaymentHashes; // Replay protection
+    mapping(uint256 => string) private _tokenURIs; // Custom token URIs
     mapping(uint256 => mapping(uint256 => bool)) public certificateCourseExists; // tokenId => courseId => exists
-    mapping(uint256 => uint256) public courseCertificatePrices;  // courseId => certificate price set by creator
-    mapping(uint256 => mapping(uint256 => uint256)) public certificateCourseCompletionDate; // ✅ tokenId => courseId => completion timestamp
+    mapping(uint256 => uint256) public courseCertificatePrices; // courseId => certificate price set by creator
+    mapping(uint256 => mapping(uint256 => uint256))
+        public certificateCourseCompletionDate; // ✅ tokenId => courseId => completion timestamp
 
     // ==================== EVENTS ====================
     event CertificateMinted(
@@ -98,7 +99,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         string recipientName,
         string ipfsCID,
         bytes32 paymentReceiptHash,
-        uint256 pricePaid  // ✅ GOLDSKY: Added for revenue analytics
+        uint256 pricePaid // ✅ GOLDSKY: Added for revenue analytics
     );
 
     event CourseAddedToCertificate(
@@ -107,7 +108,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         uint256 indexed courseId,
         string newIpfsCID,
         bytes32 paymentReceiptHash,
-        uint256 pricePaid  // ✅ GOLDSKY: Added for revenue analytics
+        uint256 pricePaid // ✅ GOLDSKY: Added for revenue analytics
     );
 
     event CertificateUpdated(
@@ -126,10 +127,14 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
 
     event CertificateRevoked(uint256 indexed tokenId, string reason);
     event BaseRouteUpdated(uint256 indexed tokenId, string newBaseRoute);
-    event DefaultBaseRouteUpdated(string newBaseRoute);  // ✅ NEW: Event for global base route update
+    event DefaultBaseRouteUpdated(string newBaseRoute); // ✅ NEW: Event for global base route update
     event PlatformNameUpdated(string newPlatformName);
     event CourseAdditionFeeUpdated(uint256 newFee);
-    event CourseCertificatePriceSet(uint256 indexed courseId, uint256 price, address indexed creator);
+    event CourseCertificatePriceSet(
+        uint256 indexed courseId,
+        uint256 price,
+        address indexed creator
+    );
 
     // ==================== CONSTRUCTOR ====================
     constructor(
@@ -137,33 +142,33 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         address _progressTracker,
         address _courseLicense,
         address _platformWallet,
-        string memory _initialBaseRoute,  // ✅ CHANGED: Now accepts base route instead of full URI
+        string memory _initialBaseRoute, // ✅ CHANGED: Now accepts base route instead of full URI
         string memory _platformName
-    ) ERC1155("") Ownable(msg.sender) {  // ✅ CHANGED: Empty URI, will use uri() function override
+    ) ERC1155("") Ownable(msg.sender) {
+        // ✅ CHANGED: Empty URI, will use uri() function override
         if (_courseFactory == address(0)) revert InvalidAddress(_courseFactory);
-        if (_progressTracker == address(0)) revert InvalidAddress(_progressTracker);
+        if (_progressTracker == address(0))
+            revert InvalidAddress(_progressTracker);
         if (_courseLicense == address(0)) revert InvalidAddress(_courseLicense);
-        if (_platformWallet == address(0)) revert InvalidAddress(_platformWallet);
+        if (_platformWallet == address(0))
+            revert InvalidAddress(_platformWallet);
 
         courseFactory = CourseFactory(_courseFactory);
         progressTracker = ProgressTracker(_progressTracker);
         courseLicense = CourseLicense(_courseLicense);
         platformWallet = _platformWallet;
         defaultPlatformName = _platformName;
-        defaultBaseRoute = _initialBaseRoute;  // ✅ NEW: Set default base route
+        defaultBaseRoute = _initialBaseRoute; // ✅ NEW: Set default base route
     }
 
     // ==================== MODIFIERS ====================
-    modifier validStringLength(string memory str, uint256 maxLength, string memory paramName) {
+    modifier validStringLength(
+        string memory str,
+        uint256 maxLength,
+        string memory paramName
+    ) {
         if (bytes(str).length == 0 || bytes(str).length > maxLength) {
             revert InvalidStringLength(paramName, maxLength);
-        }
-        _;
-    }
-
-    modifier validCID(string memory cid) {
-        if (bytes(cid).length < 46 || bytes(cid).length > 62) {
-            revert InvalidCIDFormat();
         }
         _;
     }
@@ -191,11 +196,13 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         payable
         nonReentrant
         whenNotPaused
-        validStringLength(ipfsCID, 62, "ipfsCID")
+        validStringLength(ipfsCID, 2000, "ipfsCID")
     {
         // Validate payment receipt hash
-        if (paymentReceiptHash == bytes32(0)) revert InvalidPaymentReceiptHash();
-        if (usedPaymentHashes[paymentReceiptHash]) revert PaymentHashAlreadyUsed();
+        if (paymentReceiptHash == bytes32(0))
+            revert InvalidPaymentReceiptHash();
+        if (usedPaymentHashes[paymentReceiptHash])
+            revert PaymentHashAlreadyUsed();
 
         // ✅ BUSINESS LOGIC CHECK 1: Course must be completed
         if (!progressTracker.isCourseCompleted(msg.sender, courseId)) {
@@ -203,7 +210,10 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         }
 
         // ✅ BUSINESS LOGIC CHECK 2: User must have owned a license (prevents free certificates)
-        CourseLicense.License memory userLicense = courseLicense.getLicense(msg.sender, courseId);
+        CourseLicense.License memory userLicense = courseLicense.getLicense(
+            msg.sender,
+            courseId
+        );
         if (userLicense.courseId == 0) {
             revert NoLicenseOwnership();
         }
@@ -218,10 +228,21 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
 
         if (existingTokenId == 0) {
             // User has no certificate - MINT new one (FIRST COURSE)
-            _mintFirstCertificate(courseId, recipientName, ipfsCID, paymentReceiptHash, baseRoute);
+            _mintFirstCertificate(
+                courseId,
+                recipientName,
+                ipfsCID,
+                paymentReceiptHash,
+                baseRoute
+            );
         } else {
             // User has certificate - ADD course to existing one (SUBSEQUENT COURSES)
-            _addCourseToExistingCertificate(existingTokenId, courseId, ipfsCID, paymentReceiptHash);
+            _addCourseToExistingCertificate(
+                existingTokenId,
+                courseId,
+                ipfsCID,
+                paymentReceiptHash
+            );
         }
     }
 
@@ -240,10 +261,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         bytes32 paymentReceiptHash,
         /* bool lifetimeFlag, */
         string calldata baseRoute
-    )
-        internal
-        validStringLength(recipientName, 100, "recipientName")
-    {
+    ) internal validStringLength(recipientName, 100, "recipientName") {
         // ✅ MEDIUM FIX: Prevent double-mint race condition (Security Enhancement)
         if (userCertificates[msg.sender] != 0) {
             revert CertificateAlreadyExists();
@@ -270,7 +288,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
             platformName: defaultPlatformName,
             recipientName: recipientName,
             recipientAddress: msg.sender,
-            lifetimeFlag: true,  // Always lifetime validity
+            lifetimeFlag: true, // Always lifetime validity
             isValid: true,
             ipfsCID: ipfsCID,
             baseRoute: baseRoute,
@@ -295,8 +313,20 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
         _processCertificatePayment(course.creator, certificatePrice);
 
-        emit CertificateMinted(msg.sender, tokenId, recipientName, ipfsCID, paymentReceiptHash, certificatePrice);  // ✅ Added certificatePrice
-        emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
+        emit CertificateMinted(
+            msg.sender,
+            tokenId,
+            recipientName,
+            ipfsCID,
+            paymentReceiptHash,
+            certificatePrice
+        ); // ✅ Added certificatePrice
+        emit CertificatePaymentRecorded(
+            msg.sender,
+            msg.sender,
+            tokenId,
+            paymentReceiptHash
+        );
     }
 
     /**
@@ -321,7 +351,8 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         Certificate storage cert = certificates[tokenId];
 
         // Verify certificate ownership
-        if (cert.recipientAddress != msg.sender) revert CertificateNotFound(tokenId);
+        if (cert.recipientAddress != msg.sender)
+            revert CertificateNotFound(tokenId);
         if (!cert.isValid) revert CertificateNotFound(tokenId);
 
         // Check if course already in certificate
@@ -345,12 +376,14 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         certificateCourseExists[tokenId][courseId] = true;
 
         // ✅ Store completion timestamp for certificate timeline display
-        CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
+        CourseFactory.CourseSection[] memory sections = courseFactory
+            .getCourseSections(courseId);
         if (sections.length > 0) {
             uint256 lastSectionId = sections.length - 1;
-            ProgressTracker.SectionProgress memory lastSection =
-                progressTracker.getSectionProgress(msg.sender, courseId, lastSectionId);
-            certificateCourseCompletionDate[tokenId][courseId] = lastSection.completedAt;
+            ProgressTracker.SectionProgress memory lastSection = progressTracker
+                .getSectionProgress(msg.sender, courseId, lastSectionId);
+            certificateCourseCompletionDate[tokenId][courseId] = lastSection
+                .completedAt;
         }
 
         // Process payment with 2% platform fee for course additions (98% creator + 2% platform)
@@ -358,8 +391,20 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
         _processPayment(course.creator, additionPrice);
 
-        emit CourseAddedToCertificate(msg.sender, tokenId, courseId, ipfsCID, paymentReceiptHash, additionPrice);  // ✅ Added additionPrice
-        emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
+        emit CourseAddedToCertificate(
+            msg.sender,
+            tokenId,
+            courseId,
+            ipfsCID,
+            paymentReceiptHash,
+            additionPrice
+        ); // ✅ Added additionPrice
+        emit CertificatePaymentRecorded(
+            msg.sender,
+            msg.sender,
+            tokenId,
+            paymentReceiptHash
+        );
     }
 
     /**
@@ -378,10 +423,12 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         payable
         nonReentrant
         whenNotPaused
-        validStringLength(newIpfsCID, 62, "newIpfsCID")
+        validStringLength(newIpfsCID, 2000, "newIpfsCID")
     {
-        if (paymentReceiptHash == bytes32(0)) revert InvalidPaymentReceiptHash();
-        if (usedPaymentHashes[paymentReceiptHash]) revert PaymentHashAlreadyUsed();
+        if (paymentReceiptHash == bytes32(0))
+            revert InvalidPaymentReceiptHash();
+        if (usedPaymentHashes[paymentReceiptHash])
+            revert PaymentHashAlreadyUsed();
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
         if (msg.value < defaultCourseAdditionFee) revert InsufficientPayment(); // Use smaller fee for updates
 
@@ -404,8 +451,18 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         // Process payment (use course addition fee for simple updates)
         _processCertificatePayment(platformWallet, defaultCourseAdditionFee);
 
-        emit CertificateUpdated(cert.recipientAddress, tokenId, newIpfsCID, paymentReceiptHash);
-        emit CertificatePaymentRecorded(msg.sender, cert.recipientAddress, tokenId, paymentReceiptHash);
+        emit CertificateUpdated(
+            cert.recipientAddress,
+            tokenId,
+            newIpfsCID,
+            paymentReceiptHash
+        );
+        emit CertificatePaymentRecorded(
+            msg.sender,
+            cert.recipientAddress,
+            tokenId,
+            paymentReceiptHash
+        );
     }
 
     /**
@@ -424,11 +481,13 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         payable
         nonReentrant
         whenNotPaused
-        validStringLength(ipfsCID, 62, "ipfsCID")
+        validStringLength(ipfsCID, 2000, "ipfsCID")
     {
         if (courseIds.length == 0) revert EmptyCoursesArray();
-        if (paymentReceiptHash == bytes32(0)) revert InvalidPaymentReceiptHash();
-        if (usedPaymentHashes[paymentReceiptHash]) revert PaymentHashAlreadyUsed();
+        if (paymentReceiptHash == bytes32(0))
+            revert InvalidPaymentReceiptHash();
+        if (usedPaymentHashes[paymentReceiptHash])
+            revert PaymentHashAlreadyUsed();
 
         uint256 tokenId = userCertificates[msg.sender];
         if (tokenId == 0) revert NoCertificateExists();
@@ -437,7 +496,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         if (!cert.isValid) revert CertificateNotFound(tokenId);
 
         // Validate payment for batch operation
-        uint256 perCourseFee = defaultCourseAdditionFee;  // ✅ Store for event emission
+        uint256 perCourseFee = defaultCourseAdditionFee; // ✅ Store for event emission
         uint256 totalFee = perCourseFee * courseIds.length;
         if (msg.value < totalFee) revert InsufficientPayment();
 
@@ -453,7 +512,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
                 revert CourseAlreadyInCertificate();
             }
 
-            unchecked { ++i; } // Safe: controlled loop
+            unchecked {
+                ++i;
+            } // Safe: controlled loop
         }
 
         // Mark payment hash as used
@@ -465,9 +526,18 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
             cert.completedCourses.push(courseId);
             certificateCourseExists[tokenId][courseId] = true;
 
-            emit CourseAddedToCertificate(msg.sender, tokenId, courseId, ipfsCID, paymentReceiptHash, perCourseFee);  // ✅ GOLDSKY: Per-course fee
+            emit CourseAddedToCertificate(
+                msg.sender,
+                tokenId,
+                courseId,
+                ipfsCID,
+                paymentReceiptHash,
+                perCourseFee
+            ); // ✅ GOLDSKY: Per-course fee
 
-            unchecked { ++i; } // Safe: controlled loop
+            unchecked {
+                ++i;
+            } // Safe: controlled loop
         }
 
         // Update certificate metadata
@@ -481,7 +551,12 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         // Process payment to platform (batch fee)
         _processCertificatePayment(platformWallet, totalFee);
 
-        emit CertificatePaymentRecorded(msg.sender, msg.sender, tokenId, paymentReceiptHash);
+        emit CertificatePaymentRecorded(
+            msg.sender,
+            msg.sender,
+            tokenId,
+            paymentReceiptHash
+        );
     }
 
     // ==================== VIEW FUNCTIONS ====================
@@ -491,7 +566,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param tokenId Certificate token ID
      * @return Certificate struct with full learning journey
      */
-    function getCertificate(uint256 tokenId) external view returns (Certificate memory) {
+    function getCertificate(
+        uint256 tokenId
+    ) external view returns (Certificate memory) {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
         return certificates[tokenId];
     }
@@ -510,7 +587,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param tokenId Certificate token ID
      * @return Array of completed course IDs
      */
-    function getCertificateCompletedCourses(uint256 tokenId) external view returns (uint256[] memory) {
+    function getCertificateCompletedCourses(
+        uint256 tokenId
+    ) external view returns (uint256[] memory) {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
         return certificates[tokenId].completedCourses;
     }
@@ -521,7 +600,10 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param courseId Course ID to check
      * @return Boolean indicating if course is in certificate
      */
-    function isCourseInCertificate(uint256 tokenId, uint256 courseId) external view returns (bool) {
+    function isCourseInCertificate(
+        uint256 tokenId,
+        uint256 courseId
+    ) external view returns (bool) {
         if (!_exists(tokenId)) return false;
         return certificateCourseExists[tokenId][courseId];
     }
@@ -534,19 +616,30 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @return issuedAt Timestamp of first certificate
      * @return lastUpdated Timestamp of last course addition
      */
-    function getUserCertificateStats(address user) external view returns (
-        uint256 tokenId,
-        uint256 totalCourses,
-        uint256 issuedAt,
-        uint256 lastUpdated
-    ) {
+    function getUserCertificateStats(
+        address user
+    )
+        external
+        view
+        returns (
+            uint256 tokenId,
+            uint256 totalCourses,
+            uint256 issuedAt,
+            uint256 lastUpdated
+        )
+    {
         tokenId = userCertificates[user];
         if (tokenId == 0) {
             return (0, 0, 0, 0);
         }
 
         Certificate memory cert = certificates[tokenId];
-        return (tokenId, cert.totalCoursesCompleted, cert.issuedAt, cert.lastUpdated);
+        return (
+            tokenId,
+            cert.totalCoursesCompleted,
+            cert.issuedAt,
+            cert.lastUpdated
+        );
     }
 
     /**
@@ -555,7 +648,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param tokenId Certificate token ID
      * @return QR code data string linking to learning history website
      */
-    function generateQRData(uint256 tokenId) external view returns (string memory) {
+    function generateQRData(
+        uint256 tokenId
+    ) external view returns (string memory) {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
 
         Certificate memory cert = certificates[tokenId];
@@ -567,15 +662,18 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
 
         // Generate: baseRoute + ?address=<recipientAddress>&tokenId=<tokenId>
         // Website can then query all completed courses and show full learning journey
-        return string(abi.encodePacked(
-            cert.baseRoute,
-            "?address=",
-            Strings.toHexString(uint160(cert.recipientAddress), 20),
-            "&tokenId=",
-            tokenId.toString(),
-            "&courses=",
-            cert.totalCoursesCompleted.toString()
-        ));
+        return
+            string(
+                abi.encodePacked(
+                    cert.baseRoute,
+                    "?address=",
+                    Strings.toHexString(uint160(cert.recipientAddress), 20),
+                    "&tokenId=",
+                    tokenId.toString(),
+                    "&courses=",
+                    cert.totalCoursesCompleted.toString()
+                )
+            );
     }
 
     /**
@@ -597,14 +695,20 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @return lastUpdated Last update timestamp
      * @return isValid Certificate validity status
      */
-    function getLearningJourneySummary(uint256 tokenId) external view returns (
-        string memory recipientName,
-        string memory platformName,
-        uint256 totalCourses,
-        uint256 issuedAt,
-        uint256 lastUpdated,
-        bool isValid
-    ) {
+    function getLearningJourneySummary(
+        uint256 tokenId
+    )
+        external
+        view
+        returns (
+            string memory recipientName,
+            string memory platformName,
+            uint256 totalCourses,
+            uint256 issuedAt,
+            uint256 lastUpdated,
+            bool isValid
+        )
+    {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
 
         Certificate memory cert = certificates[tokenId];
@@ -631,7 +735,14 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
             return _tokenURIs[tokenId];
         }
 
-        return string(abi.encodePacked(super.uri(tokenId), tokenId.toString(), ".json"));
+        return
+            string(
+                abi.encodePacked(
+                    super.uri(tokenId),
+                    tokenId.toString(),
+                    ".json"
+                )
+            );
     }
 
     // ==================== ADMIN FUNCTIONS ====================
@@ -670,8 +781,13 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @dev Sets default platform name (admin only)
      * @param newPlatformName New platform name
      */
-    function setDefaultPlatformName(string calldata newPlatformName) external onlyOwner {
-        if (bytes(newPlatformName).length == 0 || bytes(newPlatformName).length > 100) {
+    function setDefaultPlatformName(
+        string calldata newPlatformName
+    ) external onlyOwner {
+        if (
+            bytes(newPlatformName).length == 0 ||
+            bytes(newPlatformName).length > 100
+        ) {
             revert InvalidStringLength("platformName", 100);
         }
         defaultPlatformName = newPlatformName;
@@ -683,13 +799,19 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param courseId Course ID
      * @param price Certificate price (maximum 0.002 ETH)
      */
-    function setCourseCertificatePrice(uint256 courseId, uint256 price) external {
+    function setCourseCertificatePrice(
+        uint256 courseId,
+        uint256 price
+    ) external {
         if (price == 0) revert ZeroAmount();
         if (price > MAX_CERTIFICATE_PRICE) revert ExceedsMaxPrice();
 
         // Verify caller is the course creator
         CourseFactory.Course memory course = courseFactory.getCourse(courseId);
-        require(course.creator == msg.sender, "Only course creator can set price");
+        require(
+            course.creator == msg.sender,
+            "Only course creator can set price"
+        );
 
         courseCertificatePrices[courseId] = price;
         emit CourseCertificatePriceSet(courseId, price, msg.sender);
@@ -700,7 +822,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param courseId Course ID
      * @return Certificate price in wei
      */
-    function getCourseCertificatePrice(uint256 courseId) external view returns (uint256) {
+    function getCourseCertificatePrice(
+        uint256 courseId
+    ) external view returns (uint256) {
         uint256 creatorPrice = courseCertificatePrices[courseId];
         if (creatorPrice > 0) {
             return creatorPrice;
@@ -715,11 +839,10 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @return timestamp Completion timestamp (0 if not found)
      * @custom:goldsky Enables timeline display: "Blockchain Dev completed on Jan 15, 2024"
      */
-    function getCourseCompletionDate(uint256 tokenId, uint256 courseId)
-        external
-        view
-        returns (uint256 timestamp)
-    {
+    function getCourseCompletionDate(
+        uint256 tokenId,
+        uint256 courseId
+    ) external view returns (uint256 timestamp) {
         return certificateCourseCompletionDate[tokenId][courseId];
     }
 
@@ -731,10 +854,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     function setTokenURI(
         uint256 tokenId,
         string calldata tokenURI
-    )
-        external
-        onlyOwner
-    {
+    ) external onlyOwner {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
         _tokenURIs[tokenId] = tokenURI;
     }
@@ -747,11 +867,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     function updateBaseRoute(
         uint256 tokenId,
         string calldata newBaseRoute
-    )
-        external
-        onlyOwner
-        validStringLength(newBaseRoute, 200, "baseRoute")
-    {
+    ) external onlyOwner validStringLength(newBaseRoute, 200, "baseRoute") {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
 
         certificates[tokenId].baseRoute = newBaseRoute;
@@ -767,11 +883,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      */
     function updateDefaultBaseRoute(
         string calldata newBaseRoute
-    )
-        external
-        onlyOwner
-        validStringLength(newBaseRoute, 200, "baseRoute")
-    {
+    ) external onlyOwner validStringLength(newBaseRoute, 200, "baseRoute") {
         defaultBaseRoute = newBaseRoute;
         emit DefaultBaseRouteUpdated(newBaseRoute);
     }
@@ -785,11 +897,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     function batchUpdateBaseRoute(
         uint256[] calldata tokenIds,
         string calldata newBaseRoute
-    )
-        external
-        onlyOwner
-        validStringLength(newBaseRoute, 200, "baseRoute")
-    {
+    ) external onlyOwner validStringLength(newBaseRoute, 200, "baseRoute") {
         if (tokenIds.length == 0) revert EmptyCoursesArray();
 
         for (uint256 i = 0; i < tokenIds.length; ) {
@@ -799,7 +907,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
                 certificates[tokenId].lastUpdated = block.timestamp;
                 emit BaseRouteUpdated(tokenId, newBaseRoute);
             }
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -811,10 +921,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     function revokeCertificate(
         uint256 tokenId,
         string calldata reason
-    )
-        external
-        onlyOwner
-    {
+    ) external onlyOwner {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
 
         certificates[tokenId].isValid = false;
@@ -842,7 +949,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param courseId Course ID
      * @return Certificate price in wei
      */
-    function _getCertificatePrice(uint256 courseId) internal view returns (uint256) {
+    function _getCertificatePrice(
+        uint256 courseId
+    ) internal view returns (uint256) {
         uint256 creatorPrice = courseCertificatePrices[courseId];
         if (creatorPrice > 0) {
             return creatorPrice;
@@ -855,10 +964,13 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param recipient Payment recipient (course creator)
      * @param totalAmount Total amount being processed
      */
-    function _processCertificatePayment(address recipient, uint256 totalAmount) internal {
+    function _processCertificatePayment(
+        address recipient,
+        uint256 totalAmount
+    ) internal {
         // Calculate fees: 10% platform, 90% creator
         uint256 platformFee = (totalAmount * 1000) / 10000; // 10%
-        uint256 creatorFee = totalAmount - platformFee;     // 90%
+        uint256 creatorFee = totalAmount - platformFee; // 90%
 
         // Send platform fee (10%)
         if (platformFee > 0) {
@@ -919,8 +1031,6 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         return tokenId > 0 && tokenId < _nextTokenId;
     }
 
-
-
     /**
      * @dev Override for soulbound behavior (non-transferable)
      * @notice Remove this function to enable transfers
@@ -945,12 +1055,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @dev Interface support check
      * @notice Supports ERC1155 interface only
      */
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC1155)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(ERC1155) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 }

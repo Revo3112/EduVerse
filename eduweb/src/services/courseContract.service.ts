@@ -1,38 +1,24 @@
-/**
- * @fileoverview Course Smart Contract Service (Thirdweb SDK)
- * @description Handles blockchain interactions with CourseFactory contract using Thirdweb
- * @author EduVerse Platform
- * @date 2025-01-13
- *
- * This service provides functions to interact with the CourseFactory smart contract:
- * - prepareCreateCourseTransaction(): Prepare transaction to create a new course
- * - prepareAddSectionTransaction(): Prepare transaction to add a section
- * - getCourseDetails(): Retrieve course information
- * - getSectionDetails(): Retrieve section information with duration
- *
- * Smart Contract Integration:
- * - CourseFactory.sol with duration support in SectionAdded events
- * - Events emit contentCID and duration for Goldsky indexer
- * - Duration validated in range 60-10800 seconds (1 minute - 3 hours)
- *
- * Thirdweb SDK:
- * - Uses prepareContractCall() for transaction preparation
- * - Uses readContract() for reading blockchain data
- * - Components execute transactions with useSendTransaction() hook
- */
+// courseContract.service.ts - Course Smart Contract Interaction Service
+// Uses thirdweb SDK exclusively for all blockchain interactions
+// Updated: No CID length restrictions as per smart contract changes
 
-import { courseFactory, courseLicense } from "@/lib/contracts";
 import {
   prepareContractCall,
   readContract,
   type PreparedTransaction,
 } from "thirdweb";
+import { courseFactory } from "@/lib/contracts";
 
-// ============================================================================
-// TYPES
-// ============================================================================
+/**
+ * ========================================
+ * ENUMS - Match smart contract exactly
+ * ========================================
+ */
 
-// Enum mappings matching CourseFactory.sol
+/**
+ * Course categories matching CourseFactory.sol enum
+ * IMPORTANT: Order and values must match smart contract exactly
+ */
 export enum CourseCategory {
   Programming = 0,
   Design = 1,
@@ -62,91 +48,86 @@ export enum CourseDifficulty {
   Advanced = 2,
 }
 
-export interface CourseMetadata {
+interface CourseMetadata {
   title: string;
   description: string;
-  thumbnailCID: string; // Plain CID without ipfs:// prefix
+  thumbnailCID: string;
   creatorName: string;
-  category: string; // String from frontend, will be converted to enum
-  difficulty: string; // String from frontend, will be converted to enum
+  category: string;
+  difficulty: string;
 }
 
-export interface SectionData {
+interface SectionData {
   title: string;
-  contentCID: string; // Livepeer playback ID (16-char hex) stored as section.contentCID in smart contract
-  duration: number; // Duration in seconds (60-10800) - validated range by smart contract
+  contentCID: string;
+  duration: number;
 }
 
-export interface CreateCourseParams {
+interface CreateCourseParams {
   metadata: CourseMetadata;
-  sections: SectionData[];
-  pricePerMonth: string; // Price in ETH (e.g., "0.01")
+  pricePerMonth: string;
 }
 
-export interface BatchAddSectionsParams {
+interface BatchAddSectionsParams {
   courseId: bigint;
   sections: SectionData[];
 }
 
-export interface AddSectionParams {
+interface AddSectionParams {
   courseId: bigint;
   title: string;
   contentCID: string;
   duration: number;
 }
 
-export interface UpdateCourseParams {
+interface UpdateCourseParams {
   courseId: bigint;
   metadata: CourseMetadata;
-  pricePerMonth: string; // Price in ETH (e.g., "0.01")
+  pricePerMonth: string;
   isActive: boolean;
 }
 
-export interface DeleteCourseParams {
+interface DeleteCourseParams {
   courseId: bigint;
 }
 
-export interface MintLicenseParams {
+interface MintLicenseParams {
   courseId: bigint;
-  durationMonths: bigint;
-  priceInEth: string; // Total price in ETH (e.g., "0.01")
+  durationMonths: number;
+  priceInWei: bigint;
 }
 
-export interface Course {
+interface Course {
   title: string;
   description: string;
   thumbnailCID: string;
   creator: string;
   creatorName: string;
   pricePerMonth: bigint;
-  category: string;
-  difficulty: string;
+  category: number;
+  difficulty: number;
   isActive: boolean;
   totalRevenue: bigint;
   createdAt: bigint;
 }
 
-export interface Section {
+interface Section {
   title: string;
   contentCID: string;
-  duration: number;
+  duration: bigint;
   isActive: boolean;
 }
 
-// ============================================================================
-// VALIDATION HELPERS
-// ============================================================================
-
 /**
- * Convert category string to enum number
+ * Convert category string to enum value
  */
-export function categoryToEnum(category: string): number {
-  const mapping: Record<string, number> = {
+function categoryToEnum(category: string): CourseCategory {
+  const mapping: Record<string, CourseCategory> = {
     Programming: CourseCategory.Programming,
     Design: CourseCategory.Design,
     Business: CourseCategory.Business,
     Marketing: CourseCategory.Marketing,
-    DataScience: CourseCategory.DataScience,
+    "Data Science": CourseCategory.DataScience,
     Finance: CourseCategory.Finance,
     Healthcare: CourseCategory.Healthcare,
     Language: CourseCategory.Language,
@@ -158,60 +139,100 @@ export function categoryToEnum(category: string): number {
     Education: CourseCategory.Education,
     Psychology: CourseCategory.Psychology,
     Culinary: CourseCategory.Culinary,
-    PersonalDevelopment: CourseCategory.PersonalDevelopment,
+    "Personal Development": CourseCategory.PersonalDevelopment,
     Legal: CourseCategory.Legal,
     Sports: CourseCategory.Sports,
     Other: CourseCategory.Other,
   };
 
-  if (!(category in mapping)) {
-    throw new Error(`Invalid category: ${category}`);
-  }
-
-  return mapping[category];
+  return mapping[category] ?? CourseCategory.Other;
 }
 
 /**
- * Convert difficulty string to enum number
+ * Convert difficulty string to enum value
  */
-export function difficultyToEnum(difficulty: string): number {
-  const mapping: Record<string, number> = {
+function difficultyToEnum(difficulty: string): CourseDifficulty {
+  const mapping: Record<string, CourseDifficulty> = {
     Beginner: CourseDifficulty.Beginner,
     Intermediate: CourseDifficulty.Intermediate,
     Advanced: CourseDifficulty.Advanced,
   };
-
-  if (!(difficulty in mapping)) {
-    throw new Error(`Invalid difficulty: ${difficulty}`);
-  }
-
-  return mapping[difficulty];
+  return mapping[difficulty] ?? CourseDifficulty.Beginner;
 }
 
 /**
- * Validate section duration meets smart contract requirements
+ * Convert enum value to category string
  */
-export function validateDuration(duration: number): {
+export function enumToCategory(category: number): string {
+  const mapping: Record<number, string> = {
+    [CourseCategory.Programming]: "Programming",
+    [CourseCategory.Design]: "Design",
+    [CourseCategory.Business]: "Business",
+    [CourseCategory.Marketing]: "Marketing",
+    [CourseCategory.DataScience]: "Data Science",
+    [CourseCategory.Finance]: "Finance",
+    [CourseCategory.Healthcare]: "Healthcare",
+    [CourseCategory.Language]: "Language",
+    [CourseCategory.Arts]: "Arts",
+    [CourseCategory.Mathematics]: "Mathematics",
+    [CourseCategory.Science]: "Science",
+    [CourseCategory.Engineering]: "Engineering",
+    [CourseCategory.Technology]: "Technology",
+    [CourseCategory.Education]: "Education",
+    [CourseCategory.Psychology]: "Psychology",
+    [CourseCategory.Culinary]: "Culinary",
+    [CourseCategory.PersonalDevelopment]: "Personal Development",
+    [CourseCategory.Legal]: "Legal",
+    [CourseCategory.Sports]: "Sports",
+    [CourseCategory.Other]: "Other",
+  };
+  return mapping[category] ?? "Other";
+}
+
+/**
+ * Convert enum value to difficulty string
+ */
+export function enumToDifficulty(difficulty: number): string {
+  const mapping: Record<number, string> = {
+    [CourseDifficulty.Beginner]: "Beginner",
+    [CourseDifficulty.Intermediate]: "Intermediate",
+    [CourseDifficulty.Advanced]: "Advanced",
+  };
+  return mapping[difficulty] ?? "Beginner";
+}
+
+/**
+ * Validate duration is within allowed range
+ */
+export function validateDuration(durationSeconds: number): {
   valid: boolean;
   error?: string;
 } {
-  if (duration < 60) {
+  if (!Number.isInteger(durationSeconds) || durationSeconds <= 0) {
+    return { valid: false, error: "Duration must be a positive integer" };
+  }
+
+  if (durationSeconds < 60) {
     return {
       valid: false,
       error: "Duration must be at least 60 seconds (1 minute)",
     };
   }
-  if (duration > 10800) {
+
+  if (durationSeconds > 10800) {
     return {
       valid: false,
-      error: "Duration must not exceed 10800 seconds (3 hours)",
+      error: "Duration cannot exceed 10800 seconds (3 hours)",
     };
   }
+
   return { valid: true };
 }
 
 /**
- * Validate IPFS CID format
+ * Validate CID format
+ * NO MINIMUM LENGTH - Smart contract accepts any non-empty string
+ * Only validates: non-empty and max length
  */
 export function validateCID(cid: string): {
   valid: boolean;
@@ -223,38 +244,12 @@ export function validateCID(cid: string): {
 
   const trimmed = cid.trim();
 
-  if (trimmed.length > 100) {
-    return { valid: false, error: "CID is too long (maximum 100 characters)" };
+  // Only check maximum length for gas optimization
+  if (trimmed.length > 2000) {
+    return { valid: false, error: "CID is too long (maximum 2000 characters)" };
   }
 
-  const livepeerPlaybackIdRegex = /^[a-f0-9]{16}$/;
-  if (livepeerPlaybackIdRegex.test(trimmed)) {
-    return { valid: true };
-  }
-
-  if (trimmed.length < 46) {
-    return {
-      valid: false,
-      error:
-        "CID is too short (minimum 46 characters for IPFS CID or 16 for Livepeer playback ID)",
-    };
-  }
-
-  const cidV0Regex = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
-  const cidV1Regex = /^[a-z0-9]{59}$/;
-  const cidV1Base32Regex = /^b[a-z2-7]{58}$/;
-
-  if (
-    !cidV0Regex.test(trimmed) &&
-    !cidV1Regex.test(trimmed) &&
-    !cidV1Base32Regex.test(trimmed)
-  ) {
-    return {
-      valid: false,
-      error: "Invalid IPFS CID or Livepeer playback ID format",
-    };
-  }
-
+  // NO MINIMUM LENGTH CHECK - Smart contract updated to accept any length
   return { valid: true };
 }
 
@@ -269,12 +264,31 @@ export function validateSections(sections: SectionData[]): {
     return { valid: false, error: "At least one section is required" };
   }
 
+  if (sections.length > 50) {
+    return {
+      valid: false,
+      error:
+        "Batch exceeds maximum limit of 50 sections. Split into multiple batches.",
+    };
+  }
+
+  const titles = new Set<string>();
+
   for (let i = 0; i < sections.length; i++) {
     const section = sections[i];
 
     if (!section.title || section.title.trim().length === 0) {
       return { valid: false, error: `Section ${i + 1}: Title is required` };
     }
+
+    const normalizedTitle = section.title.trim().toLowerCase();
+    if (titles.has(normalizedTitle)) {
+      return {
+        valid: false,
+        error: `Section ${i + 1}: Duplicate title "${section.title}"`,
+      };
+    }
+    titles.add(normalizedTitle);
 
     if (!section.contentCID || section.contentCID.trim().length === 0) {
       return {
@@ -283,6 +297,7 @@ export function validateSections(sections: SectionData[]): {
       };
     }
 
+    // Validate CID (NO MINIMUM LENGTH)
     const cidCheck = validateCID(section.contentCID);
     if (!cidCheck.valid) {
       return {
@@ -304,106 +319,94 @@ export function validateSections(sections: SectionData[]): {
 }
 
 /**
- * Convert ETH string to wei (as bigint)
+ * Convert ETH to Wei with precision handling
  */
-export function ethToWei(ethAmount: string): bigint {
-  try {
-    const eth = parseFloat(ethAmount);
-    if (isNaN(eth) || eth < 0) {
-      throw new Error("Invalid ETH amount");
-    }
+export function ethToWei(ethValue: string): bigint {
+  const eth = parseFloat(ethValue);
 
-    const MAX_ETH = 1000000;
-    if (eth > MAX_ETH) {
-      throw new Error(`ETH amount exceeds maximum (${MAX_ETH} ETH)`);
-    }
-
-    const weiString = (eth * 1e18).toFixed(0);
-    const weiValue = BigInt(weiString);
-
-    const MAX_UINT256 = BigInt(
-      "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-    );
-    if (weiValue > MAX_UINT256) {
-      throw new Error("Amount exceeds uint256 max value");
-    }
-
-    return weiValue;
-  } catch (error) {
-    console.error("[Contract Service] Failed to convert ETH to wei:", error);
-    throw error;
+  if (isNaN(eth) || eth < 0) {
+    throw new Error(`Invalid ETH value: ${ethValue}`);
   }
+
+  const MAX_ETH = 1000000;
+  if (eth > MAX_ETH) {
+    throw new Error(`ETH value too large: ${eth} (max: ${MAX_ETH})`);
+  }
+
+  const weiString = (eth * 1e18).toFixed(0);
+  const weiValue = BigInt(weiString);
+
+  const MAX_UINT256 = BigInt(
+    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+  );
+  if (weiValue > MAX_UINT256) {
+    throw new Error(`Wei value exceeds uint256 maximum: ${weiValue}`);
+  }
+
+  return weiValue;
 }
 
 /**
- * Convert wei to ETH string
+ * Convert Wei to ETH for display
  */
-export function weiToEth(weiAmount: bigint): string {
-  try {
-    const weiStr = weiAmount.toString();
-    const len = weiStr.length;
+export function weiToEth(weiValue: bigint): string {
+  const weiStr = weiValue.toString();
+  const len = weiStr.length;
 
-    if (len <= 18) {
-      const padded = weiStr.padStart(18, "0");
-      const eth = `0.${padded}`;
-      return eth.replace(/\.?0+$/, "") || "0";
-    }
-
+  if (len <= 18) {
+    const padded = weiStr.padStart(18, "0");
+    const eth = "0." + padded;
+    return parseFloat(eth).toFixed(6);
+  } else {
     const intPart = weiStr.slice(0, len - 18);
     const decPart = weiStr.slice(len - 18);
-    const eth = `${intPart}.${decPart}`;
-    return eth.replace(/\.?0+$/, "");
-  } catch (error) {
-    console.error("[Contract Service] Failed to convert wei to ETH:", error);
-    return "0";
+    const eth = intPart + "." + decPart;
+    return parseFloat(eth).toFixed(6);
   }
 }
 
-// ============================================================================
-// TRANSACTION PREPARATION FUNCTIONS
-// ============================================================================
+/**
+ * ========================================
+ * TRANSACTION PREPARATION FUNCTIONS
+ * ========================================
+ */
 
 /**
- * Prepare transaction to create a new course on the blockchain
- * Returns a PreparedTransaction for execution with useSendTransaction() hook
+ * Prepare create course transaction
+ * @param params Course creation parameters
+ * @returns PreparedTransaction ready to send via thirdweb
  *
- * @param params - Course creation parameters
- * @returns Prepared transaction or throws error if validation fails
- *
- * @example
- * ```tsx
- * const { mutate: sendTx } = useSendTransaction();
- * const transaction = prepareCreateCourseTransaction(params);
- * sendTx(transaction, {
- *   onSuccess: (result) => console.log('Course created!', result),
- *   onError: (error) => console.error('Failed:', error),
- * });
- * ```
+ * Smart Contract Signature:
+ * function createCourse(
+ *   string memory title,
+ *   string memory description,
+ *   string memory thumbnailCID,
+ *   string memory creatorName,
+ *   uint256 pricePerMonth,
+ *   CourseCategory category,
+ *   CourseDifficulty difficulty
+ * ) external returns (uint256 courseId)
  */
 export function prepareCreateCourseTransaction(
   params: CreateCourseParams
 ): PreparedTransaction {
   console.log("[Contract Service] ========================================");
-  console.log("[Contract Service] Preparing course creation transaction...");
+  console.log("[Contract Service] Preparing create course transaction...");
   console.log("[Contract Service] Title:", params.metadata.title);
-  console.log("[Contract Service] Sections:", params.sections.length);
+  console.log("[Contract Service] Creator:", params.metadata.creatorName);
   console.log("[Contract Service] Price:", params.pricePerMonth, "ETH");
 
-  if (!params.metadata.title?.trim()) {
-    throw new Error("Course title is required");
+  if (
+    !params.metadata.thumbnailCID ||
+    params.metadata.thumbnailCID.trim().length === 0
+  ) {
+    throw new Error("Thumbnail CID is required");
   }
 
-  if (!params.metadata.description?.trim()) {
-    throw new Error("Course description is required");
-  }
-
+  // Validate thumbnail CID (NO MINIMUM LENGTH)
   const thumbnailCidCheck = validateCID(params.metadata.thumbnailCID);
   if (!thumbnailCidCheck.valid) {
-    throw new Error(`Invalid thumbnail CID: ${thumbnailCidCheck.error}`);
-  }
-
-  if (!params.metadata.creatorName?.trim()) {
-    throw new Error("Creator name is required");
+    throw new Error(thumbnailCidCheck.error);
   }
 
   const priceInWei = ethToWei(params.pricePerMonth);
@@ -414,12 +417,12 @@ export function prepareCreateCourseTransaction(
   const transaction = prepareContractCall({
     contract: courseFactory,
     method:
-      "function createCourse(string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, uint8 category, uint8 difficulty) returns (uint256)",
+      "function createCourse(string title, string description, string thumbnailCID, string creatorName, uint256 pricePerMonth, uint8 category, uint8 difficulty) returns (uint256 courseId)",
     params: [
-      params.metadata.title.trim(),
-      params.metadata.description.trim(),
-      params.metadata.thumbnailCID.trim(),
-      params.metadata.creatorName.trim(),
+      params.metadata.title,
+      params.metadata.description,
+      params.metadata.thumbnailCID,
+      params.metadata.creatorName,
       priceInWei,
       categoryEnum,
       difficultyEnum,
@@ -430,47 +433,45 @@ export function prepareCreateCourseTransaction(
   console.log(
     "[Contract Service] Category:",
     params.metadata.category,
-    "→",
+    "->",
     categoryEnum
   );
   console.log(
     "[Contract Service] Difficulty:",
     params.metadata.difficulty,
-    "→",
+    "->",
     difficultyEnum
   );
+  console.log("[Contract Service] Price in Wei:", priceInWei.toString());
+  console.log("[Contract Service] ========================================");
+
   return transaction;
 }
 
 /**
- * Prepare transaction to batch add sections to a course
- * Handles up to 50 sections per transaction (smart contract limit)
+ * Prepare batch add sections transaction
+ * @param params Batch section data
+ * @returns PreparedTransaction ready to send via thirdweb
  *
- * For 100 sections, call this function twice:
- * - First batch: sections 0-49
- * - Second batch: sections 50-99
+ * Smart Contract Signature:
+ * function batchAddSections(
+ *   uint256 courseId,
+ *   SectionData[] calldata sectionsData
+ * ) external onlyCreator(courseId) courseExists(courseId) returns (bool success)
  *
- * @param params - Batch section parameters
- * @returns Prepared transaction or throws error if validation fails
+ * struct SectionData {
+ *   string title;
+ *   string contentCID;
+ *   uint256 duration;
+ * }
  *
- * @example
- * ```tsx
- * const { mutate: sendTx } = useSendTransaction();
+ * CRITICAL: This function handles the smart contract's batch limit of 50 sections.
+ * For courses with >50 sections, the caller MUST split into multiple transactions.
  *
- * // For 100 sections, split into 2 batches
- * const batch1 = sections.slice(0, 50);
- * const batch2 = sections.slice(50, 100);
- *
- * // Send first batch
- * const tx1 = prepareBatchAddSectionsTransaction({ courseId: 1n, sections: batch1 });
- * sendTx(tx1, {
- *   onSuccess: () => {
- *     // Send second batch
- *     const tx2 = prepareBatchAddSectionsTransaction({ courseId: 1n, sections: batch2 });
- *     sendTx(tx2);
- *   }
- * });
- * ```
+ * Gas Optimization Strategy:
+ * - Batch size: 50 sections per transaction (smart contract limit)
+ * - Sequential processing with receipt confirmation to prevent nonce conflicts
+ * - Each batch must complete before next batch starts
  */
 export function prepareBatchAddSectionsTransaction(
   params: BatchAddSectionsParams
@@ -522,46 +523,25 @@ export function prepareBatchAddSectionsTransaction(
 }
 
 /**
- * Prepare transaction to add a section to an existing course
- * Returns a PreparedTransaction for execution with useSendTransaction() hook
+ * Prepare add single section transaction
+ * @param params Section data
+ * @returns PreparedTransaction ready to send via thirdweb
  *
-```
-
-/**
- * Prepare transaction to add a section to an existing course
- * Returns a PreparedTransaction for execution with useSendTransaction() hook
- *
- * @param params - Section parameters including courseId, title, contentCID, and duration
- * @returns Prepared transaction or throws error if validation fails
- *
- * @example
- * ```tsx
- * const { mutate: sendTx } = useSendTransaction();
- * const transaction = prepareAddSectionTransaction({
- *   courseId: 1n,
- *   title: "Introduction",
- *   contentCID: "QmXXX...",
- *   duration: 300, // 5 minutes
- * });
- * sendTx(transaction);
- * ```
+ * Smart Contract Signature:
+ * function addCourseSection(
+ *   uint256 courseId,
+ *   string memory title,
+ *   string memory contentCID,
+ *   uint256 duration
+ * ) external onlyCreator(courseId) courseExists(courseId)
  */
 export function prepareAddSectionTransaction(
   params: AddSectionParams
 ): PreparedTransaction {
-  console.log("[Contract Service] ========================================");
   console.log("[Contract Service] Preparing add section transaction...");
   console.log("[Contract Service] Course ID:", params.courseId);
-  console.log("[Contract Service] Section Title:", params.title);
-  console.log("[Contract Service] Duration:", params.duration, "seconds");
+  console.log("[Contract Service] Section title:", params.title);
 
-  // Validate duration
-  const durationCheck = validateDuration(params.duration);
-  if (!durationCheck.valid) {
-    throw new Error(`Duration validation failed: ${durationCheck.error}`);
-  }
-
-  // Validate required fields
   if (!params.title || params.title.trim().length === 0) {
     throw new Error("Section title is required");
   }
@@ -570,90 +550,161 @@ export function prepareAddSectionTransaction(
     throw new Error("Content CID is required");
   }
 
-  // Prepare transaction
+  // Validate CID (NO MINIMUM LENGTH)
+  const cidCheck = validateCID(params.contentCID);
+  if (!cidCheck.valid) {
+    throw new Error(cidCheck.error);
+  }
+
+  const durationCheck = validateDuration(params.duration);
+  if (!durationCheck.valid) {
+    throw new Error(durationCheck.error);
+  }
+
   const transaction = prepareContractCall({
     contract: courseFactory,
     method:
-      "function addCourseSection(uint256,string,string,uint256) returns (bool)",
+      "function addCourseSection(uint256 courseId, string title, string contentCID, uint256 duration)",
     params: [
       params.courseId,
-      params.title,
-      params.contentCID,
+      params.title.trim(),
+      params.contentCID.trim(),
       BigInt(params.duration),
     ],
   });
 
-  console.log("[Contract Service] ✅ Transaction prepared successfully");
+  console.log("[Contract Service] ✅ Add section transaction prepared");
   return transaction;
 }
 
 /**
- * Prepare a transaction to update an existing course
+ * Determine if batch upload should be used based on section count
+ * @param sectionCount Number of sections to upload
+ * @returns Strategy recommendation
  *
- * @param params - Update course parameters including courseId, metadata, price, and isActive status
- * @returns Prepared transaction for use with useSendTransaction
+ * STRATEGY:
+ * - 1 section: Use addCourseSection (sequential)
+ * - 2-50 sections: Use batchAddSections (single transaction)
+ * - 51-250 sections: Use batchAddSections (multiple batches of 50)
+ * - 251+ sections: Use batchAddSections (multiple batches of 50)
  *
- * @example
- * ```tsx
- * const transaction = prepareUpdateCourseTransaction({
- *   courseId: 1n,
- *   metadata: {
- *     title: "Updated Course Title",
- *     description: "Updated description",
- *     thumbnailCID: "QmXXX...",
- *     creatorName: "Instructor Name",
- *     category: "Programming",
- *     difficulty: "Intermediate"
- *   },
- *   pricePerMonth: "0.02",
- *   isActive: true
- * });
- * sendTx(transaction);
- * ```
+ * Gas Estimation:
+ * - Single section: ~150,000 gas per section
+ * - Batch (50 sections): ~7,000,000 gas total (~140,000 per section)
+ * - Savings: ~10,000 gas per section when batching
+ */
+export function shouldUseBatchUpload(sections: SectionData[]): {
+  shouldBatch: boolean;
+  batches: SectionData[][];
+  batchCount: number;
+  strategy: string;
+  estimatedGas: string;
+  reasoning: string;
+} {
+  const BATCH_THRESHOLD = 1;
+  const BATCH_SIZE = 50;
+  const count = sections.length;
+
+  // Strategy 1: Sequential for single section
+  if (count <= BATCH_THRESHOLD) {
+    return {
+      shouldBatch: false,
+      batches: [sections],
+      batchCount: 1,
+      strategy: "sequential",
+      estimatedGas: "~150,000 gas",
+      reasoning: "Single section - using sequential upload",
+    };
+  }
+
+  // Strategy 2: Single batch (2-50 sections)
+  if (count <= BATCH_SIZE) {
+    return {
+      shouldBatch: true,
+      batches: [sections],
+      batchCount: 1,
+      strategy: "single-batch",
+      estimatedGas: `~${(count * 140000).toLocaleString()} gas`,
+      reasoning: `${count} sections - using single batch upload`,
+    };
+  }
+
+  // Strategy 3: Multiple batches (51+ sections)
+  const batches: SectionData[][] = [];
+  for (let i = 0; i < count; i += BATCH_SIZE) {
+    batches.push(sections.slice(i, i + BATCH_SIZE));
+  }
+  const batchCount = batches.length;
+
+  const totalGasBatch = batchCount * 7000000;
+  const totalGasSequential = count * 150000;
+
+  return {
+    shouldBatch: true,
+    batches,
+    batchCount,
+    strategy: "multi-batch",
+    estimatedGas: `~${totalGasBatch.toLocaleString()} gas (saves ~${(
+      totalGasSequential - totalGasBatch
+    ).toLocaleString()} gas)`,
+    reasoning: `${count} sections split into ${batchCount} batches of ${BATCH_SIZE}. Significant gas savings vs sequential.`,
+  };
+}
+
+/**
+ * Prepare update course transaction
+ * @param params Update parameters
+ * @returns PreparedTransaction ready to send via thirdweb
+ *
+ * Smart Contract Signature:
+ * function updateCourse(
+ *   uint256 courseId,
+ *   string memory title,
+ *   string memory description,
+ *   string memory thumbnailCID,
+ *   string memory creatorName,
+ *   uint256 pricePerMonth,
+ *   bool isActive,
+ *   CourseCategory category,
+ *   CourseDifficulty difficulty
+ * ) external onlyCreator(courseId) courseExists(courseId)
  */
 export function prepareUpdateCourseTransaction(
   params: UpdateCourseParams
 ): PreparedTransaction {
-  console.log("[Contract Service] ========================================");
   console.log("[Contract Service] Preparing update course transaction...");
   console.log("[Contract Service] Course ID:", params.courseId);
-  console.log("[Contract Service] Title:", params.metadata.title);
-  console.log("[Contract Service] Price:", params.pricePerMonth, "ETH");
-  console.log("[Contract Service] Is Active:", params.isActive);
 
-  // Convert category and difficulty to enums
   const categoryEnum = categoryToEnum(params.metadata.category);
   const difficultyEnum = difficultyToEnum(params.metadata.difficulty);
 
-  console.log(
-    "[Contract Service] Category:",
-    params.metadata.category,
-    "→",
-    categoryEnum
-  );
-  console.log(
-    "[Contract Service] Difficulty:",
-    params.metadata.difficulty,
-    "→",
-    difficultyEnum
-  );
-
-  // Convert ETH to wei
-  const priceInWei = ethToWei(params.pricePerMonth);
-  console.log("[Contract Service] Price in wei:", priceInWei.toString());
-
-  // Validate price
-  const MAX_PRICE_WEI = BigInt("1000000000000000000"); // 1 ETH
-  if (priceInWei === BigInt(0)) {
-    throw new Error("Price cannot be zero");
+  if (!params.metadata.title || params.metadata.title.trim().length === 0) {
+    throw new Error("Title is required");
   }
+
+  if (
+    !params.metadata.description ||
+    params.metadata.description.trim().length === 0
+  ) {
+    throw new Error("Description is required");
+  }
+
+  if (
+    !params.metadata.thumbnailCID ||
+    params.metadata.thumbnailCID.trim().length === 0
+  ) {
+    throw new Error("Thumbnail CID is required");
+  }
+
+  const priceInWei = ethToWei(params.pricePerMonth);
+
+  const MAX_PRICE_WEI = ethToWei("1000000");
   if (priceInWei > MAX_PRICE_WEI) {
     throw new Error(
-      `Price exceeds maximum of 1 ETH (provided: ${params.pricePerMonth} ETH)`
+      `Price too high: ${params.pricePerMonth} ETH (max: 1,000,000 ETH)`
     );
   }
 
-  // Prepare transaction
   const transaction = prepareContractCall({
     contract: courseFactory,
     method:
@@ -671,257 +722,163 @@ export function prepareUpdateCourseTransaction(
     ],
   });
 
-  console.log("[Contract Service] ✅ Update transaction prepared successfully");
+  console.log("[Contract Service] ✅ Update transaction prepared");
   return transaction;
 }
 
 /**
- * Prepare a transaction to delete a course (soft delete - marks as inactive)
- *
- * @param params - Delete course parameters (courseId)
- * @returns Prepared transaction for use with useSendTransaction
- *
- * @example
- * ```tsx
- * const transaction = prepareDeleteCourseTransaction({
- *   courseId: 1n
- * });
- * sendTx(transaction);
- * ```
+ * Prepare delete course transaction
+ * @param params Delete parameters
+ * @returns PreparedTransaction ready to send via thirdweb
  */
 export function prepareDeleteCourseTransaction(
   params: DeleteCourseParams
 ): PreparedTransaction {
-  console.log("[Contract Service] ========================================");
   console.log("[Contract Service] Preparing delete course transaction...");
   console.log("[Contract Service] Course ID:", params.courseId);
-  console.log(
-    "[Contract Service] NOTE: This is a soft delete (marks as inactive)"
-  );
 
-  // Prepare transaction
   const transaction = prepareContractCall({
     contract: courseFactory,
     method: "function deleteCourse(uint256 courseId)",
     params: [params.courseId],
   });
 
-  console.log("[Contract Service] ✅ Delete transaction prepared successfully");
   return transaction;
 }
 
 /**
- * Prepare transaction to mint a course license (student purchases course)
- * This is the MAIN function for students to buy course access
+ * Prepare mint license transaction
+ * @param params License mint parameters
+ * @returns PreparedTransaction ready to send via thirdweb
  *
- * @param params - License parameters (courseId, duration, price)
- * @returns Prepared transaction with payable value
- *
- * @example
- * ```tsx
- * const { mutate: sendTransaction } = useSendTransaction();
- *
- * const transaction = prepareMintLicenseTransaction({
- *   courseId: 1n,
- *   durationMonths: 1n,
- *   priceInEth: "0.01"
- * });
- *
- * sendTransaction(transaction, {
- *   onSuccess: (result) => {
- *     console.log("License minted! Token ID:", result);
- *   }
- * });
- * ```
+ * Smart Contract Signature:
+ * function mintLicense(uint256 courseId, uint256 durationMonths) external payable
  */
 export function prepareMintLicenseTransaction(
   params: MintLicenseParams
 ): PreparedTransaction {
-  console.log("[Contract Service] ========================================");
   console.log("[Contract Service] Preparing mint license transaction...");
   console.log("[Contract Service] Course ID:", params.courseId);
   console.log("[Contract Service] Duration:", params.durationMonths, "months");
-  console.log("[Contract Service] Price:", params.priceInEth, "ETH");
+  console.log("[Contract Service] Price:", weiToEth(params.priceInWei), "ETH");
 
-  if (params.durationMonths < BigInt(1)) {
-    throw new Error("Duration must be at least 1 month");
+  if (params.durationMonths <= 0) {
+    throw new Error("Duration must be positive");
   }
 
-  const MAX_DURATION = BigInt(36);
+  const MAX_DURATION = 12;
   if (params.durationMonths > MAX_DURATION) {
-    throw new Error(`Duration cannot exceed ${MAX_DURATION} months`);
+    throw new Error(
+      `Duration too long: ${params.durationMonths} (max: 12 months)`
+    );
   }
 
-  const priceInWei = ethToWei(params.priceInEth);
-
-  if (priceInWei === BigInt(0)) {
-    throw new Error("Price must be greater than 0");
-  }
+  const priceInWei = params.priceInWei;
 
   const transaction = prepareContractCall({
-    contract: courseLicense,
+    contract: courseFactory,
     method:
-      "function mintLicense(uint256 courseId, uint256 durationMonths) payable returns (uint256)",
-    params: [params.courseId, params.durationMonths],
+      "function mintLicense(uint256 courseId, uint256 durationMonths) payable",
+    params: [params.courseId, BigInt(params.durationMonths)],
     value: priceInWei,
   });
 
-  console.log("[Contract Service] ✅ Mint license transaction prepared");
-  console.log("[Contract Service] Value (wei):", priceInWei.toString());
   return transaction;
 }
 
-// ============================================================================
-// READ FUNCTIONS
-// ============================================================================
+/**
+ * ========================================
+ * READ FUNCTIONS
+ * ========================================
+ */
 
 /**
- * Get course details from the blockchain
- *
- * @param courseId - The course ID to retrieve
- * @returns Course details or null if not found
- *
- * @example
- * ```tsx
- * const course = await getCourseDetails(1n);
- * console.log('Course title:', course?.title);
- * console.log('Price:', weiToEth(course?.pricePerMonth));
- * ```
+ * Get course details from blockchain
+ * @param courseId Course ID
+ * @returns Course data
  */
-export async function getCourseDetails(
-  courseId: bigint
-): Promise<Course | null> {
-  console.log("[Contract Service] ========================================");
+export async function getCourseDetails(courseId: bigint): Promise<Course> {
   console.log("[Contract Service] Fetching course details...");
   console.log("[Contract Service] Course ID:", courseId);
 
-  try {
-    const result = (await readContract({
-      contract: courseFactory,
-      method:
-        "function getCourse(uint256) view returns (string,string,string,address,string,uint256,string,string,bool,uint256,uint256)",
-      params: [courseId],
-    })) as readonly [
-      string,
-      string,
-      string,
-      string,
-      string,
-      bigint,
-      string,
-      string,
-      boolean,
-      bigint,
-      bigint
-    ];
+  const result = await readContract({
+    contract: courseFactory,
+    method:
+      "function getCourse(uint256 courseId) view returns (string title, string description, string thumbnailCID, address creator, string creatorName, uint256 pricePerMonth, uint8 category, uint8 difficulty, bool isActive, uint256 totalRevenue, uint256 createdAt)",
+    params: [courseId],
+  });
 
-    // Transform result to Course interface
-    const course: Course = {
-      title: result[0],
-      description: result[1],
-      thumbnailCID: result[2],
-      creator: result[3],
-      creatorName: result[4],
-      pricePerMonth: result[5],
-      category: result[6],
-      difficulty: result[7],
-      isActive: result[8],
-      totalRevenue: result[9],
-      createdAt: result[10],
-    };
+  const course: Course = {
+    title: result[0],
+    description: result[1],
+    thumbnailCID: result[2],
+    creator: result[3],
+    creatorName: result[4],
+    pricePerMonth: result[5],
+    category: result[6],
+    difficulty: result[7],
+    isActive: result[8],
+    totalRevenue: result[9],
+    createdAt: result[10],
+  };
 
-    console.log("[Contract Service] ✅ Course details retrieved");
-    console.log("[Contract Service] Title:", course.title);
-    console.log("[Contract Service] Creator:", course.creatorName);
-
-    return course;
-  } catch (error) {
-    console.error("[Contract Service] Failed to get course details:", error);
-    return null;
-  }
+  console.log("[Contract Service] ✅ Course details fetched");
+  return course;
 }
 
 /**
- * Get section details from the blockchain
- *
- * @param courseId - The course ID
- * @param sectionId - The section ID
- * @returns Section details or null if not found
- *
- * @example
- * ```tsx
- * const section = await getSectionDetails(1n, 0n);
- * console.log('Section title:', section?.title);
- * console.log('Duration:', section?.duration, 'seconds');
- * console.log('Video CID:', section?.contentCID);
- * ```
+ * Get section details from blockchain
+ * @param courseId Course ID
+ * @param sectionId Section ID
+ * @returns Section data
  */
 export async function getSectionDetails(
   courseId: bigint,
   sectionId: bigint
-): Promise<Section | null> {
-  console.log("[Contract Service] ========================================");
+): Promise<Section> {
   console.log("[Contract Service] Fetching section details...");
   console.log("[Contract Service] Course ID:", courseId);
   console.log("[Contract Service] Section ID:", sectionId);
 
-  try {
-    const result = (await readContract({
-      contract: courseFactory,
-      method:
-        "function getCourseSection(uint256,uint256) view returns (string,string,uint256,bool)",
-      params: [courseId, sectionId],
-    })) as readonly [string, string, bigint, boolean];
+  const result = await readContract({
+    contract: courseFactory,
+    method:
+      "function getCourseSection(uint256 courseId, uint256 sectionId) view returns (string title, string contentCID, uint256 duration, bool isActive)",
+    params: [courseId, sectionId],
+  });
 
-    // Transform result to Section interface
-    const section: Section = {
-      title: result[0],
-      contentCID: result[1],
-      duration: Number(result[2]),
-      isActive: result[3],
-    };
+  const section: Section = {
+    title: result[0],
+    contentCID: result[1],
+    duration: result[2],
+    isActive: result[3],
+  };
 
-    console.log("[Contract Service] ✅ Section details retrieved");
-    console.log("[Contract Service] Title:", section.title);
-    console.log("[Contract Service] Duration:", section.duration, "seconds");
-    console.log("[Contract Service] CID:", section.contentCID);
-
-    return section;
-  } catch (error) {
-    console.error("[Contract Service] Failed to get section details:", error);
-    return null;
-  }
+  console.log("[Contract Service] ✅ Section details fetched");
+  return section;
 }
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
+/**
+ * ========================================
+ * UTILITY FUNCTIONS
+ * ========================================
+ */
 
 /**
- * Format duration from seconds to human-readable string
- *
- * @param seconds - Duration in seconds
- * @returns Formatted string (e.g., "5m 30s" or "1h 15m")
+ * Format duration in seconds to HH:MM:SS
  */
 export function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
 
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${secs}s`;
-  } else {
-    return `${secs}s`;
-  }
+  return `${hours.toString().padStart(2, "0")}:${minutes
+    .toString()
+    .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
 /**
- * Calculate total course duration from sections
- *
- * @param sections - Array of section data
- * @returns Total duration in seconds
+ * Calculate total duration of all sections
  */
 export function calculateTotalDuration(sections: SectionData[]): number {
   return sections.reduce((total, section) => total + section.duration, 0);

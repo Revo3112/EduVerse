@@ -48,7 +48,7 @@ function loadEnv(): { clientId: string } {
 
 const env = loadEnv();
 const THIRDWEB_CLIENT_ID = env.clientId;
-const COURSE_FACTORY_ADDRESS = "0x44661459e3c092358559d8459e585EA201D04231";
+const COURSE_FACTORY_ADDRESS = "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72";
 
 const client = createThirdwebClient({
   clientId: THIRDWEB_CLIENT_ID,

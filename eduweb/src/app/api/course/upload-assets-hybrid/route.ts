@@ -234,13 +234,65 @@ export async function POST(request: NextRequest) {
 
           const assetObj = dataObj.asset as Record<string, unknown>;
           const assetId = assetObj.id as string;
-          const playbackId = (assetObj.playbackId as string) || "";
+          let playbackId = (assetObj.playbackId as string) || "";
           const tusEndpoint = dataObj.tusEndpoint as string;
 
           console.log(`[Hybrid Upload] Asset created:`);
           console.log(`[Hybrid Upload]    Asset ID: ${assetId}`);
-          console.log(`[Hybrid Upload]    Playback ID: ${playbackId}`);
+          console.log(
+            `[Hybrid Upload]    Initial Playback ID: ${
+              playbackId || "not yet available"
+            }`
+          );
           console.log(`[Hybrid Upload]    TUS Endpoint: ${tusEndpoint}`);
+
+          // CRITICAL FIX: Poll for playbackId if not immediately available
+          // Livepeer generates playbackId asynchronously after asset creation
+          if (!playbackId) {
+            console.log(`[Hybrid Upload] Polling for playback ID (max 30s)...`);
+            const maxRetries = 15;
+            const retryDelay = 2000; // 2 seconds
+
+            for (let retry = 0; retry < maxRetries; retry++) {
+              await new Promise((resolve) => setTimeout(resolve, retryDelay));
+
+              try {
+                const assetResponse = await livepeerClient.asset.get(assetId);
+                const assetData =
+                  (assetResponse as Record<string, unknown>).data ||
+                  assetResponse;
+                const updatedAsset = assetData as Record<string, unknown>;
+
+                playbackId = (updatedAsset.playbackId as string) || "";
+
+                if (playbackId) {
+                  console.log(
+                    `[Hybrid Upload] ✅ Playback ID retrieved: ${playbackId} (after ${
+                      (retry + 1) * 2
+                    }s)`
+                  );
+                  break;
+                }
+
+                console.log(
+                  `[Hybrid Upload] Retry ${
+                    retry + 1
+                  }/${maxRetries}: Playback ID not ready yet...`
+                );
+              } catch (pollError) {
+                console.error(
+                  `[Hybrid Upload] Error polling asset ${assetId}:`,
+                  pollError
+                );
+              }
+            }
+
+            if (!playbackId) {
+              throw new Error(
+                `Playback ID not available for asset ${assetId} after 30s. Asset may still be processing. Try again later.`
+              );
+            }
+          }
 
           tusEndpoints.push({
             sectionId: video.sectionId,

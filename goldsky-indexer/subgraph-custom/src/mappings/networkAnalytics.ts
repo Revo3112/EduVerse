@@ -20,19 +20,19 @@ const NETWORK_STATS_ID = "network";
 const CONTRACT_ADDRESSES = new Map<string, string>();
 CONTRACT_ADDRESSES.set(
   "CourseFactory",
-  "0x44661459e3c092358559d8459e585EA201D04231",
+  "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72",
 );
 CONTRACT_ADDRESSES.set(
   "CourseLicense",
-  "0x3aad55E0E88C4594643fEFA837caFAe1723403C8",
+  "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578",
 );
 CONTRACT_ADDRESSES.set(
   "ProgressTracker",
-  "0xaB2adB0F4D800971Ee095e2bC26f9d4AdBeDe930",
+  "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2",
 );
 CONTRACT_ADDRESSES.set(
   "CertificateManager",
-  "0x0a7750524B826E09a27B98564E98AF77fe78f600",
+  "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5",
 );
 
 // ============================================================================

@@ -206,11 +206,6 @@
   },
   {
     "inputs": [],
-    "name": "InvalidCIDFormat",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "InvalidPaymentReceiptHash",
     "type": "error"
   },

@@ -315,16 +315,16 @@ export default function DashboardPage() {
               Teaching Overview
             </CardTitle>
             <CardDescription>
-              Monitor your courses and student engagement
+              Monitor your active courses and student engagement
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {teachingCourses.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Users className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <p className="font-medium">No courses created yet</p>
+                <p className="font-medium">No active courses</p>
                 <p className="text-sm">
-                  Create your first course to start teaching
+                  Only published (active) courses appear here
                 </p>
               </div>
             ) : (
@@ -340,15 +340,11 @@ export default function DashboardPage() {
                       <span>•</span>
                       <span>{course.activeEnrollments} active</span>
                       <span>•</span>
-                      <span>{course.totalRevenue} ETH</span>
+                      <span>{course.totalRevenue} ETH earned</span>
                     </div>
                   </div>
-                  <Badge
-                    variant={
-                      course.status === "Active" ? "default" : "secondary"
-                    }
-                  >
-                    {course.status}
+                  <Badge variant="default" className="bg-green-600">
+                    Active
                   </Badge>
                 </div>
               ))

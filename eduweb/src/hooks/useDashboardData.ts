@@ -155,8 +155,8 @@ export function useDashboardData(): UseDashboardDataReturn {
       const [dashboardData, enrollments, courses, activitiesData] =
         await Promise.all([
           getDashboardStats(userAddress),
-          getUserEnrollments(userAddress, 50),
-          getUserCreatedCourses(userAddress, 50),
+          getUserEnrollments(userAddress, 100),
+          getUserCreatedCourses(userAddress, 100),
           getUserActivities(userAddress, 20),
         ]);
 
@@ -221,29 +221,34 @@ export function useDashboardData(): UseDashboardDataReturn {
 
       setLearningCourses(transformedLearningCourses);
 
-      // Transform teaching courses
-      const transformedTeachingCourses: TeachingCourse[] = courses.map(
-        (course: {
-          id: string;
-          title: string;
-          thumbnailCID: string;
-          totalEnrollments: string;
-          activeEnrollments: string;
-          totalRevenueEth: string;
-          averageRating: string;
-          isActive: boolean;
-        }) => ({
-          id: course.id,
-          courseId: course.id,
-          title: course.title,
-          studentCount: parseInt(course.totalEnrollments),
-          status: course.isActive ? "Active" : "Inactive",
-          thumbnailCID: course.thumbnailCID,
-          totalRevenue: parseFloat(course.totalRevenueEth).toFixed(3),
-          activeEnrollments: parseInt(course.activeEnrollments),
-          averageRating: parseFloat(course.averageRating),
-        })
-      );
+      // Transform teaching courses - filter only active courses and sort by newest first
+      const transformedTeachingCourses: TeachingCourse[] = courses
+        .filter(
+          (course: { isActive: boolean; isDeleted?: boolean }) =>
+            course.isActive === true && course.isDeleted !== true
+        )
+        .map(
+          (course: {
+            id: string;
+            title: string;
+            thumbnailCID: string;
+            totalEnrollments: string;
+            activeEnrollments: string;
+            totalRevenueEth: string;
+            averageRating: string;
+            isActive: boolean;
+          }) => ({
+            id: course.id,
+            courseId: course.id,
+            title: course.title,
+            studentCount: parseInt(course.totalEnrollments),
+            status: "Active",
+            thumbnailCID: course.thumbnailCID,
+            totalRevenue: parseFloat(course.totalRevenueEth).toFixed(3),
+            activeEnrollments: parseInt(course.activeEnrollments),
+            averageRating: parseFloat(course.averageRating),
+          })
+        );
 
       setTeachingCourses(transformedTeachingCourses);
 

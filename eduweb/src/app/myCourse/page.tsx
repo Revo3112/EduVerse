@@ -32,6 +32,7 @@ import { useCreatorCourses } from "@/hooks/useCreatorCourses";
 import {
   getCategoryName,
   getDifficultyName,
+  refreshCreatorData,
 } from "@/services/goldsky-creator.service";
 import { prepareDeleteCourseTransaction } from "@/services/courseContract.service";
 import {
@@ -48,51 +49,12 @@ import {
   AlertCircle,
   RefreshCw,
   Trash2,
+  CheckCircle2,
 } from "lucide-react";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-
-/**
- * ===================================================================
- * GOLDSKY INDEXER INTEGRATION FOR CREATOR ANALYTICS
- * ===================================================================
- *
- * This page displays courses created by the logged-in creator/instructor
- * with comprehensive analytics powered by Goldsky indexer:
- *
- * 1. COURSE MANAGEMENT:
- *    - List all courses created by creator
- *    - View enrollments and active students per course
- *    - Track revenue per course
- *    - Monitor ratings and feedback
- *
- * 2. REVENUE ANALYTICS:
- *    - Total revenue across all courses
- *    - Revenue per course breakdown
- *    - ETH and IDR pricing with real-time conversion
- *    - Revenue growth trends
- *
- * 3. STUDENT ANALYTICS:
- *    - Total enrollments across all courses
- *    - Active vs completed students
- *    - Average completion rates
- *    - Student engagement metrics
- *
- * 4. PERFORMANCE METRICS:
- *    - Course ratings and reviews
- *    - Completion rates per course
- *    - Section analytics and dropoff rates
- *    - Student progress tracking
- *
- * DATA SOURCE:
- * - Goldsky subgraph indexes CourseFactory, CourseLicense, ProgressTracker
- * - Real-time updates via GraphQL queries
- * - Cached with 5-minute TTL for performance
- * - Automatic refetch on user actions
- * ===================================================================
- */
 
 export default function MyCoursePage() {
   const account = useActiveAccount();
@@ -107,6 +69,20 @@ export default function MyCoursePage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { ethToIDR, isLoading: priceLoading, lastUpdated } = useEthPrice();
+
+  const {
+    courses,
+    analytics,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    refresh,
+    isRefetching,
+  } = useCreatorCourses(creatorAddress, ethToIDR, {
+    enabled: !!creatorAddress,
+    refetchInterval: 30000,
+  });
 
   const handleDeleteClick = (courseId: string, courseTitle: string) => {
     setCourseToDelete({ id: courseId, title: courseTitle });
@@ -129,7 +105,12 @@ export default function MyCoursePage() {
           });
           setDeleteDialogOpen(false);
           setCourseToDelete(null);
-          refetch();
+          setTimeout(() => {
+            if (creatorAddress) {
+              refreshCreatorData(creatorAddress);
+            }
+            refetch();
+          }, 2000);
         },
         onError: (error) => {
           toast.error("Failed to delete course", {
@@ -146,18 +127,13 @@ export default function MyCoursePage() {
     }
   };
 
-  const {
-    courses,
-    analytics,
-    isLoading,
-    isError,
-    error,
-    refetch,
-    isRefetching,
-  } = useCreatorCourses(creatorAddress, ethToIDR, {
-    enabled: !!creatorAddress,
-    refetchInterval: 30000, // Refetch every 30 seconds
-  });
+  const handleRefresh = async () => {
+    if (creatorAddress) {
+      refreshCreatorData(creatorAddress);
+    }
+    await refetch();
+    toast.success("Data refreshed successfully");
+  };
 
   const formatIDR = (amount: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -172,24 +148,20 @@ export default function MyCoursePage() {
     return `${eth.toFixed(4)} ETH`;
   };
 
-  // Loading state
   if (isLoading) {
     return <LoadingSkeleton />;
   }
 
-  // Error state
   if (isError) {
     return <ErrorState error={error} onRetry={refetch} />;
   }
 
-  // Not connected state
   if (!creatorAddress) {
     return <NotConnectedState />;
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/50 dark:to-purple-950/50 px-6 py-12">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -201,7 +173,6 @@ export default function MyCoursePage() {
               </p>
             </div>
 
-            {/* Real-time Pricing Display */}
             <div className="flex flex-col sm:flex-row gap-4">
               <Card className="px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -215,7 +186,7 @@ export default function MyCoursePage() {
                 </div>
               </Card>
 
-              <Button disabled={isRefetching} onClick={() => refetch()}>
+              <Button disabled={isRefetching} onClick={handleRefresh}>
                 {isRefetching ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -240,7 +211,6 @@ export default function MyCoursePage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
         <Tabs defaultValue="overview" className="space-y-8">
           <TabsList className="grid w-full lg:w-[400px] grid-cols-3">
@@ -258,11 +228,42 @@ export default function MyCoursePage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-8">
-            {/* Stats Grid */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {/* Total Revenue */}
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Total Courses
+                  </CardTitle>
+                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {analytics.totalCourses}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {courses.filter((c) => c.isActive).length} active
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Total Students
+                  </CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {analytics.totalEnrollments}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {analytics.totalActiveStudents} currently active
+                  </p>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
@@ -272,61 +273,18 @@ export default function MyCoursePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {formatETH(analytics.totalRevenueEth)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
                     {formatIDR(analytics.revenueInIDR)}
-                  </p>
-                  <div className="flex items-center pt-1">
-                    <TrendingUp className="h-3 w-3 text-green-600 mr-1" />
-                    <span className="text-xs text-green-600">
-                      +{analytics.revenueGrowth.toFixed(1)}% from last month
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Total Enrollments */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Total Enrollments
-                  </CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {analytics.totalEnrollments.toLocaleString()}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {analytics.totalActiveStudents} active students
+                    {formatETH(analytics.totalRevenueEth)}
                   </p>
                 </CardContent>
               </Card>
 
-              {/* Course Count */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
-                    Published Courses
-                  </CardTitle>
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {analytics.totalCourses}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    All courses active
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Completion Rate */}
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Avg. Completion Rate
+                    Avg Completion
                   </CardTitle>
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
@@ -335,362 +293,359 @@ export default function MyCoursePage() {
                     {analytics.averageCompletionRate.toFixed(1)}%
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Across all courses
+                    {analytics.totalEnrollments > 0
+                      ? "Above average"
+                      : "No data yet"}
                   </p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Recent Courses Performance */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Course Performance</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Overview of your top performing courses
-                </p>
-              </CardHeader>
-              <CardContent>
-                {courses.length === 0 ? (
-                  <div className="text-center py-12">
-                    <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">
-                      No courses created yet
-                    </p>
-                    <Button className="mt-4">
+            {courses.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <BookOpen className="h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No courses yet</h3>
+                  <p className="text-muted-foreground text-center mb-6">
+                    Create your first course to start earning and teaching
+                    students
+                  </p>
+                  <Link href="/create">
+                    <Button>
                       <PlusCircle className="h-4 w-4 mr-2" />
                       Create Your First Course
                     </Button>
-                  </div>
-                ) : (
+                  </Link>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                </CardHeader>
+                <CardContent>
                   <div className="space-y-4">
-                    {courses.slice(0, 3).map((course) => (
-                      <div
-                        key={course.id}
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
+                    {courses.slice(0, 5).map((course) => (
+                      <div key={course.id} className="flex items-center gap-4">
                         <div className="flex-1">
-                          <h4 className="font-medium">{course.title}</h4>
-                          <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                            <span>{course.totalEnrollments} students</span>
-                            <span>
-                              {formatETH(course.totalRevenueEth)} revenue
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                              <span>{course.averageRating.toFixed(1)}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-medium">
-                            {course.completedStudents} completed
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {course.completionRate.toFixed(1)}% completion
+                          <p className="font-medium">{course.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {course.totalEnrollments} enrollments •{" "}
+                            {course.activeEnrollments} active
                           </p>
                         </div>
+                        <Badge
+                          variant={course.isActive ? "default" : "secondary"}
+                        >
+                          {course.isActive ? "Active" : "Inactive"}
+                        </Badge>
                       </div>
                     ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
-          {/* Courses Tab */}
-          <TabsContent value="courses" className="space-y-8">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Your Courses</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Manage and monitor your published courses
-                    </p>
-                  </div>
-                  <Button>
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Create New Course
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {courses.length === 0 ? (
-                  <div className="text-center py-12">
-                    <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">
-                      No courses created yet
-                    </p>
-                    <Button className="mt-4">
+          <TabsContent value="courses" className="space-y-6">
+            {courses.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <BookOpen className="h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No courses yet</h3>
+                  <p className="text-muted-foreground text-center mb-6">
+                    Create your first course to start earning
+                  </p>
+                  <Link href="/create">
+                    <Button>
                       <PlusCircle className="h-4 w-4 mr-2" />
-                      Create Your First Course
+                      Create Course
                     </Button>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Course</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Students</TableHead>
-                        <TableHead>Rating</TableHead>
-                        <TableHead>Revenue</TableHead>
-                        <TableHead>Last Activity</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {courses.map((course) => (
-                        <TableRow key={course.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{course.title}</p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="outline" className="text-xs">
-                                  {getDifficultyName(course.difficulty)}
-                                </Badge>
-                                <Badge
-                                  variant={
-                                    course.isActive ? "default" : "secondary"
-                                  }
-                                  className="text-xs"
-                                >
-                                  {course.isActive ? "Active" : "Inactive"}
-                                </Badge>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="text-xs">
-                              {getCategoryName(course.category)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">
-                                {course.totalEnrollments}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {course.activeEnrollments} active
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Rating value={course.averageRating} readOnly />
-                              <span className="text-sm text-muted-foreground">
-                                ({course.totalRatings})
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">
-                                {formatETH(course.totalRevenueEth)}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatIDR(
-                                  parseFloat(course.totalRevenueEth) * ethToIDR
-                                )}
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <p className="text-sm">
-                              {new Date(
-                                course.lastActivityAt! * 1000
-                              ).toLocaleDateString()}
-                            </p>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button variant="ghost" size="sm">
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  handleDeleteClick(course.id, course.title)
-                                }
-                                disabled={isDeleting}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Analytics Tab */}
-          <TabsContent value="analytics" className="space-y-8">
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Revenue Analytics */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Revenue Analytics</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Revenue breakdown and trends
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4">
-                    <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                      <span className="text-sm">Total Revenue (ETH)</span>
-                      <span className="font-medium">
-                        {formatETH(analytics.totalRevenueEth)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                      <span className="text-sm">Total Revenue (IDR)</span>
-                      <span className="font-medium">
-                        {formatIDR(analytics.revenueInIDR)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                      <span className="text-sm">Last Month Revenue</span>
-                      <span className="font-medium">
-                        {formatIDR(analytics.lastMonthRevenueInIDR)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
-                      <span className="text-sm">Revenue Growth</span>
-                      <span className="font-medium text-green-600">
-                        +{analytics.revenueGrowth.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
+                  </Link>
                 </CardContent>
               </Card>
-
-              {/* Student Analytics */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Student Analytics</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Student engagement and completion metrics
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Total Enrollments</span>
-                      <span className="font-medium">
-                        {analytics.totalEnrollments}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Active Students</span>
-                      <span className="font-medium">
-                        {analytics.totalActiveStudents}
-                      </span>
-                    </div>
-                    <Separator />
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Completion Rate</span>
-                        <span>
-                          {analytics.averageCompletionRate.toFixed(1)}%
-                        </span>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {courses.map((course) => (
+                  <Card key={course.id} className="overflow-hidden">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-lg line-clamp-2">
+                          {course.title}
+                        </CardTitle>
+                        <Badge
+                          variant={course.isActive ? "default" : "secondary"}
+                        >
+                          {course.isActive ? "Active" : "Inactive"}
+                        </Badge>
                       </div>
-                      <Progress
-                        value={analytics.averageCompletionRate}
-                        className="h-2"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Rating Analytics */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Rating Analytics</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Course ratings and feedback overview
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {courses.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Star className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">
-                        No courses to display ratings
+                      <div className="flex gap-2 mt-2">
+                        <Badge variant="outline">
+                          {getCategoryName(course.category)}
+                        </Badge>
+                        <Badge variant="outline">
+                          {getDifficultyName(course.difficulty)}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {course.description}
                       </p>
-                    </div>
-                  ) : (
-                    <div className="grid gap-4 md:grid-cols-3">
-                      {courses.map((course) => (
-                        <div key={course.id} className="p-4 border rounded-lg">
-                          <h4 className="font-medium mb-2 line-clamp-1">
-                            {course.title}
-                          </h4>
-                          <div className="flex items-center gap-2 mb-2">
-                            <Rating value={course.averageRating} readOnly />
-                            <span className="text-sm font-medium">
+
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Students</p>
+                          <p className="font-semibold">
+                            {course.totalEnrollments}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Active</p>
+                          <p className="font-semibold">
+                            {course.activeEnrollments}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Revenue</p>
+                          <p className="font-semibold">
+                            {formatETH(course.priceInEth)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Rating</p>
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <span className="font-semibold">
                               {course.averageRating.toFixed(1)}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            {course.totalRatings} ratings from{" "}
-                            {course.totalEnrollments} students
-                          </p>
-                          <div className="mt-2">
-                            <div className="flex justify-between text-xs mb-1">
-                              <span>Rating Coverage</span>
-                              <span>
-                                {course.totalEnrollments > 0
-                                  ? (
-                                      (course.totalRatings /
-                                        course.totalEnrollments) *
-                                      100
-                                    ).toFixed(1)
-                                  : 0}
-                                %
-                              </span>
-                            </div>
-                            <Progress
-                              value={
-                                course.totalEnrollments > 0
-                                  ? (course.totalRatings /
-                                      course.totalEnrollments) *
-                                    100
-                                  : 0
-                              }
-                              className="h-1"
-                            />
-                          </div>
                         </div>
-                      ))}
+                      </div>
+
+                      <Separator />
+
+                      <div className="flex gap-2">
+                        <Link href={`/course/${course.id}`} className="flex-1">
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            size="sm"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </Button>
+                        </Link>
+                        <Link href={`/edit/${course.id}`} className="flex-1">
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            size="sm"
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() =>
+                            handleDeleteClick(course.id, course.title)
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Revenue Analytics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Total Revenue
+                      </p>
+                      <p className="text-2xl font-bold">
+                        {formatIDR(analytics.revenueInIDR)}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatETH(analytics.totalRevenueEth)}
+                      </p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Revenue Growth
+                      </p>
+                      <p className="text-2xl font-bold text-green-600">
+                        +{analytics.revenueGrowth.toFixed(1)}%
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        vs last month
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Avg per Student
+                      </p>
+                      <p className="text-2xl font-bold">
+                        {analytics.totalEnrollments > 0
+                          ? formatIDR(
+                              analytics.revenueInIDR /
+                                analytics.totalEnrollments
+                            )
+                          : formatIDR(0)}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        per enrollment
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Course Performance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Course</TableHead>
+                      <TableHead>Students</TableHead>
+                      <TableHead>Completion</TableHead>
+                      <TableHead>Rating</TableHead>
+                      <TableHead className="text-right">Revenue</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {courses.map((course) => (
+                      <TableRow key={course.id}>
+                        <TableCell className="font-medium">
+                          {course.title}
+                        </TableCell>
+                        <TableCell>
+                          {course.totalEnrollments}
+                          <span className="text-muted-foreground ml-1">
+                            ({course.activeEnrollments} active)
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Progress
+                              value={course.completionRate}
+                              className="w-16"
+                            />
+                            <span className="text-sm">
+                              {course.completionRate.toFixed(0)}%
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <span>{course.averageRating.toFixed(1)}</span>
+                            <span className="text-muted-foreground">
+                              ({course.totalRatings})
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div>
+                            <p className="font-medium">
+                              {formatIDR(
+                                parseFloat(course.priceInEth) * ethToIDR
+                              )}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatETH(course.priceInEth)}
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Student Engagement</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">
+                          Total Enrollments
+                        </span>
+                        <span className="text-sm font-bold">
+                          {analytics.totalEnrollments}
+                        </span>
+                      </div>
+                      <Progress value={100} />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">
+                          Active Students
+                        </span>
+                        <span className="text-sm font-bold">
+                          {analytics.totalActiveStudents}
+                        </span>
+                      </div>
+                      <Progress
+                        value={
+                          analytics.totalEnrollments > 0
+                            ? (analytics.totalActiveStudents /
+                                analytics.totalEnrollments) *
+                              100
+                            : 0
+                        }
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">
+                          Completion Rate
+                        </span>
+                        <span className="text-sm font-bold">
+                          {analytics.averageCompletionRate.toFixed(1)}%
+                        </span>
+                      </div>
+                      <Progress value={analytics.averageCompletionRate} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <div className="text-center space-y-2">
+                      <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto" />
+                      <p className="text-2xl font-bold">
+                        {analytics.averageCompletionRate.toFixed(1)}%
+                      </p>
+                      <p className="text-muted-foreground">
+                        Average Completion Rate
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
-      </div>
-
-      {/* Footer Info */}
-      <div className="border-t bg-muted/30 px-6 py-4 mt-12">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-muted-foreground">
-            <p>
-              📈 Real-time pricing updates every 5 minutes • Last updated:{" "}
-              {lastUpdated?.toLocaleTimeString()}
-            </p>
-            <p>🔗 Connected to Manta Pacific Testnet (ChainID: 3441006)</p>
-          </div>
-        </div>
       </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -698,11 +653,10 @@ export default function MyCoursePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Course</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{courseToDelete?.title}
-              &quot;? This will mark the course as inactive and delete all
-              sections. Enrolled students will retain their license, but course
-              content will no longer be accessible. New enrollments will be
-              disabled.
+              Are you sure you want to delete{" "}
+              <strong>{courseToDelete?.title}</strong>? This will mark the
+              course as inactive. Students who already enrolled will still have
+              access until their license expires.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -710,7 +664,7 @@ export default function MyCoursePage() {
             <AlertDialogAction
               onClick={handleDeleteConfirm}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-red-600 hover:bg-red-700"
             >
               {isDeleting ? "Deleting..." : "Delete Course"}
             </AlertDialogAction>
@@ -721,54 +675,43 @@ export default function MyCoursePage() {
   );
 }
 
-// ============================================================================
-// LOADING SKELETON
-// ============================================================================
-
 function LoadingSkeleton() {
   return (
     <div className="min-h-screen bg-background">
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/50 dark:to-purple-950/50 px-6 py-12">
         <div className="max-w-7xl mx-auto">
-          <Skeleton className="h-10 w-64 mb-2" />
-          <Skeleton className="h-5 w-96" />
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="space-y-2">
+              <Skeleton className="h-9 w-48" />
+              <Skeleton className="h-5 w-96" />
+            </div>
+            <div className="flex gap-4">
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-40" />
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
-              <CardContent className="pt-6">
-                <Skeleton className="h-4 w-24 mb-4" />
-                <Skeleton className="h-8 w-32 mb-2" />
-                <Skeleton className="h-3 w-40" />
+              <CardHeader>
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-20" />
               </CardContent>
             </Card>
           ))}
         </div>
-
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-48 mb-2" />
-            <Skeleton className="h-4 w-64" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full" />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
 }
-
-// ============================================================================
-// ERROR STATE
-// ============================================================================
 
 function ErrorState({
   error,
@@ -781,68 +724,54 @@ function ErrorState({
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <Card className="max-w-md w-full">
         <CardHeader>
-          <div className="flex items-center gap-2 text-destructive mb-2">
-            <AlertCircle className="h-5 w-5" />
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-6 w-6 text-red-600" />
             <CardTitle>Failed to Load Courses</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>
-              {error?.message || "An unknown error occurred"}
+              {error?.message ||
+                "An unexpected error occurred while fetching your courses"}
             </AlertDescription>
           </Alert>
-
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Unable to fetch your courses from Goldsky indexer. This might be
-              due to:
-            </p>
-            <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
-              <li>Network connection issues</li>
-              <li>Goldsky service temporarily unavailable</li>
-              <li>Invalid wallet address</li>
-            </ul>
+          <div className="flex gap-2">
+            <Button onClick={onRetry} className="flex-1">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Try Again
+            </Button>
+            <Link href="/" className="flex-1">
+              <Button variant="outline" className="w-full">
+                Go Home
+              </Button>
+            </Link>
           </div>
-
-          <Button onClick={onRetry} className="w-full">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Retry
-          </Button>
         </CardContent>
       </Card>
     </div>
   );
 }
 
-// ============================================================================
-// NOT CONNECTED STATE
-// ============================================================================
-
 function NotConnectedState() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <Card className="max-w-md w-full">
         <CardHeader>
-          <div className="flex items-center gap-2 mb-2">
-            <Wallet className="h-5 w-5" />
-            <CardTitle>Connect Your Wallet</CardTitle>
-          </div>
+          <CardTitle>Connect Your Wallet</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground">
             Please connect your wallet to view and manage your courses.
           </p>
-
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Note</AlertTitle>
-            <AlertDescription>
-              This page shows courses you created as an instructor. To view
-              enrolled courses, visit My Learning.
-            </AlertDescription>
-          </Alert>
+          <Link href="/">
+            <Button className="w-full">
+              <Wallet className="h-4 w-4 mr-2" />
+              Go to Homepage
+            </Button>
+          </Link>
         </CardContent>
       </Card>
     </div>
