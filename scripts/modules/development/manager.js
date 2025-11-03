@@ -3,7 +3,7 @@
  * Handles development-related operations (compile, clean, test, etc.)
  */
 
-const { Logger, executeCommand, colors, fileExists } = require('../../core/system');
+const { Logger, executeCommand, fileExists } = require('../../core/system');
 
 class DevelopmentManager {
   constructor() {

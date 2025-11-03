@@ -10,10 +10,6 @@
  * 2. CourseLicense.sol: Untuk data lisensi NFT yang dimiliki pengguna.
  * 3. ProgressTracker.sol: Untuk melacak kemajuan belajar pengguna per sesi.
  * 4. CertificateManager.sol: Untuk data sertifikat digital ERC-1155 yang dinamis.
- *
- * Dibuat oleh: Gemini (Ahli Developer Web3)
- * Versi: 2.0.0
- * Terakhir Diperbarui: 7 September 2025
  * ===================================================================================
  */
 
@@ -264,11 +260,11 @@ const createMockEnrichedSections = (courseId: bigint, sectionCount: number): Enr
       courseId: courseId,
       title: sectionTitles[index % sectionTitles.length],
       description: sectionDescriptions[index % sectionDescriptions.length],
-      contentCID: "bafybeicmoogk5nmg4uizxyn6i3gh24dc2c7rnpico7ziqoi4llvhqaicli",
+      contentCID: "bafybeigbxztbxewqyddso76boh27p3ptlnnqz3rwwmg5pg2juoulb5t3tq",
       duration: BigInt(1800 + Math.floor(Math.random() * 1200)), // 30-50 menit
       orderId: sectionId,
       videoMetadata: {
-        thumbnailCID: "bafybeic3zml2dfde76qfakovud6wamewoa42z23tgliplke54nrwc5cj2y",
+        thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
         qualityOptions: [
           { resolution: "1080p", bitrate: 4000, size: 720 }, { resolution: "720p", bitrate: 2500, size: 450 },
           { resolution: "480p", bitrate: 1200, size: 280 }
@@ -294,21 +290,28 @@ export const mockCourses: ExtendedCourse[] = [
     id: BigInt(1),
     title: "Dasar-Dasar Blockchain untuk Pemula",
     description: "Pelajari konsep inti teknologi blockchain, cryptocurrency, dan sistem terdesentralisasi. Sempurna untuk pendatang baru di Web3.",
-    thumbnailCID: "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
     creator: "0x742e8A4C2a9b4f7A76B25e5B8F6a8f9E8A9b4c5D",
     creatorName: "Dr. Sarah Johnson",
     isActive: true,
     category: CourseCategory.Programming,
-    difficulty: CourseDifficulty.Beginner,
     pricePerMonth: BigInt("1000000000000000"), // 0.001 ETH
+    difficulty: CourseDifficulty.Beginner,
     createdAt: BigInt(1703836800), // 1 Jan 2024
     totalSections: 10,
     sections: createMockEnrichedSections(BigInt(1), 10),
     userProgress: [
+      // ✅ ALL 10 sections completed (100% progress) for certificate testing
       { courseId: BigInt(1), sectionId: BigInt(0), completed: true, completedAt: BigInt(1709856000) },
       { courseId: BigInt(1), sectionId: BigInt(1), completed: true, completedAt: BigInt(1709942400) },
       { courseId: BigInt(1), sectionId: BigInt(2), completed: true, completedAt: BigInt(1710028800) },
-      { courseId: BigInt(1), sectionId: BigInt(3), completed: false, completedAt: BigInt(0) }
+      { courseId: BigInt(1), sectionId: BigInt(3), completed: true, completedAt: BigInt(1710115200) },
+      { courseId: BigInt(1), sectionId: BigInt(4), completed: true, completedAt: BigInt(1710201600) },
+      { courseId: BigInt(1), sectionId: BigInt(5), completed: true, completedAt: BigInt(1710288000) },
+      { courseId: BigInt(1), sectionId: BigInt(6), completed: true, completedAt: BigInt(1710374400) },
+      { courseId: BigInt(1), sectionId: BigInt(7), completed: true, completedAt: BigInt(1710460800) },
+      { courseId: BigInt(1), sectionId: BigInt(8), completed: true, completedAt: BigInt(1710547200) },
+      { courseId: BigInt(1), sectionId: BigInt(9), completed: true, completedAt: BigInt(1710633600) }
     ],
     rating: {
       totalRatings: BigInt(150),
@@ -324,7 +327,7 @@ export const mockCourses: ExtendedCourse[] = [
     id: BigInt(2),
     title: "Pengembangan Smart Contract Solidity Tingkat Lanjut",
     description: "Kuasai pola Solidity tingkat lanjut, praktik terbaik keamanan, dan teknik optimisasi gas. Bangun smart contract siap produksi.",
-    thumbnailCID: "QmUNLLsPACCz1vLxQVkXqqLX5R1X9RVxrK7F2z4B8xCmv8",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
     creator: "0x1a2B3c4D5e6F7890aB1c2D3e4F567890aB1c2D3e",
     creatorName: "Alex Chen",
     isActive: true,
@@ -349,27 +352,48 @@ export const mockCourses: ExtendedCourse[] = [
     }
   },
   {
-    id: BigInt(3),
-    title: "Arsitektur dan Pengembangan Protokol DeFi",
-    description: "Rancang dan bangun protokol keuangan terdesentralisasi dari awal. Pelajari tentang AMM, protokol pinjaman, dan strategi yield farming.",
-    thumbnailCID: "QmPvP4z9FJiXpKvP2zq8x7Y6B5a1B2c3D4e5F6g7H8i9J",
-    creator: "0x9F8e7D6c5B4a3921F8e7D6c5B4a39218F7e6D5c4",
-    creatorName: "Maria Rodriguez",
-    isActive: false, // Contoh kursus tidak aktif
-    category: CourseCategory.Finance,
-    difficulty: CourseDifficulty.Intermediate,
-    pricePerMonth: BigInt("4000000000000000"), // 0.004 ETH
-    createdAt: BigInt(1704009600), // 3 Jan 2024
-    totalSections: 8,
-    sections: createMockEnrichedSections(BigInt(3), 8),
-    userProgress: [],
+    id: BigInt(4),
+    title: "🎬 Test Livepeer Video Playback",
+    description: "Course khusus untuk testing integrasi Livepeer player dengan HLS streaming dan multiple quality renditions. Video ini menggunakan Livepeer playback ID dan akan otomatis menggunakan LivepeerPlayerView component.",
+    thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
+    creator: MOCK_USER_ADDRESS,
+    creatorName: "EduVerse Dev Team",
+    isActive: true,
+    category: CourseCategory.Technology,
+    difficulty: CourseDifficulty.Beginner,
+    pricePerMonth: BigInt("100000000000000"), // 0.0001 ETH (test course)
+    createdAt: BigInt(Math.floor(Date.now() / 1000) - 86400), // 1 day ago
+    totalSections: 1,
+    sections: [
+      {
+        id: BigInt(400), // Course 4, Section 0
+        courseId: BigInt(4),
+        title: "Test.mp4 - Livepeer HLS Streaming Test",
+        description: "Video test untuk memverifikasi integrasi Livepeer player. Video ini di-upload ke Livepeer dan memiliki 3 quality renditions: 1200p (1920x1200), 800p (1280x800), dan 400p (640x400). HLS adaptive streaming akan otomatis memilih quality terbaik berdasarkan koneksi internet.",
+        contentCID: "41cfxt8j26ksmxgr", // ✅ Livepeer Playback ID (16 char hex)
+        duration: BigInt(58), // Estimated duration in seconds (39.61 MB @ 5.43 mbps ≈ 58s)
+        orderId: BigInt(0),
+        videoMetadata: {
+          thumbnailCID: "bafybeia53xes6gxywrtwekknabt3hgt4leytd3rxh3v3vwl5aru6k6v2ku",
+          qualityOptions: [
+            { resolution: "1200p", bitrate: 4405, size: 39.61 }, // Original upload quality
+            { resolution: "800p", bitrate: 2225, size: 16.11 },  // Livepeer transcoded
+            { resolution: "400p", bitrate: 877, size: 6.35 }     // Livepeer transcoded
+          ],
+          subtitleLanguages: [],
+          chapters: [
+            { title: "Full Video", startTime: 0, endTime: 58 }
+          ],
+          estimatedSize: 39.61 // File size in MB (from Livepeer dashboard)
+        }
+      }
+    ],
+    userProgress: [], // No progress yet - fresh for testing
     rating: {
-        totalRatings: BigInt(95),
-        ratingSum: BigInt(446), // (95 * 4.7)
-        averageRating: BigInt(47000), // 4.7000
-        userRatings: new Map([
-            [MOCK_USER_ADDRESS, 5]
-        ])
+        totalRatings: BigInt(0),
+        ratingSum: BigInt(0),
+        averageRating: BigInt(0),
+        userRatings: new Map()
     }
   }
 ];
@@ -395,11 +419,19 @@ export const mockLicenses: License[] = [
     durationLicense: BigInt(1),
     expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) - (10 * 86400)), // Kedaluwarsa 10 hari lalu
     isActive: false // Seharusnya false jika sudah kedaluwarsa
+  },
+  {
+    courseId: BigInt(4),
+    student: MOCK_USER_ADDRESS,
+    durationLicense: BigInt(12), // 1 year license for testing
+    expiryTimestamp: BigInt(Math.floor(Date.now() / 1000) + (365 * 86400)), // Active for 1 year
+    isActive: true
   }
 ];
 
 // Mock sertifikat tunggal untuk pengguna.
 // Sertifikat ini mencerminkan perjalanan belajar pengguna, bertambah seiring kursus yang diselesaikan.
+// NOTE: Course 1 removed from completedCourses to test "Get Certificate" button for 100% completed course
 export const mockUserCertificate: Certificate = {
     tokenId: BigInt(101),
     platformName: "EduVerse Academy",
@@ -409,11 +441,11 @@ export const mockUserCertificate: Certificate = {
     isValid: true,
     ipfsCID: "bafybeigajo2ei5zcnbtr3a245fhx3o6dtoa27yrhvro7jcyy4ywdkitgwm", // CID gambar sertifikat terbaru
     baseRoute: "https://verify.eduverse.com/certificate",
-    issuedAt: BigInt(1710028800), // Timestamp saat kursus pertama selesai & sertifikat di-mint
+    issuedAt: BigInt(1710201600), // Timestamp saat kursus pertama selesai & sertifikat di-mint
     lastUpdated: BigInt(1710201600), // Timestamp saat kursus terakhir ditambahkan
-    totalCoursesCompleted: BigInt(2),
+    totalCoursesCompleted: BigInt(1),
     paymentReceiptHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd",
-    completedCourses: [BigInt(1), BigInt(2)] // ID kursus yang telah diselesaikan dari `mockCourses`
+    completedCourses: [BigInt(2)] // Only Course 2 has certificate claimed (Course 1 removed for testing)
 };
 
 

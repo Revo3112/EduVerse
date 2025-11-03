@@ -1,0 +1,26 @@
+{
+  "extends": "@graphprotocol/graph-ts/types/tsconfig.base.json",
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "module": "commonjs",
+    "target": "esnext",
+    "outDir": "build",
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "strict": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": false,
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noLib": false,
+    "noEmit": true,
+    "types": ["@graphprotocol/graph-ts"]
+  },
+  "include": ["src/**/*", "generated/**/*"],
+  "exclude": ["node_modules", "build", "tests"]
+}

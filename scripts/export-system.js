@@ -11,7 +11,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { validateMantaNetwork } = require("./core/system");
+const { validateMantaNetwork, PROJECT_ROOT, PATHS } = require("./core/system");
 
 class ExportSystem {
   constructor() {
@@ -24,16 +24,16 @@ class ExportSystem {
       ],
       paths: {
         mobile: {
-          abi: path.join(__dirname, "../EduVerseApp/src/constants/abi"),
-          env: path.join(__dirname, "../EduVerseApp/.env"),
-          envContracts: path.join(__dirname, "../EduVerseApp/.env.contracts"),
+          abi: PATHS.mobileAbi,
+          env: PATHS.mobileEnv,
+          envContracts: path.join(PROJECT_ROOT, "EduVerseApp/.env.contracts"),
         },
         frontend: {
-          abi: path.join(__dirname, "../eduweb/abis"),
-          env: path.join(__dirname, "../eduweb/.env.local"),
+          abi: PATHS.frontendAbi,
+          env: path.join(PROJECT_ROOT, "eduweb/.env.local"),
         },
-        artifacts: path.join(__dirname, "../artifacts/contracts"),
-        deployedContracts: path.join(__dirname, "../deployed-contracts.json"),
+        artifacts: PATHS.artifacts,
+        deployedContracts: PATHS.deployedContracts,
       },
     };
   }
@@ -118,8 +118,9 @@ class ExportSystem {
           continue;
         }
 
-        const artifact = require(artifactPath);
-        const abiContent = JSON.stringify(artifact.abi, null, 2);
+        // Use fs.readFileSync instead of require() to avoid caching issues
+        const artifactData = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+        const abiContent = JSON.stringify(artifactData.abi, null, 2);
 
         // Export to selected targets
         targets.forEach(targetPath => {
@@ -355,10 +356,10 @@ EXPO_PUBLIC_NETWORK_NAME=${addresses.network}
       const envVars = {
         "NEXT_PUBLIC_CHAIN_ID": addresses.chainId.toString(),
         "NEXT_PUBLIC_RPC_URL": "https://pacific-rpc.sepolia-testnet.manta.network/http",
-        "NEXT_PUBLIC_COURSE_FACTORY": addresses.courseFactory,
-        "NEXT_PUBLIC_COURSE_LICENSE": addresses.courseLicense,
-        "NEXT_PUBLIC_PROGRESS_TRACKER": addresses.progressTracker,
-        "NEXT_PUBLIC_CERTIFICATE_MANAGER": addresses.certificateManager,
+        "NEXT_PUBLIC_COURSE_FACTORY_ADDRESS": addresses.courseFactory,
+        "NEXT_PUBLIC_COURSE_LICENSE_ADDRESS": addresses.courseLicense,
+        "NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS": addresses.progressTracker,
+        "NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS": addresses.certificateManager,
       };
 
       // Update environment content

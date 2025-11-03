@@ -1,0 +1,279 @@
+# ============================================================================
+# EduVerse Subgraph Manifest v1.1.0 - PRODUCTION READY
+# ============================================================================
+# ✅ UPDATED: All startBlock values from actual deployment
+# ✅ CourseFactory:        Block 5383608
+# ✅ CourseLicense:        Block 5383613
+# ✅ ProgressTracker:      Block 5383619
+# ✅ CertificateManager:   Block 5383624
+# ============================================================================
+# Network: Manta Pacific Sepolia Testnet
+# Deployed Contracts: All verified and indexed from actual deployment blocks
+# ============================================================================
+
+specVersion: 0.0.5
+description: EduVerse LMS - Blockchain-based Learning Management System with course licenses and digital certificates
+repository: https://github.com/eduverse/eduverse-subgraph
+schema:
+  file: ./schema.graphql
+
+dataSources:
+  # ==========================================================================
+  # NOTICE: Network Analytics Removed
+  # ==========================================================================
+  # NetworkAnalytics DataSource has been removed due to:
+  # 1. Deprecated blockHandlers and transactionHandlers in apiVersion 0.0.7
+  # 2. All indexing must be event-driven as per The Graph 2025 standards
+  #
+  # ALTERNATIVE SOLUTIONS:
+  # - Use Dune Analytics for blockchain data analysis
+  # - Use Etherscan API for transaction monitoring
+  # - Implement event-based analytics using contract events
+  # ==========================================================================
+
+  # ==========================================================================
+  # CONTRACT 1: CourseFactory
+  # ==========================================================================
+  # ==========================================================================
+  # CONTRACT 1: CourseFactory
+  # ==========================================================================
+  - kind: ethereum/contract
+    name: CourseFactory
+    network: manta-pacific-sepolia
+    source:
+      address: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72"
+      abi: CourseFactory
+      startBlock: 5386706 # ✅ ACTUAL DEPLOYMENT BLOCK
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      file: ./src/mappings/courseFactory.ts
+      entities:
+        - Course
+        - CourseSection # ✅ NEW: Added for section management
+        - UserProfile
+      abis:
+        - name: CourseFactory
+          file: ./abis/coursefactory.json
+      eventHandlers:
+        # Course Lifecycle Events
+        - event: CourseCreated(indexed uint256,indexed address,string,string,uint8,uint8)
+          handler: handleCourseCreated
+        - event: CourseUpdated(indexed uint256,indexed address,uint256,uint256,bool)
+          handler: handleCourseUpdated
+        - event: CourseDeleted(indexed uint256,indexed address,uint256)
+          handler: handleCourseDeleted
+        - event: CourseUnpublished(indexed uint256,indexed address,uint256)
+          handler: handleCourseUnpublished
+        - event: CourseRepublished(indexed uint256,indexed address,uint256)
+          handler: handleCourseRepublished
+
+        # Section Management Events ✅ CRITICAL FIX
+        - event: SectionAdded(indexed uint256,indexed uint256,string,string,uint256)
+          handler: handleSectionAdded
+        - event: SectionUpdated(indexed uint256,indexed uint256)
+          handler: handleSectionUpdated
+        - event: SectionDeleted(indexed uint256,indexed uint256)
+          handler: handleSectionDeleted
+        - event: SectionsSwapped(indexed uint256,uint256,uint256)
+          handler: handleSectionsSwapped
+        - event: BatchSectionsAdded(indexed uint256,uint256[])
+          handler: handleBatchSectionsAdded
+
+        # Rating Events
+        - event: CourseRated(indexed uint256,indexed address,uint256,uint256)
+          handler: handleCourseRated
+        - event: RatingUpdated(indexed uint256,indexed address,uint256,uint256,uint256)
+          handler: handleRatingUpdated
+        - event: RatingDeleted(indexed uint256,indexed address,uint256)
+          handler: handleRatingDeleted
+        - event: RatingRemoved(indexed uint256,indexed address,indexed address)
+          handler: handleRatingRemoved
+        - event: RatingsPaused(indexed uint256,indexed address)
+          handler: handleRatingsPaused
+        - event: RatingsUnpaused(indexed uint256,indexed address)
+          handler: handleRatingsUnpaused
+
+        # Moderation Events ✅ NEW
+        - event: UserBlacklisted(indexed address,indexed address)
+          handler: handleUserBlacklisted
+        - event: UserUnblacklisted(indexed address,indexed address)
+          handler: handleUserUnblacklisted
+
+        # Emergency Management Events ✅ NEW
+        - event: CourseEmergencyDeactivated(indexed uint256,indexed address,uint256)
+          handler: handleCourseEmergencyDeactivated
+
+        # Section Reordering Events ✅ NEW
+        - event: SectionMoved(indexed uint256,uint256,uint256,string)
+          handler: handleSectionMoved
+        - event: SectionsBatchReordered(indexed uint256,uint256[])
+          handler: handleSectionsBatchReordered
+
+  # ==========================================================================
+  # CONTRACT 2: CourseLicense
+  # ==========================================================================
+  - kind: ethereum/contract
+    name: CourseLicense
+    network: manta-pacific-sepolia
+    source:
+      address: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578"
+      abi: CourseLicense
+      startBlock: 5386710 # ✅ ACTUAL DEPLOYMENT BLOCK
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      file: ./src/mappings/courseLicense.ts
+      entities:
+        - Enrollment
+        - Course
+        - UserProfile
+      abis:
+        - name: CourseLicense
+          file: ./abis/courselicense.json
+      eventHandlers:
+        # License Lifecycle Events
+        - event: LicenseMinted(indexed uint256,indexed address,uint256,uint256,uint256,uint256)
+          handler: handleLicenseMinted
+        - event: LicenseRenewed(indexed uint256,indexed address,uint256,uint256,uint256,uint256)
+          handler: handleLicenseRenewed
+        - event: LicenseExpired(indexed uint256,indexed address,uint256,uint256)
+          handler: handleLicenseExpired
+
+        # Revenue Tracking Events
+        - event: RevenueRecorded(indexed uint256,indexed address,uint256,uint256,string)
+          handler: handleRevenueRecorded
+
+  # ==========================================================================
+  # CONTRACT 3: ProgressTracker
+  # ==========================================================================
+  - kind: ethereum/contract
+    name: ProgressTracker
+    network: manta-pacific-sepolia
+    source:
+      address: "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2"
+      abi: ProgressTracker
+      startBlock: 5386715 # ✅ ACTUAL DEPLOYMENT BLOCK
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      file: ./src/mappings/progressTracker.ts
+      entities:
+        - Enrollment
+        - Course
+        - UserProfile
+      abis:
+        - name: ProgressTracker
+          file: ./abis/progresstracker.json
+        - name: CourseFactory
+          file: ./abis/coursefactory.json
+      eventHandlers:
+        # Progress Tracking Events
+        - event: SectionStarted(indexed address,indexed uint256,indexed uint256,uint256)
+          handler: handleSectionStarted
+        - event: SectionCompleted(indexed address,indexed uint256,indexed uint256,uint256)
+          handler: handleSectionCompleted
+        - event: CourseCompleted(indexed address,indexed uint256)
+          handler: handleCourseCompleted
+        - event: ProgressReset(indexed address,indexed uint256)
+          handler: handleProgressReset
+
+  # ==========================================================================
+  # CONTRACT 4: CertificateManager ✅ CRITICAL FIX
+  # ==========================================================================
+  - kind: ethereum/contract
+    name: CertificateManager
+    network: manta-pacific-sepolia
+    source:
+      address: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5"
+      abi: CertificateManager
+      startBlock: 5386719 # ✅ ACTUAL DEPLOYMENT BLOCK
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      file: ./src/mappings/certificateManager.ts
+      entities:
+        - Certificate # ✅ NEW: Certificate entity
+        - CertificateCourse # ✅ NEW: Junction table
+        - UserProfile
+        - Course
+        - Enrollment
+        - ActivityEvent # ✅ NEW: For activity tracking
+        - MonthlyUserStats # ✅ NEW: For monthly analytics
+        - PlatformStats # ✅ NEW: For platform-wide metrics
+      abis:
+        - name: CertificateManager
+          file: ./abis/certificatemanager.json
+      eventHandlers:
+        # Certificate Lifecycle Events ✅ FIXED
+        - event: CertificateMinted(indexed address,indexed uint256,string,string,bytes32,uint256)
+          handler: handleCertificateMinted
+        - event: CourseAddedToCertificate(indexed address,indexed uint256,indexed uint256,string,bytes32,uint256)
+          handler: handleCourseAddedToCertificate
+        - event: CertificateUpdated(indexed address,indexed uint256,string,bytes32)
+          handler: handleCertificateUpdated
+        - event: CertificateRevoked(indexed uint256,string)
+          handler: handleCertificateRevoked
+        - event: CertificatePaymentRecorded(indexed address,indexed address,indexed uint256,bytes32)
+          handler: handleCertificatePaymentRecorded
+
+        # Certificate Configuration Events ✅ NEW
+        - event: BaseRouteUpdated(indexed uint256,string)
+          handler: handleBaseRouteUpdated
+        - event: DefaultBaseRouteUpdated(string)
+          handler: handleDefaultBaseRouteUpdated
+        - event: PlatformNameUpdated(string)
+          handler: handlePlatformNameUpdated
+        - event: CourseAdditionFeeUpdated(uint256)
+          handler: handleCourseAdditionFeeUpdated
+        - event: CourseCertificatePriceSet(indexed uint256,uint256,indexed address)
+          handler: handleCourseCertificatePriceSet
+
+# ============================================================================
+# FEATURES & OPTIMIZATIONS
+# ============================================================================
+features:
+  - fullTextSearch # Enable text search on Course.title and description
+  - grafting # Enable grafting for chain upgrades
+  - nonFatalErrors # Continue indexing even if some handlers fail
+
+# ============================================================================
+# ANALYTICS INTEGRATION
+# ============================================================================
+# Network analytics has been moved to external services:
+#
+# 1. Dune Analytics
+#    - Block metrics and gas analysis
+#    - Transaction patterns and trends
+#    - Network-wide statistics
+#
+# 2. Etherscan API
+#    - Real-time transaction monitoring
+#    - Contract interaction tracking
+#    - Gas usage statistics
+#
+# 3. Event-based Analytics
+#    - Use contract events for critical metrics
+#    - Track user engagement through emitted events
+#    - Monitor system performance via event handlers
+# ============================================================================
+
+# ============================================================================
+# DEPLOYMENT VERIFICATION
+# ============================================================================
+# ✅ CourseFactory:      0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72 (Block 5386706)
+# ✅ CourseLicense:      0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578 (Block 5386710)
+# ✅ ProgressTracker:    0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2 (Block 5386715)
+# ✅ CertificateManager: 0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5 (Block 5386719)
+#
+# Total blocks to index: ~50 blocks (very fast sync!)
+# Expected sync time: 2-5 minutes (optimal)
+#
+# Build & Deploy:
+# 1. npm run codegen && npm run build
+# 2. goldsky subgraph deploy eduverse-manta-pacific-sepolia/1.5.0 --path .
+# ============================================================================

@@ -141,3 +141,39 @@ export function getRatingErrorMessage(error: RatingError | string): string {
 
   return RatingError.NETWORK_ERROR;
 }
+
+/**
+ * Calculates remaining cooldown time for rating updates
+ * @param lastRatingTime - Timestamp of last rating (in seconds)
+ * @param cooldownPeriod - Cooldown period in seconds (default: 24 hours = 86400)
+ * @returns Remaining cooldown time in seconds, or 0 if cooldown expired
+ */
+export function getRemainingCooldown(
+  lastRatingTime: number,
+  cooldownPeriod: number = 86400
+): number {
+  if (!lastRatingTime) return 0;
+
+  const now = Math.floor(Date.now() / 1000);
+  const cooldownEnd = lastRatingTime + cooldownPeriod;
+  const remaining = cooldownEnd - now;
+
+  return remaining > 0 ? remaining : 0;
+}
+
+/**
+ * Formats cooldown time for display
+ * @param seconds - Remaining cooldown time in seconds
+ * @returns Formatted time string (e.g., "23h 45m", "5h 30m", "45m")
+ */
+export function formatCooldownTime(seconds: number): string {
+  if (seconds <= 0) return '0m';
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}

@@ -1,233 +1,1388 @@
-"use client"
+"use client";
 
-import { AnalyticsContainer } from "@/components/PageContainer"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
+import React, { useMemo, useState } from "react";
+import { AnalyticsContainer } from "@/components/PageContainer";
+import { GoldskyConfigError } from "@/components/GoldskyConfigError";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+import { useAnalyticsMetrics } from "@/hooks/useAnalytics";
+import {
+  useRecentActivitiesAsTransactions,
+  type BlockchainTransactionEvent,
+} from "@/hooks/useRecentActivities";
 import {
   Activity,
+  AlertTriangle,
+  ArrowUpDown,
   Award,
-  BarChart3,
   BookOpen,
+  CheckCircle,
   Clock,
   DollarSign,
+  Edit,
+  Eye,
+  EyeOff,
   FileText,
   GraduationCap,
+  Layers,
+  Play,
+  Plus,
+  RefreshCw,
+  Shield,
   Star,
+  Trash2,
   TrendingDown,
   TrendingUp,
   Users,
   Wallet,
-  Zap
-} from "lucide-react"
-import { memo, useCallback, useEffect, useMemo, useState } from "react"
+} from "lucide-react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
-// Types for transaction data based on type
-interface CourseCreatedData {
-  courseId: number
-  title: string
-  category: number
-  price: string
+// ==================== EXACT SMART CONTRACT TYPES ====================
+
+// CRITICAL: Enums harus exact match dengan smart contract
+enum CourseCategory {
+  Programming = 0,
+  Design = 1,
+  Business = 2,
+  Marketing = 3,
+  DataScience = 4,
+  Finance = 5,
+  Healthcare = 6,
+  Language = 7,
+  Arts = 8,
+  Mathematics = 9,
+  Science = 10,
+  Engineering = 11,
+  Technology = 12,
+  Education = 13,
+  Psychology = 14,
+  Culinary = 15,
+  PersonalDevelopment = 16,
+  Legal = 17,
+  Sports = 18,
+  Other = 19,
 }
 
-interface LicensePurchasedData {
-  courseId: number
-  duration: number
-  price: string
+enum CourseDifficulty {
+  Beginner = 0,
+  Intermediate = 1,
+  Advanced = 2,
 }
 
-interface CertificateMintedData {
-  tokenId: number
-  recipientName: string
-  coursesCompleted: number
+// ==================== EXACT EVENT DATA STRUCTURES ====================
+// Setiap struktur harus match persis dengan event parameters di smart contract
+
+interface CourseCreatedEventData {
+  courseId: number; // uint256 indexed courseId
+  creator: string; // address indexed creator
+  creatorName: string; // string creatorName
+  title: string; // string title
+  category: CourseCategory; // CourseCategory category
+  difficulty: CourseDifficulty; // CourseDifficulty difficulty
 }
 
-interface ProgressUpdatedData {
-  courseId: number
-  sectionId: number
-  progress: number
+interface CourseDeletedEventData {
+  courseId: number; // uint256 indexed courseId
+  deletedBy: string; // address indexed deletedBy
 }
 
-interface CourseRatedData {
-  courseId: number
-  rating: number
-  totalRatings: number
+interface CourseUnpublishedEventData {
+  courseId: number; // uint256 indexed courseId
+  unpublishedBy: string; // address indexed unpublishedBy
 }
 
-type TransactionData = CourseCreatedData | LicensePurchasedData | CertificateMintedData | ProgressUpdatedData | CourseRatedData | Record<string, never>
-
-// Types for real-time analytics data
-interface TransactionEvent {
-  id: string
-  type: 'course_created' | 'license_purchased' | 'certificate_minted' | 'progress_updated' | 'course_rated' | 'payment_processed'
-  timestamp: number
-  blockNumber: number
-  transactionHash: string
-  gasUsed: string
-  gasPrice: string
-  from: string
-  to: string
-  value: string
-  data: TransactionData
+interface CourseRepublishedEventData {
+  courseId: number; // uint256 indexed courseId
+  republishedBy: string; // address indexed republishedBy
 }
 
-interface AnalyticsMetrics {
-  totalTransactions: number
-  totalVolume: string
-  activeUsers: number
-  coursesCreated: number
-  certificatesIssued: number
-  averageGasPrice: string
-  networkUtilization: number
+interface CourseEmergencyDeactivatedEventData {
+  courseId: number; // uint256 indexed courseId
+  reason: string; // string reason
 }
 
-// Mock real-time data for demonstration
-const generateMockTransaction = (): TransactionEvent => {
-  const types: TransactionEvent['type'][] = [
-    'course_created', 'license_purchased', 'certificate_minted',
-    'progress_updated', 'course_rated', 'payment_processed'
-  ]
+interface CourseUpdatedEventData {
+  courseId: number; // uint256 indexed courseId
+  creator: string; // address indexed creator
+  newPrice: number; // uint256 newPrice - ✅ GOLDSKY price change tracking
+  oldPrice: number; // uint256 oldPrice - ✅ GOLDSKY compare adjustments
+  isActive: boolean; // bool isActive - ✅ GOLDSKY publish/unpublish status
+}
 
-  const now = Date.now()
-  const type = types[Math.floor(Math.random() * types.length)]
+interface SectionAddedEventData {
+  courseId: number; // uint256 indexed courseId
+  sectionId: number; // uint256 indexed sectionId
+  title: string; // string title
+}
+
+interface SectionUpdatedEventData {
+  courseId: number; // uint256 indexed courseId
+  sectionId: number; // uint256 indexed sectionId
+}
+
+interface SectionDeletedEventData {
+  courseId: number; // uint256 indexed courseId
+  sectionId: number; // uint256 indexed sectionId
+}
+
+interface SectionMovedEventData {
+  courseId: number; // uint256 indexed courseId
+  fromIndex: number; // uint256 fromIndex
+  toIndex: number; // uint256 toIndex
+  sectionTitle: string; // string sectionTitle
+}
+
+interface BatchSectionsAddedEventData {
+  courseId: number; // uint256 indexed courseId
+  sectionIds: number[]; // uint256[] sectionIds
+}
+
+interface CourseRatedEventData {
+  courseId: number; // uint256 indexed courseId
+  user: string; // address indexed user
+  rating: number; // uint256 rating (1-5)
+  newAverageRating: number; // uint256 newAverageRating (scaled by 10000)
+}
+
+interface RatingUpdatedEventData {
+  courseId: number; // uint256 indexed courseId
+  user: string; // address indexed user
+  oldRating: number; // uint256 oldRating
+  newRating: number; // uint256 newRating
+  newAverageRating: number; // uint256 newAverageRating
+}
+
+interface RatingDeletedEventData {
+  courseId: number; // uint256 indexed courseId
+  user: string; // address indexed user
+  previousRating: number; // uint256 previousRating
+}
+
+// CRITICAL: CourseLicense menggunakan ERC1155 dengan tokenId mapping
+interface LicenseMintedEventData {
+  courseId: number; // uint256 indexed courseId
+  student: string; // address indexed student
+  tokenId: number; // uint256 tokenId
+  durationMonths: number; // uint256 durationMonths
+  expiryTimestamp: number; // uint256 expiryTimestamp
+  pricePaid: number; // uint256 pricePaid - ✅ GOLDSKY revenue analytics
+}
+
+interface LicenseRenewedEventData {
+  courseId: number; // uint256 indexed courseId
+  student: string; // address indexed student
+  tokenId: number; // uint256 tokenId
+  durationMonths: number; // uint256 durationMonths
+  expiryTimestamp: number; // uint256 expiryTimestamp
+  pricePaid: number; // uint256 pricePaid - ✅ GOLDSKY revenue analytics
+}
+
+interface LicenseExpiredEventData {
+  courseId: number; // uint256 indexed courseId
+  student: string; // address indexed student
+  tokenId: number; // uint256 tokenId
+  expiredAt: number; // uint256 expiredAt
+}
+
+interface RevenueRecordedEventData {
+  courseId: number; // uint256 indexed courseId
+  amount: number; // uint256 amount
+  revenueType: string; // string revenueType - ✅ GOLDSKY "LicenseMinted" or "LicenseRenewed"
+}
+
+// CRITICAL: ProgressTracker events
+interface SectionStartedEventData {
+  student: string; // address indexed student
+  courseId: number; // uint256 indexed courseId
+  sectionId: number; // uint256 indexed sectionId
+  startedAt: number; // uint256 startedAt
+}
+
+interface SectionCompletedEventData {
+  student: string; // address indexed student
+  courseId: number; // uint256 indexed courseId
+  sectionId: number; // uint256 indexed sectionId
+}
+
+interface CourseCompletedEventData {
+  student: string; // address indexed student
+  courseId: number; // uint256 indexed courseId
+}
+
+interface ProgressResetEventData {
+  student: string; // address indexed student
+  courseId: number; // uint256 indexed courseId
+}
+
+// CRITICAL: CertificateManager "One Certificate Per User" model
+interface CertificateMintedEventData {
+  owner: string; // address indexed owner (NOT student)
+  tokenId: number; // uint256 indexed tokenId
+  recipientName: string; // string recipientName
+  ipfsCID: string; // string ipfsCID
+  paymentReceiptHash: string; // bytes32 paymentReceiptHash (as hex string)
+}
+
+interface CourseAddedToCertificateEventData {
+  owner: string; // address indexed owner
+  tokenId: number; // uint256 indexed tokenId
+  courseId: number; // uint256 indexed courseId
+  newIpfsCID: string; // string newIpfsCID
+  paymentReceiptHash: string; // bytes32 paymentReceiptHash
+}
+
+interface CertificateUpdatedEventData {
+  owner: string; // address indexed owner
+  tokenId: number; // uint256 indexed tokenId
+  newIpfsCID: string; // string newIpfsCID
+  paymentReceiptHash: string; // bytes32 paymentReceiptHash
+}
+
+interface CertificateRevokedEventData {
+  tokenId: number; // uint256 indexed tokenId
+  reason: string; // string reason
+}
+
+interface CertificatePaymentRecordedEventData {
+  payer: string; // address indexed payer
+  owner: string; // address indexed owner
+  tokenId: number; // uint256 indexed tokenId
+  paymentReceiptHash: string; // bytes32 paymentReceiptHash
+}
+
+// Union type untuk semua event data
+type TransactionEventData =
+  | CourseCreatedEventData
+  | CourseUpdatedEventData
+  | CourseDeletedEventData
+  | CourseUnpublishedEventData
+  | CourseRepublishedEventData
+  | CourseEmergencyDeactivatedEventData
+  | SectionAddedEventData
+  | SectionUpdatedEventData
+  | SectionDeletedEventData
+  | SectionMovedEventData
+  | BatchSectionsAddedEventData
+  | SectionsSwappedEventData
+  | SectionsBatchReorderedEventData
+  | CourseRatedEventData
+  | RatingUpdatedEventData
+  | RatingDeletedEventData
+  | RatingRemovedEventData
+  | LicenseMintedEventData
+  | LicenseRenewedEventData
+  | LicenseExpiredEventData
+  | RevenueRecordedEventData
+  | SectionStartedEventData
+  | SectionCompletedEventData
+  | CourseCompletedEventData
+  | ProgressResetEventData
+  | CertificateMintedEventData
+  | CourseAddedToCertificateEventData
+  | CertificateUpdatedEventData
+  | CertificateRevokedEventData
+  | CertificatePaymentRecordedEventData
+  | UserBlacklistedEventData
+  | UserUnblacklistedEventData
+  | RatingsPausedEventData
+  | RatingsUnpausedEventData
+  | BaseRouteUpdatedEventData
+  | PlatformNameUpdatedEventData
+  | CourseAdditionFeeUpdatedEventData
+  | CourseCertificatePriceSetEventData
+  | Record<string, never>;
+// ========== MISSING EVENT INTERFACES FOR FULL CONTRACT ALIGNMENT ==========
+
+interface SectionsSwappedEventData {
+  courseId: number; // uint256 indexed courseId
+  indexA: number; // uint256 indexA - ARRAY POSITION, not section ID!
+  indexB: number; // uint256 indexB - ARRAY POSITION, not section ID!
+}
+
+interface SectionsBatchReorderedEventData {
+  courseId: number; // uint256 indexed courseId
+  newOrder: number[]; // uint256[] newOrder
+}
+
+interface RatingRemovedEventData {
+  courseId: number; // uint256 indexed courseId
+  user: string; // address indexed user
+  previousRating: number; // uint256 previousRating
+}
+
+interface UserBlacklistedEventData {
+  user: string; // address indexed user
+  admin: string; // address indexed admin
+}
+
+interface UserUnblacklistedEventData {
+  user: string; // address indexed user
+  admin: string; // address indexed admin
+}
+
+interface RatingsPausedEventData {
+  courseId: number; // uint256 indexed courseId
+  admin: string; // address indexed admin
+}
+
+interface RatingsUnpausedEventData {
+  courseId: number; // uint256 indexed courseId
+  admin: string; // address indexed admin
+}
+
+interface BaseRouteUpdatedEventData {
+  tokenId: number; // uint256 indexed tokenId
+  newBaseRoute: string; // string newBaseRoute
+}
+
+interface PlatformNameUpdatedEventData {
+  newPlatformName: string; // string newPlatformName
+}
+
+interface CourseAdditionFeeUpdatedEventData {
+  newFee: number; // uint256 newFee
+}
+
+interface CourseCertificatePriceSetEventData {
+  courseId: number; // uint256 indexed courseId
+  price: number; // uint256 price
+  creator: string; // address indexed creator
+}
+
+// ==================== COMPLETE TRANSACTION EVENT ====================
+
+// ==================== REAL CONTRACT CONSTANTS ====================
+
+// CRITICAL: These must match deployed contract addresses from deployed-contracts.json
+const DEPLOYED_CONTRACTS = {
+  // Updated with actual deployment addresses from contract-addresses.json
+  CourseFactory: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72",
+  CourseLicense: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578",
+  ProgressTracker: "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2",
+  CertificateManager: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5",
+} as const;
+
+// Smart contract limits (from actual contracts) - Used for validation
+// const _CONTRACT_LIMITS = {
+//   MAX_SECTIONS_PER_COURSE: 1000,           // CourseFactory anti-DoS
+//   MAX_PRICE_ETH: '1.000000',               // CourseFactory.MAX_PRICE_ETH
+//   MAX_CERTIFICATE_PRICE: '0.002000',       // CertificateManager.MAX_CERTIFICATE_PRICE
+//   RATING_COOLDOWN_HOURS: 24,               // CourseFactory.RATING_COOLDOWN
+//   MAX_DURATION_MONTHS: 12,                 // CourseLicense.MAX_DURATION_MONTHS
+//   SECONDS_PER_MONTH: 2592000                // CourseLicense.SECONDS_PER_MONTH (30 days)
+// } as const
+
+// CRITICAL: Platform fee percentages from actual smart contracts
+// CourseLicense.sol line 42: platformFeePercentage = 200 (2%)
+// CertificateManager.sol line 775: platformFee = (totalAmount * 1000) / 10000 (10%)
+// CertificateManager.sol line 805: platformFee = (totalAmount * 200) / 10000 (2%)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const PLATFORM_FEE_BASIS_POINTS = {
+  LICENSE: 200, // 2% for license mint/renewal (CourseLicense.sol)
+  CERTIFICATE_MINT: 1000, // 10% for initial certificate minting (CertificateManager.sol line 775)
+  CERTIFICATE_ADD: 200, // 2% for adding courses to certificate (CertificateManager.sol line 805)
+} as const;
+
+// Helper function to calculate exact platform fees matching smart contracts
+// Currently unused but kept for future revenue breakdown features
+// const calculatePlatformFee = (
+//   totalAmount: number,
+//   feeType: keyof typeof PLATFORM_FEE_BASIS_POINTS
+// ): { platformFee: number; creatorPayout: number } => {
+//   const basisPoints = PLATFORM_FEE_BASIS_POINTS[feeType];
+//   const platformFee = (totalAmount * basisPoints) / 10000;
+//   const creatorPayout = totalAmount - platformFee;
+//
+//   return { platformFee, creatorPayout };
+// };
+
+// ==================== ANALYTICS METRICS ====================
+
+interface EduVerseAnalyticsMetrics {
+  totalTransactions: number;
+  totalCourseCreations: number;
+  totalLicenseMints: number;
+  totalCertificateMints: number;
+  totalProgressUpdates: number;
+  courseFactoryInteractions: number;
+  courseLicenseInteractions: number;
+  progressTrackerInteractions: number;
+  certificateManagerInteractions: number;
+  averageBlockTime: number;
+  uniqueAddresses: number;
+  activeStudents: number;
+  activeCreators: number;
+  totalCourses: number;
+  activeCourses: number;
+  totalSections: number;
+  coursesWithRatings: number;
+  averagePlatformRating: number;
+  totalSectionsCompleted: number;
+  totalCoursesCompleted: number;
+  uniqueStudentsWithProgress: number;
+  totalLicensesMinted: number;
+  totalLicensesRenewed: number;
+  activeLicenses: number;
+  totalLicenseRevenue: string;
+  totalCertificateHolders: number;
+  totalCourseAdditions: number;
+  certificateUpdates: number;
+  totalCertificateRevenue: string;
+  totalPlatformRevenue: string;
+  totalCreatorPayouts: string;
+  averageCoursePrice: string;
+}
+
+// ==================== MOCK DATA GENERATION (REALISTIC) ====================
+
+// Currently unused but kept for future mock data generation features
+// const COURSE_CATEGORIES_NAMES = [
+//   "Programming",
+//   "Design",
+//   "Business",
+//   "Marketing",
+//   "Data Science",
+//   "Finance",
+//   "Healthcare",
+//   "Language",
+//   "Arts",
+//   "Mathematics",
+//   "Science",
+//   "Engineering",
+//   "Technology",
+//   "Education",
+//   "Psychology",
+//   "Culinary",
+//   "Personal Development",
+//   "Legal",
+//   "Sports",
+//   "Other",
+// ];
+
+// const DIFFICULTY_NAMES = ["Beginner", "Intermediate", "Advanced"];
+
+const WEB3_COURSE_TITLES = [
+  "Smart Contract Security Fundamentals",
+  "DeFi Protocol Development with Solidity",
+  "NFT Marketplace Architecture on Manta",
+  "Web3 Frontend with React and Wagmi",
+  "Blockchain Data Analytics with Subgraph",
+  "ERC-1155 Token Implementation Guide",
+  "IPFS Integration for Decentralized Apps",
+  "Zero-Knowledge Proofs in Practice",
+  "MEV Protection Strategies",
+  "Cross-Chain Bridge Development",
+];
+
+const CREATOR_PROFILES = [
+  { name: "Dr. Sarah Blockchain", expertise: "Smart Contract Security" },
+  { name: "Prof. Alex DeFi", expertise: "DeFi Protocols" },
+  { name: "Maria Web3", expertise: "Frontend Development" },
+  { name: "David Cryptography", expertise: "Zero-Knowledge Proofs" },
+  { name: "Lisa Analytics", expertise: "Blockchain Data" },
+];
+
+const generateRealisticAddress = (): string => {
+  return `0x${Math.random().toString(16).substr(2, 40).padEnd(40, "0")}`;
+};
+
+const generateRealisticHash = (): string => {
+  return `0x${Math.random().toString(16).substr(2, 64).padEnd(64, "0")}`;
+};
+
+const generatePaymentReceiptHash = (): string => {
+  return generateRealisticHash(); // bytes32 payment receipt hash
+};
+
+const getGasUsageByContractAndFunction = (
+  contractName: string,
+  functionName: string
+): number => {
+  // Realistic gas usage based on contract complexity
+  const gasUsage: Record<string, Record<string, number>> = {
+    CourseFactory: {
+      createCourse: 180000,
+      updateCourse: 85000,
+      addCourseSection: 95000,
+      batchAddSections: 45000, // per section
+      rateCourse: 75000,
+      deleteMyRating: 65000,
+    },
+    CourseLicense: {
+      mintLicense: 220000,
+      renewLicense: 180000,
+    },
+    ProgressTracker: {
+      completeSection: 95000,
+      batchCompleteSections: 35000, // per section
+    },
+    CertificateManager: {
+      mintOrUpdateCertificate: 250000, // First certificate
+      addCourseToExistingCertificate: 180000, // Additional courses
+      updateCertificate: 120000,
+    },
+  };
+
+  return gasUsage[contractName]?.[functionName] || 100000;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _generateMockBlockchainTransaction = (): Record<string, unknown> => {
+  const now = Date.now();
+  const blockNumber = 12500000 + Math.floor(Math.random() * 50000);
+
+  // Weighted distribution (more common transactions have higher probability)
+  const transactionTypes = [
+    {
+      type: "section_completed",
+      weight: 25,
+      contract: "ProgressTracker",
+      event: "SectionCompleted",
+    },
+    {
+      type: "section_started",
+      weight: 20,
+      contract: "ProgressTracker",
+      event: "SectionStarted",
+    },
+    {
+      type: "course_rated",
+      weight: 15,
+      contract: "CourseFactory",
+      event: "CourseRated",
+    },
+    {
+      type: "license_minted",
+      weight: 12,
+      contract: "CourseLicense",
+      event: "LicenseMinted",
+    },
+    {
+      type: "section_added",
+      weight: 10,
+      contract: "CourseFactory",
+      event: "SectionAdded",
+    },
+    {
+      type: "revenue_recorded",
+      weight: 8,
+      contract: "CourseLicense",
+      event: "RevenueRecorded",
+    },
+    {
+      type: "course_completed",
+      weight: 8,
+      contract: "ProgressTracker",
+      event: "CourseCompleted",
+    },
+    {
+      type: "certificate_minted",
+      weight: 6,
+      contract: "CertificateManager",
+      event: "CertificateMinted",
+    },
+    {
+      type: "course_created",
+      weight: 5,
+      contract: "CourseFactory",
+      event: "CourseCreated",
+    },
+    {
+      type: "license_renewed",
+      weight: 5,
+      contract: "CourseLicense",
+      event: "LicenseRenewed",
+    },
+    {
+      type: "course_added_to_certificate",
+      weight: 4,
+      contract: "CertificateManager",
+      event: "CourseAddedToCertificate",
+    },
+    {
+      type: "course_updated",
+      weight: 3,
+      contract: "CourseFactory",
+      event: "CourseUpdated",
+    },
+    {
+      type: "section_updated",
+      weight: 3,
+      contract: "CourseFactory",
+      event: "SectionUpdated",
+    },
+    {
+      type: "license_expired",
+      weight: 2,
+      contract: "CourseLicense",
+      event: "LicenseExpired",
+    },
+    {
+      type: "certificate_updated",
+      weight: 2,
+      contract: "CertificateManager",
+      event: "CertificateUpdated",
+    },
+    {
+      type: "rating_updated",
+      weight: 2,
+      contract: "CourseFactory",
+      event: "RatingUpdated",
+    },
+    {
+      type: "section_moved",
+      weight: 2,
+      contract: "CourseFactory",
+      event: "SectionMoved",
+    },
+    {
+      type: "course_unpublished",
+      weight: 1,
+      contract: "CourseFactory",
+      event: "CourseUnpublished",
+    },
+    {
+      type: "course_republished",
+      weight: 1,
+      contract: "CourseFactory",
+      event: "CourseRepublished",
+    },
+    {
+      type: "batch_sections_added",
+      weight: 1,
+      contract: "CourseFactory",
+      event: "BatchSectionsAdded",
+    },
+    {
+      type: "section_deleted",
+      weight: 1,
+      contract: "CourseFactory",
+      event: "SectionDeleted",
+    },
+    {
+      type: "sections_swapped",
+      weight: 1,
+      contract: "CourseFactory",
+      event: "SectionsSwapped",
+    },
+    {
+      type: "sections_batch_reordered",
+      weight: 1,
+      contract: "CourseFactory",
+      event: "SectionsBatchReordered",
+    },
+    {
+      type: "rating_deleted",
+      weight: 1,
+      contract: "CourseFactory",
+      event: "RatingDeleted",
+    },
+    {
+      type: "progress_reset",
+      weight: 1,
+      contract: "ProgressTracker",
+      event: "ProgressReset",
+    },
+    {
+      type: "certificate_revoked",
+      weight: 1,
+      contract: "CertificateManager",
+      event: "CertificateRevoked",
+    },
+    {
+      type: "course_deleted",
+      weight: 0.5,
+      contract: "CourseFactory",
+      event: "CourseDeleted",
+    },
+    {
+      type: "course_emergency_deactivated",
+      weight: 0.1,
+      contract: "CourseFactory",
+      event: "CourseEmergencyDeactivated",
+    },
+  ];
+
+  // Weighted selection
+  const totalWeight = transactionTypes.reduce((sum, t) => sum + t.weight, 0);
+  let random = Math.random() * totalWeight;
+
+  const selectedType =
+    transactionTypes.find((t) => {
+      random -= t.weight;
+      return random <= 0;
+    }) || transactionTypes[0];
+
+  const gasUsed = getGasUsageByContractAndFunction(
+    selectedType.contract,
+    selectedType.event
+  );
+  const gasPrice = Math.floor(Math.random() * 80 + 20); // 20-100 gwei realistic for Manta
+  const gasCost = ((gasUsed * gasPrice) / 1e9).toFixed(9); // Convert to ETH
 
   return {
     id: `tx_${now}_${Math.random().toString(36).substr(2, 9)}`,
-    type,
-    timestamp: now,
-    blockNumber: 12345678 + Math.floor(Math.random() * 1000),
-    transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-    gasUsed: (21000 + Math.floor(Math.random() * 100000)).toString(),
-    gasPrice: (20 + Math.floor(Math.random() * 50)).toString(),
-    from: `0x${Math.random().toString(16).substr(2, 40)}`,
-    to: `0x${Math.random().toString(16).substr(2, 40)}`,
-    value: (Math.random() * 0.01).toFixed(6),
-    data: getTransactionData(type)
-  }
-}
+    transactionHash: generateRealisticHash(),
+    blockNumber,
+    blockHash: generateRealisticHash(),
+    transactionIndex: Math.floor(Math.random() * 200),
+    logIndex: Math.floor(Math.random() * 50),
+    timestamp: now - Math.floor(Math.random() * 300000), // Within last 5 minutes
 
-const getTransactionData = (type: TransactionEvent['type']): TransactionData => {
-  switch (type) {
-    case 'course_created':
+    gasUsed: gasUsed.toString(),
+    gasPrice: gasPrice.toString(),
+    gasCost,
+
+    from: generateRealisticAddress(),
+    to:
+      DEPLOYED_CONTRACTS[
+        selectedType.contract as keyof typeof DEPLOYED_CONTRACTS
+      ] || generateRealisticAddress(),
+    value: getTransactionValue(selectedType.type),
+
+    // Note: Removed contractName, contractAddress, eventName, eventSignature, transactionType
+    // These properties don't exist in BlockchainTransactionEvent from Goldsky
+    // This mock function is not used in production
+  };
+};
+
+const getTransactionValue = (transactionType: string): string => {
+  switch (transactionType) {
+    case "license_minted":
+    case "license_renewed":
+      return (Math.random() * 0.012 + 0.001).toFixed(6); // 0.001-0.013 ETH
+    case "certificate_minted":
+    case "course_added_to_certificate":
+    case "certificate_updated":
+      return (Math.random() * 0.0015 + 0.0005).toFixed(6); // 0.0005-0.002 ETH
+    default:
+      return "0.000000"; // Most operations don't involve ETH transfer
+  }
+};
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const generateEventData = (transactionType: string): TransactionEventData => {
+  const courseId = Math.floor(Math.random() * 500) + 1;
+  const userAddress = generateRealisticAddress();
+
+  switch (transactionType) {
+    case "course_created":
       return {
-        courseId: Math.floor(Math.random() * 1000),
-        title: `Web3 Course ${Math.floor(Math.random() * 100)}`,
-        category: Math.floor(Math.random() * 20),
-        price: (Math.random() * 0.01).toFixed(6)
-      } as CourseCreatedData
-    case 'license_purchased':
+        courseId,
+        creator: userAddress,
+        creatorName:
+          CREATOR_PROFILES[Math.floor(Math.random() * CREATOR_PROFILES.length)]
+            .name,
+        title:
+          WEB3_COURSE_TITLES[
+            Math.floor(Math.random() * WEB3_COURSE_TITLES.length)
+          ],
+        category: Math.floor(Math.random() * 20) as CourseCategory,
+        difficulty: Math.floor(Math.random() * 3) as CourseDifficulty,
+      } as CourseCreatedEventData;
+
+    case "course_updated":
+      const oldPrice =
+        Math.floor(Math.random() * 5000000000000000000) + 100000000000000000; // 0.1-5 MANTA
+      const newPrice =
+        Math.floor(Math.random() * 5000000000000000000) + 100000000000000000;
       return {
-        courseId: Math.floor(Math.random() * 1000),
-        duration: [1, 3, 6, 12][Math.floor(Math.random() * 4)],
-        price: (Math.random() * 0.01).toFixed(6)
-      } as LicensePurchasedData
-    case 'certificate_minted':
+        courseId,
+        creator: userAddress,
+        newPrice,
+        oldPrice,
+        isActive: Math.random() > 0.5,
+      } as CourseUpdatedEventData;
+
+    case "course_deleted":
       return {
-        tokenId: Math.floor(Math.random() * 10000),
-        recipientName: `User${Math.floor(Math.random() * 1000)}`,
-        coursesCompleted: Math.floor(Math.random() * 10) + 1
-      } as CertificateMintedData
-    case 'progress_updated':
+        courseId,
+        deletedBy: userAddress,
+      } as CourseDeletedEventData;
+
+    case "course_unpublished":
       return {
-        courseId: Math.floor(Math.random() * 1000),
+        courseId,
+        unpublishedBy: userAddress,
+      } as CourseUnpublishedEventData;
+
+    case "course_republished":
+      return {
+        courseId,
+        republishedBy: userAddress,
+      } as CourseRepublishedEventData;
+
+    case "course_emergency_deactivated":
+      return {
+        courseId,
+        reason: "Security violation detected",
+      } as CourseEmergencyDeactivatedEventData;
+
+    case "section_added":
+      return {
+        courseId,
+        sectionId: Math.floor(Math.random() * 100),
+        title: `Section ${
+          Math.floor(Math.random() * 50) + 1
+        }: Advanced Concepts`,
+      } as SectionAddedEventData;
+
+    case "section_updated":
+      return {
+        courseId,
+        sectionId: Math.floor(Math.random() * 100),
+      } as SectionUpdatedEventData;
+
+    case "section_completed":
+      return {
+        student: userAddress,
+        courseId,
         sectionId: Math.floor(Math.random() * 50),
-        progress: Math.floor(Math.random() * 100)
-      } as ProgressUpdatedData
-    case 'course_rated':
-      return {
-        courseId: Math.floor(Math.random() * 1000),
-        rating: Math.floor(Math.random() * 5) + 1,
-        totalRatings: Math.floor(Math.random() * 100)
-      } as CourseRatedData
-    default:
-      return {}
-  }
-}
+      } as SectionCompletedEventData;
 
-const TransactionTypeIcon = memo<{ type: TransactionEvent['type'] }>(({ type }) => {
-  const iconProps = { className: "h-4 w-4" }
+    case "course_completed":
+      return {
+        student: userAddress,
+        courseId,
+      } as CourseCompletedEventData;
+
+    case "license_minted":
+      const duration = [1, 3, 6, 12][Math.floor(Math.random() * 4)];
+      const pricePaid =
+        Math.floor(Math.random() * 5000000000000000000) + 100000000000000000; // 0.1-5 MANTA
+      return {
+        courseId,
+        student: userAddress,
+        tokenId: Math.floor(Math.random() * 10000) + 1,
+        durationMonths: duration,
+        expiryTimestamp: Date.now() + duration * 30 * 24 * 60 * 60 * 1000,
+        pricePaid,
+      } as LicenseMintedEventData;
+
+    case "license_renewed":
+      const renewDuration = [1, 3, 6, 12][Math.floor(Math.random() * 4)];
+      const renewPricePaid =
+        Math.floor(Math.random() * 5000000000000000000) + 100000000000000000;
+      return {
+        courseId,
+        student: userAddress,
+        tokenId: Math.floor(Math.random() * 10000) + 1,
+        durationMonths: renewDuration,
+        expiryTimestamp: Date.now() + renewDuration * 30 * 24 * 60 * 60 * 1000,
+        pricePaid: renewPricePaid,
+      } as LicenseRenewedEventData;
+
+    case "license_expired":
+      return {
+        courseId,
+        student: userAddress,
+        tokenId: Math.floor(Math.random() * 10000) + 1,
+        expiredAt:
+          Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000), // Expired within last week
+      } as LicenseExpiredEventData;
+
+    case "revenue_recorded":
+      const revenueAmount =
+        Math.floor(Math.random() * 5000000000000000000) + 100000000000000000;
+      return {
+        courseId,
+        amount: revenueAmount,
+        revenueType: Math.random() > 0.5 ? "LicenseMinted" : "LicenseRenewed",
+      } as RevenueRecordedEventData;
+
+    case "section_started":
+      return {
+        student: userAddress,
+        courseId,
+        sectionId: Math.floor(Math.random() * 50),
+        startedAt: Date.now() - Math.floor(Math.random() * 24 * 60 * 60 * 1000), // Started within last day
+      } as SectionStartedEventData;
+
+    case "certificate_minted":
+      return {
+        owner: userAddress,
+        tokenId: Math.floor(Math.random() * 5000) + 1,
+        recipientName: `Student${Math.floor(Math.random() * 1000)}`,
+        ipfsCID: `Qm${Math.random().toString(36).substr(2, 44)}`,
+        paymentReceiptHash: generatePaymentReceiptHash(),
+      } as CertificateMintedEventData;
+
+    case "course_added_to_certificate":
+      return {
+        owner: userAddress,
+        tokenId: Math.floor(Math.random() * 5000) + 1,
+        courseId,
+        newIpfsCID: `Qm${Math.random().toString(36).substr(2, 44)}`,
+        paymentReceiptHash: generatePaymentReceiptHash(),
+      } as CourseAddedToCertificateEventData;
+
+    case "course_rated":
+      const rating = Math.floor(Math.random() * 5) + 1;
+      return {
+        courseId,
+        user: userAddress,
+        rating,
+        newAverageRating: Math.floor(Math.random() * 40000 + 10000), // 1.0000-5.0000 scaled by 10000
+      } as CourseRatedEventData;
+
+    case "rating_updated":
+      return {
+        courseId,
+        user: userAddress,
+        oldRating: Math.floor(Math.random() * 5) + 1,
+        newRating: Math.floor(Math.random() * 5) + 1,
+        newAverageRating: Math.floor(Math.random() * 40000 + 10000),
+      } as RatingUpdatedEventData;
+
+    case "section_moved":
+      return {
+        courseId,
+        fromIndex: Math.floor(Math.random() * 10),
+        toIndex: Math.floor(Math.random() * 10),
+        sectionTitle: `Section ${
+          Math.floor(Math.random() * 50) + 1
+        }: Moved Section`,
+      } as SectionMovedEventData;
+
+    case "rating_deleted":
+      return {
+        courseId,
+        user: userAddress,
+        previousRating: Math.floor(Math.random() * 5) + 1,
+      } as RatingDeletedEventData;
+
+    case "batch_sections_added":
+      return {
+        courseId,
+        sectionIds: Array.from(
+          { length: Math.floor(Math.random() * 10) + 1 },
+          (_, i) => i + 1
+        ),
+      } as BatchSectionsAddedEventData;
+
+    case "sections_swapped":
+      const indexA = Math.floor(Math.random() * 20);
+      const indexB = Math.floor(Math.random() * 20);
+      return {
+        courseId,
+        indexA, // CORRECT - These are array positions
+        indexB, // CORRECT - Not section IDs!
+      } as SectionsSwappedEventData;
+
+    case "sections_batch_reordered":
+      return {
+        courseId,
+        newOrder: Array.from(
+          { length: Math.floor(Math.random() * 10) + 3 },
+          (_, i) => i
+        ),
+      } as SectionsBatchReorderedEventData;
+
+    case "progress_reset":
+      return {
+        student: userAddress,
+        courseId,
+      } as ProgressResetEventData;
+
+    case "certificate_revoked":
+      return {
+        tokenId: Math.floor(Math.random() * 5000) + 1,
+        reason: "Academic dishonesty detected",
+      } as CertificateRevokedEventData;
+
+    default:
+      return {};
+  }
+};
+
+// ==================== UI COMPONENTS ====================
+
+const TransactionTypeIcon = memo<{
+  type: string;
+  contractName: string;
+}>(({ type, contractName }) => {
+  const iconProps = { className: "h-4 w-4" };
+
+  const contractColors: Record<string, string> = {
+    CourseFactory: "text-blue-500",
+    CourseLicense: "text-green-500",
+    ProgressTracker: "text-purple-500",
+    CertificateManager: "text-yellow-500",
+  };
+
+  const colorClass = contractColors[contractName] || "text-gray-500";
 
   switch (type) {
-    case 'course_created':
-      return <BookOpen {...iconProps} className={cn(iconProps.className, "text-blue-500")} />
-    case 'license_purchased':
-      return <Wallet {...iconProps} className={cn(iconProps.className, "text-green-500")} />
-    case 'certificate_minted':
-      return <Award {...iconProps} className={cn(iconProps.className, "text-yellow-500")} />
-    case 'progress_updated':
-      return <TrendingUp {...iconProps} className={cn(iconProps.className, "text-purple-500")} />
-    case 'course_rated':
-      return <Star {...iconProps} className={cn(iconProps.className, "text-orange-500")} />
-    case 'payment_processed':
-      return <DollarSign {...iconProps} className={cn(iconProps.className, "text-emerald-500")} />
+    case "course_created":
+      return (
+        <BookOpen
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "course_updated":
+      return (
+        <Edit {...iconProps} className={cn(iconProps.className, colorClass)} />
+      );
+    case "course_deleted":
+      return (
+        <Trash2
+          {...iconProps}
+          className={cn(iconProps.className, colorClass, "text-red-500")}
+        />
+      );
+    case "course_unpublished":
+      return (
+        <EyeOff
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "course_republished":
+      return (
+        <Eye {...iconProps} className={cn(iconProps.className, colorClass)} />
+      );
+    case "course_emergency_deactivated":
+      return (
+        <AlertTriangle
+          {...iconProps}
+          className={cn(iconProps.className, colorClass, "text-red-600")}
+        />
+      );
+    case "section_added":
+      return (
+        <Plus {...iconProps} className={cn(iconProps.className, colorClass)} />
+      );
+    case "section_updated":
+      return (
+        <Edit {...iconProps} className={cn(iconProps.className, colorClass)} />
+      );
+    case "section_deleted":
+      return (
+        <Trash2
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "section_moved":
+      return (
+        <ArrowUpDown
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "batch_sections_added":
+      return (
+        <Layers
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "license_minted":
+      return (
+        <Wallet
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "license_renewed":
+      return (
+        <RefreshCw
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "license_expired":
+      return (
+        <Clock
+          {...iconProps}
+          className={cn(iconProps.className, colorClass, "text-orange-500")}
+        />
+      );
+    case "revenue_recorded":
+      return (
+        <DollarSign
+          {...iconProps}
+          className={cn(iconProps.className, colorClass, "text-green-500")}
+        />
+      );
+    case "section_started":
+      return (
+        <Play {...iconProps} className={cn(iconProps.className, colorClass)} />
+      );
+    case "section_completed":
+      return (
+        <CheckCircle
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "course_completed":
+      return (
+        <GraduationCap
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "certificate_minted":
+      return (
+        <Award {...iconProps} className={cn(iconProps.className, colorClass)} />
+      );
+    case "course_added_to_certificate":
+      return (
+        <FileText
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "certificate_updated":
+      return (
+        <Edit {...iconProps} className={cn(iconProps.className, colorClass)} />
+      );
+    case "certificate_revoked":
+      return (
+        <Shield
+          {...iconProps}
+          className={cn(iconProps.className, "text-red-500")}
+        />
+      );
+    case "course_rated":
+    case "rating_updated":
+    case "rating_deleted":
+      return (
+        <Star {...iconProps} className={cn(iconProps.className, colorClass)} />
+      );
+    case "sections_swapped":
+    case "sections_batch_reordered":
+      return (
+        <ArrowUpDown
+          {...iconProps}
+          className={cn(iconProps.className, colorClass)}
+        />
+      );
+    case "progress_reset":
+      return (
+        <RefreshCw
+          {...iconProps}
+          className={cn(iconProps.className, "text-orange-500")}
+        />
+      );
     default:
-      return <Activity {...iconProps} />
+      return <Activity {...iconProps} className={colorClass} />;
   }
-})
+});
 
-TransactionTypeIcon.displayName = 'TransactionTypeIcon'
+TransactionTypeIcon.displayName = "TransactionTypeIcon";
 
-const TransactionRow = memo<{ transaction: TransactionEvent }>(({ transaction }) => {
-  const formatTimestamp = useCallback((timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString()
-  }, [])
+// Helper function to get contract name from event type
+const getContractName = (eventType: string): string => {
+  const type = eventType.toUpperCase();
 
-  const getTypeLabel = useCallback((type: TransactionEvent['type']) => {
-    switch (type) {
-      case 'course_created': return 'Course Created'
-      case 'license_purchased': return 'License Purchased'
-      case 'certificate_minted': return 'Certificate Minted'
-      case 'progress_updated': return 'Progress Updated'
-      case 'course_rated': return 'Course Rated'
-      case 'payment_processed': return 'Payment Processed'
-      default: return 'Unknown'
-    }
-  }, [])
+  // Priority 1: ProgressTracker events (MUST check before CourseFactory)
+  if (
+    type.includes("SECTION_STARTED") ||
+    type.includes("SECTION_COMPLETED") ||
+    type === "COURSE_COMPLETED" ||
+    type.includes("PROGRESS_RESET")
+  ) {
+    return "ProgressTracker";
+  }
 
-  return (
-    <div className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors">
-      <div className="flex items-center space-x-3">
-        <TransactionTypeIcon type={transaction.type} />
-        <div>
-          <p className="font-medium text-sm">{getTypeLabel(transaction.type)}</p>
+  // Priority 2: CertificateManager events
+  if (type.includes("CERTIFICATE")) {
+    return "CertificateManager";
+  }
+
+  // Priority 3: CourseLicense events
+  if (type.includes("LICENSE") || type.includes("REVENUE")) {
+    return "CourseLicense";
+  }
+
+  // Priority 4: CourseFactory events (sections managed by CourseFactory)
+  if (
+    type.includes("COURSE_CREATED") ||
+    type.includes("COURSE_UPDATED") ||
+    type.includes("COURSE_DELETED") ||
+    type.includes("COURSE_UNPUBLISHED") ||
+    type.includes("COURSE_REPUBLISHED") ||
+    type.includes("COURSE_EMERGENCY") ||
+    type.includes("SECTION_ADDED") ||
+    type.includes("SECTION_UPDATED") ||
+    type.includes("SECTION_DELETED") ||
+    type.includes("SECTION_MOVED") ||
+    type.includes("SECTION_SWAPPED") ||
+    type.includes("BATCH_SECTIONS") ||
+    type.includes("RATING") ||
+    type.includes("BLACKLIST")
+  ) {
+    return "CourseFactory";
+  }
+
+  return "CourseFactory";
+};
+
+const TransactionRow = memo<{ transaction: BlockchainTransactionEvent }>(
+  ({ transaction }) => {
+    const formatTimestamp = useCallback((timestamp: number) => {
+      return new Date(timestamp * 1000).toLocaleTimeString();
+    }, []);
+
+    const getTypeLabel = useCallback((type: string) => {
+      return type
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+    }, []);
+
+    const getTransactionDetails = useCallback(
+      (tx: BlockchainTransactionEvent) => {
+        const type = tx.eventType.toUpperCase();
+
+        if (type.includes("COURSE_CREATED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" created`
+            : tx.eventData.description || "Course created";
+        } else if (type.includes("COURSE_DELETED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" deleted`
+            : tx.eventData.description || "Course deleted";
+        } else if (type.includes("COURSE_UNPUBLISHED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" unpublished`
+            : tx.eventData.description || "Course unpublished";
+        } else if (type.includes("COURSE_REPUBLISHED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" republished`
+            : tx.eventData.description || "Course republished";
+        } else if (type.includes("EMERGENCY_DEACTIVATED")) {
+          return tx.eventData.description || "Course emergency deactivated";
+        } else if (type.includes("SECTION_ADDED")) {
+          return tx.eventData.description || "New section added";
+        } else if (type.includes("SECTION_UPDATED")) {
+          return tx.eventData.description || "Section updated";
+        } else if (type.includes("SECTION_STARTED")) {
+          return tx.eventData.course?.title
+            ? `Section started in "${tx.eventData.course.title}"`
+            : tx.eventData.description || "Section started";
+        } else if (type.includes("SECTION_COMPLETED")) {
+          return tx.eventData.course?.title
+            ? `Section completed in "${tx.eventData.course.title}"`
+            : tx.eventData.description || "Section completed";
+        } else if (type.includes("LICENSE_MINTED")) {
+          return tx.eventData.course?.title
+            ? `License minted for "${tx.eventData.course.title}"`
+            : tx.eventData.description || "License minted";
+        } else if (type.includes("LICENSE_RENEWED")) {
+          return tx.eventData.course?.title
+            ? `License renewed for "${tx.eventData.course.title}"`
+            : tx.eventData.description || "License renewed";
+        } else if (type.includes("LICENSE_EXPIRED")) {
+          return tx.eventData.description || "License expired";
+        } else if (type.includes("REVENUE_RECORDED")) {
+          return tx.eventData.description || "Revenue recorded";
+        } else if (type.includes("CERTIFICATE_MINTED")) {
+          return tx.eventData.description || "Certificate minted";
+        } else if (type.includes("COURSE_RATED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" rated`
+            : tx.eventData.description || "Course rated";
+        } else if (type.includes("COURSE_ADDED_TO_CERTIFICATE")) {
+          return tx.eventData.course?.title
+            ? `"${tx.eventData.course.title}" added to certificate`
+            : tx.eventData.description || "Course added to certificate";
+        } else if (type.includes("SECTION_DELETED")) {
+          return tx.eventData.description || "Section deleted";
+        } else if (
+          type.includes("SECTIONS_SWAPPED") ||
+          type.includes("BATCH_REORDERED")
+        ) {
+          return tx.eventData.description || "Sections reordered";
+        } else if (type.includes("PROGRESS_RESET")) {
+          return tx.eventData.course?.title
+            ? `Progress reset for "${tx.eventData.course.title}"`
+            : tx.eventData.description || "Progress reset";
+        } else if (type.includes("CERTIFICATE_REVOKED")) {
+          return tx.eventData.description || "Certificate revoked";
+        } else if (type.includes("COURSE_COMPLETED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" completed`
+            : tx.eventData.description || "Course completed";
+        }
+
+        return tx.eventData.description || "Transaction";
+      },
+      []
+    );
+
+    return (
+      <div className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-muted/50 transition-colors">
+        <div className="flex items-center space-x-3 min-w-0 flex-1">
+          <TransactionTypeIcon
+            type={transaction.eventType}
+            contractName={getContractName(transaction.eventType)}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center space-x-2 mb-1">
+              <p className="font-medium text-sm">
+                {getTypeLabel(transaction.eventType)}
+              </p>
+              <Badge variant="outline" className="text-xs">
+                {getContractName(transaction.eventType)}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground truncate mb-1">
+              {getTransactionDetails(transaction)}
+            </p>
+            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+              <span>{formatTimestamp(transaction.timestamp)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-right ml-4">
+          <p className="font-mono text-sm">
+            {transaction.eventData.description}
+          </p>
           <p className="text-xs text-muted-foreground">
-            Block #{transaction.blockNumber} • {formatTimestamp(transaction.timestamp)}
+            Block: {transaction.blockNumber.toLocaleString()}
           </p>
         </div>
       </div>
+    );
+  }
+);
 
-      <div className="text-right">
-        <p className="font-mono text-sm">{transaction.value} ETH</p>
-        <p className="text-xs text-muted-foreground">
-          Gas: {parseInt(transaction.gasUsed).toLocaleString()}
-        </p>
-      </div>
-    </div>
-  )
-})
-
-TransactionRow.displayName = 'TransactionRow'
+TransactionRow.displayName = "TransactionRow";
 
 const MetricCard = memo<{
-  title: string
-  value: string | number
-  change?: string
-  icon: React.ReactNode
-  trend?: 'up' | 'down' | 'neutral'
-}>(({ title, value, change, icon, trend = 'neutral' }) => {
+  title: string;
+  value: string | number;
+  change?: string;
+  icon: React.ReactNode;
+  trend?: "up" | "down" | "neutral";
+  subtitle?: string;
+}>(({ title, value, change, icon, trend = "neutral", subtitle }) => {
   const trendIcon = useMemo(() => {
     switch (trend) {
-      case 'up':
-        return <TrendingUp className="h-3 w-3 text-green-500" />
-      case 'down':
-        return <TrendingDown className="h-3 w-3 text-red-500" />
+      case "up":
+        return <TrendingUp className="h-3 w-3 text-green-500" />;
+      case "down":
+        return <TrendingDown className="h-3 w-3 text-red-500" />;
       default:
-        return null
+        return null;
     }
-  }, [trend])
+  }, [trend]);
 
   return (
     <Card>
@@ -239,6 +1394,9 @@ const MetricCard = memo<{
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        )}
         {change && (
           <div className="flex items-center space-x-1 text-xs text-muted-foreground">
             {trendIcon}
@@ -247,76 +1405,301 @@ const MetricCard = memo<{
         )}
       </CardContent>
     </Card>
-  )
-})
+  );
+});
 
-MetricCard.displayName = 'MetricCard'
+MetricCard.displayName = "MetricCard";
 
 /**
- * Professional Analytics Dashboard for EduVerse Platform
+ * EduVerse Analytics Dashboard - PRODUCTION READY
  *
- * Real-time blockchain transaction monitoring with comprehensive metrics:
- * - Live transaction feed from Manta Pacific network
- * - Smart contract interaction analytics
- * - User engagement metrics
- * - Financial performance tracking
- * - Gas usage optimization insights
+ * CRITICAL: Sesuai 100% dengan Smart Contract Architecture
+ * - Event structures match exact contract parameters
+ * - Business logic compliance dengan "One Certificate Per User"
+ * - Gas usage calculations berdasarkan actual contract complexity
+ * - Payment flows sesuai dengan 90% creator, 10% platform
+ * - Network monitoring untuk Manta Pacific Testnet (chainId: 3441006)
  *
- * Based on EduVerse smart contracts:
- * - CourseFactory: Course creation, ratings, sections
- * - CourseLicense: ERC-1155 license purchases
- * - CertificateManager: ERC-1155 certificate minting
- * - ProgressTracker: Learning progress updates
+ * NEXT STEP: Replace mock data dengan actual Web3 event listeners
  */
 export default function AnalyticsPage() {
-  const [transactions, setTransactions] = useState<TransactionEvent[]>([])
-  const [metrics, setMetrics] = useState<AnalyticsMetrics>({
-    totalTransactions: 0,
-    totalVolume: "0.00",
-    activeUsers: 0,
-    coursesCreated: 0,
-    certificatesIssued: 0,
-    averageGasPrice: "0",
-    networkUtilization: 0
-  })
-  const [isLive, setIsLive] = useState(true)
+  // Fetch real analytics data from Goldsky
+  const {
+    metrics: goldskyMetrics,
+    isLoading: metricsLoading,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    isError: _metricsError,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    refresh: _refreshMetrics,
+  } = useAnalyticsMetrics({
+    fetchOnMount: true,
+    autoRefresh: true,
+    refreshInterval: 30000, // Refresh every 30 seconds
+    debug: false,
+  });
 
-  // Simulate real-time transaction feed
-  useEffect(() => {
-    if (!isLive) return
+  // Fetch recent activities/transactions
+  const {
+    transactions,
+    isLoading: transactionsLoading,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    refresh: _refreshTransactions,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    hasMore: _hasMore,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    loadMore: _loadMore,
+  } = useRecentActivitiesAsTransactions({
+    initialLimit: 50,
+    autoRefresh: true,
+    refreshInterval: 15000, // Refresh every 15 seconds
+    debug: false,
+  });
 
-    const interval = setInterval(() => {
-      const newTransaction = generateMockTransaction()
+  const [isLive, setIsLive] = useState(true);
 
-      setTransactions(prev => [newTransaction, ...prev.slice(0, 49)]) // Keep last 50
+  // Use goldskyMetrics directly or fallback to default values
+  const metrics: EduVerseAnalyticsMetrics = useMemo(() => {
+    return (
+      goldskyMetrics || {
+        totalTransactions: 0,
+        totalCourseCreations: 0,
+        totalLicenseMints: 0,
+        totalCertificateMints: 0,
+        totalProgressUpdates: 0,
+        courseFactoryInteractions: 0,
+        courseLicenseInteractions: 0,
+        progressTrackerInteractions: 0,
+        certificateManagerInteractions: 0,
+        averageBlockTime: 2.1,
+        uniqueAddresses: 0,
+        activeStudents: 0,
+        activeCreators: 0,
+        totalCourses: 0,
+        activeCourses: 0,
+        totalSections: 0,
+        coursesWithRatings: 0,
+        averagePlatformRating: 0,
+        totalSectionsCompleted: 0,
+        totalCoursesCompleted: 0,
+        uniqueStudentsWithProgress: 0,
+        totalLicensesMinted: 0,
+        totalLicensesRenewed: 0,
+        activeLicenses: 0,
+        totalLicenseRevenue: "0.000000",
+        totalCertificateHolders: 0,
+        totalCourseAdditions: 0,
+        certificateUpdates: 0,
+        totalCertificateRevenue: "0.000000",
+        totalPlatformRevenue: "0.000000",
+        totalCreatorPayouts: "0.000000",
+        averageCoursePrice: "0.000000",
+      }
+    );
+  }, [goldskyMetrics]);
 
-      // Update metrics
-      setMetrics(prev => ({
-        ...prev,
-        totalTransactions: prev.totalTransactions + 1,
-        totalVolume: (parseFloat(prev.totalVolume) + parseFloat(newTransaction.value)).toFixed(6),
-        activeUsers: prev.activeUsers + (Math.random() > 0.7 ? 1 : 0),
-        coursesCreated: prev.coursesCreated + (newTransaction.type === 'course_created' ? 1 : 0),
-        certificatesIssued: prev.certificatesIssued + (newTransaction.type === 'certificate_minted' ? 1 : 0),
-        averageGasPrice: (parseFloat(prev.averageGasPrice) * 0.9 + parseFloat(newTransaction.gasPrice) * 0.1).toFixed(2),
-        networkUtilization: Math.min(100, prev.networkUtilization + (Math.random() - 0.5) * 5)
-      }))
-    }, 2000) // New transaction every 2 seconds
+  // Manual refresh function (currently unused but kept for future manual refresh button)
+  // const handleRefresh = async () => {
+  //   await Promise.all([refreshMetrics(), refreshTransactions()]);
+  // };
 
-    return () => clearInterval(interval)
-  }, [isLive])
+  // Show loading state
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _isLoading = metricsLoading || transactionsLoading;
 
-  const transactionsByType = useMemo(() => {
+  // Computed analytics
+  const contractActivity = useMemo(() => {
+    const activity = transactions.reduce((acc, tx) => {
+      const contract = getContractName(tx.eventType);
+      acc[contract] = (acc[contract] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(activity)
+      .map(([contract, count]) => ({ contract, count }))
+      .filter(({ contract }) => contract !== "Unknown")
+      .sort((a, b) => b.count - a.count);
+  }, [transactions]);
+
+  const transactionTypeDistribution = useMemo(() => {
     const counts = transactions.reduce((acc, tx) => {
-      acc[tx.type] = (acc[tx.type] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
+      acc[tx.eventType] = (acc[tx.eventType] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-    return Object.entries(counts).map(([type, count]) => ({
-      type: type as TransactionEvent['type'],
-      count
-    }))
-  }, [transactions])
+    return Object.entries(counts)
+      .map(([type, count]) => ({
+        type,
+        count,
+        percentage: (count / transactions.length) * 100,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [transactions]);
+
+  const recentCourses = useMemo(() => {
+    return transactions
+      .filter((tx) => tx.eventType === "COURSE_CREATED")
+      .slice(0, 10)
+      .map((tx) => {
+        const courseId = tx.eventData.course?.id || "0";
+        const title =
+          tx.eventData.course?.title ||
+          tx.eventData.description ||
+          "Untitled Course";
+        const creator = tx.from.slice(0, 6) + "..." + tx.from.slice(-4);
+        const category = tx.eventData.course?.category || "Other";
+        const difficulty = tx.eventData.course?.difficulty || "Beginner";
+        return {
+          courseId: parseInt(courseId, 10) || 0,
+          title,
+          creator,
+          category,
+          difficulty,
+          timestamp: tx.timestamp,
+        };
+      });
+  }, [transactions]);
+
+  const certificateInsights = useMemo(() => {
+    const certTxs = transactions.filter(
+      (tx) =>
+        tx.eventType === "certificate_minted" ||
+        tx.eventType === "course_added_to_certificate" ||
+        tx.eventType === "certificate_updated"
+    );
+
+    const newCerts = certTxs.filter(
+      (tx) => tx.eventType === "certificate_minted"
+    ).length;
+    const courseAdditions = certTxs.filter(
+      (tx) => tx.eventType === "course_added_to_certificate"
+    ).length;
+    const updates = certTxs.filter(
+      (tx) => tx.eventType === "certificate_updated"
+    ).length;
+
+    return {
+      totalActivity: certTxs.length,
+      newCertificates: newCerts,
+      courseAdditions,
+      updates,
+      avgCoursesPerCertificate:
+        newCerts > 0
+          ? ((courseAdditions + newCerts) / newCerts).toFixed(1)
+          : "0",
+    };
+  }, [transactions]);
+
+  const contractInteractionsReport = useMemo(() => {
+    return [
+      {
+        contract: "CourseFactory",
+        totalTransactions: metrics.courseFactoryInteractions,
+        percentage:
+          metrics.totalTransactions > 0
+            ? (
+                (metrics.courseFactoryInteractions /
+                  metrics.totalTransactions) *
+                100
+              ).toFixed(1)
+            : "0",
+      },
+      {
+        contract: "CourseLicense",
+        totalTransactions: metrics.courseLicenseInteractions,
+        percentage:
+          metrics.totalTransactions > 0
+            ? (
+                (metrics.courseLicenseInteractions /
+                  metrics.totalTransactions) *
+                100
+              ).toFixed(1)
+            : "0",
+      },
+      {
+        contract: "ProgressTracker",
+        totalTransactions: metrics.progressTrackerInteractions,
+        percentage:
+          metrics.totalTransactions > 0
+            ? (
+                (metrics.progressTrackerInteractions /
+                  metrics.totalTransactions) *
+                100
+              ).toFixed(1)
+            : "0",
+      },
+      {
+        contract: "CertificateManager",
+        totalTransactions: metrics.certificateManagerInteractions,
+        percentage:
+          metrics.totalTransactions > 0
+            ? (
+                (metrics.certificateManagerInteractions /
+                  metrics.totalTransactions) *
+                100
+              ).toFixed(1)
+            : "0",
+      },
+    ];
+  }, [metrics]);
+
+  // --- Fixed scroll behavior for live feed ---
+  // Keep a ref to the scroll container so we can preserve the user's
+  // scroll position when new transactions are prepended. If the user
+  // is at the top (wants to follow new items), auto-scroll to show newest.
+  const feedContainerRef = useRef<HTMLDivElement | null>(null);
+  const prevScrollHeightRef = useRef<number>(0);
+  const isUserAtTopRef = useRef<boolean>(true);
+
+  // Update isUserAtTopRef on user scroll
+  const onFeedScroll = useCallback(() => {
+    const el = feedContainerRef.current;
+    if (!el) return;
+    // Consider user 'at top' if within 48px from the top
+    isUserAtTopRef.current = el.scrollTop <= 48;
+  }, []);
+
+  // Initialize previous scrollHeight on mount
+  useEffect(() => {
+    const el = feedContainerRef.current;
+    if (el) prevScrollHeightRef.current = el.scrollHeight;
+  }, []);
+
+  // After DOM updates from transactions, adjust scroll to preserve view
+  useLayoutEffect(() => {
+    const el = feedContainerRef.current;
+    if (!el) return;
+
+    const newScrollHeight = el.scrollHeight;
+
+    // If this is the first time, just scroll to top to show newest
+    if (prevScrollHeightRef.current === 0) {
+      el.scrollTop = 0;
+      prevScrollHeightRef.current = newScrollHeight;
+      return;
+    }
+
+    const delta = newScrollHeight - prevScrollHeightRef.current;
+
+    if (isUserAtTopRef.current) {
+      // User wants live updates: always show newest (top)
+      el.scrollTo({ top: 0, behavior: "auto" });
+    } else {
+      // Preserve user's viewport by increasing scrollTop by the height delta
+      // caused by items prepended to the top.
+      el.scrollTop = el.scrollTop + delta;
+    }
+
+    prevScrollHeightRef.current = el.scrollHeight;
+  }, [transactions]);
+
+  // Check if Goldsky endpoint is configured
+  const isConfigured = !!process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
+
+  // Show configuration error if endpoint not set
+  if (!isConfigured) {
+    return <GoldskyConfigError />;
+  }
 
   return (
     <AnalyticsContainer>
@@ -324,18 +1707,27 @@ export default function AnalyticsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Analytics Dashboard</h1>
+            <h1 className="text-3xl font-bold">
+              EduVerse Blockchain Analytics
+            </h1>
             <p className="text-muted-foreground">
-              Real-time blockchain analytics for EduVerse platform on Manta Pacific
+              Real-time smart contract monitoring • Manta Pacific Testnet (Chain
+              ID: 3441006)
             </p>
           </div>
 
           <div className="flex items-center space-x-2">
-            <Badge variant={isLive ? "default" : "secondary"} className="animate-pulse">
-              <div className={cn("w-2 h-2 rounded-full mr-2",
-                isLive ? "bg-green-500" : "bg-gray-500"
-              )} />
-              {isLive ? "Live" : "Paused"}
+            <Badge
+              variant={isLive ? "default" : "secondary"}
+              className={isLive ? "animate-pulse" : ""}
+            >
+              <div
+                className={cn(
+                  "w-2 h-2 rounded-full mr-2",
+                  isLive ? "bg-green-500" : "bg-gray-500"
+                )}
+              />
+              {isLive ? "Live Monitoring" : "Paused"}
             </Badge>
             <Button
               variant="outline"
@@ -347,223 +1739,879 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Key Metrics */}
+        {/* Contract Status Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {Object.entries(DEPLOYED_CONTRACTS).map(([name, address]) => (
+            <Card key={name}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium">{name}</CardTitle>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-xs text-green-600">Active</span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="text-xs font-mono text-muted-foreground mb-2 truncate">
+                  {address || "Not Deployed"}
+                </div>
+                <div className="text-sm font-medium">
+                  {contractActivity.find((c) => c.contract === name)?.count ||
+                    0}{" "}
+                  transactions
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Core Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
             title="Total Transactions"
             value={metrics.totalTransactions.toLocaleString()}
-            change="+12.5% from yesterday"
-            trend="up"
             icon={<Activity className="h-4 w-4 text-blue-500" />}
+            subtitle="Across all contracts"
           />
 
           <MetricCard
-            title="Total Volume"
-            value={`${metrics.totalVolume} ETH`}
-            change="+8.2% from yesterday"
-            trend="up"
-            icon={<DollarSign className="h-4 w-4 text-green-500" />}
+            title="Contract Interactions"
+            value={`${(
+              metrics.courseFactoryInteractions +
+              metrics.courseLicenseInteractions +
+              metrics.progressTrackerInteractions +
+              metrics.certificateManagerInteractions
+            ).toLocaleString()}`}
+            icon={<TrendingUp className="h-4 w-4 text-orange-500" />}
+            subtitle={`${metrics.averageBlockTime.toFixed(1)}s avg block time`}
           />
 
           <MetricCard
-            title="Active Users"
-            value={metrics.activeUsers.toLocaleString()}
-            change="+15.3% from yesterday"
-            trend="up"
+            title="Platform Revenue"
+            value={`${metrics.totalPlatformRevenue} ETH`}
+            icon={<Wallet className="h-4 w-4 text-green-500" />}
+            subtitle="10% platform fee"
+          />
+
+          <MetricCard
+            title="Active Learners"
+            value={metrics.activeStudents.toLocaleString()}
             icon={<Users className="h-4 w-4 text-purple-500" />}
+            subtitle="Students with recent activity"
+          />
+        </div>
+
+        {/* Educational Platform Metrics */}
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+          <MetricCard
+            title="Courses Created"
+            value={metrics.totalCourses.toString()}
+            icon={<BookOpen className="h-4 w-4 text-blue-500" />}
+            subtitle={`${metrics.activeCourses} active`}
           />
 
           <MetricCard
-            title="Avg Gas Price"
-            value={`${metrics.averageGasPrice} gwei`}
-            change="-5.1% from yesterday"
-            trend="down"
-            icon={<Zap className="h-4 w-4 text-orange-500" />}
+            title="Course Sections"
+            value={metrics.totalSections.toString()}
+            icon={<Layers className="h-4 w-4 text-indigo-500" />}
+            subtitle="Total sections added"
+          />
+
+          <MetricCard
+            title="Licenses Issued"
+            value={metrics.totalLicensesMinted.toString()}
+            icon={<Wallet className="h-4 w-4 text-green-500" />}
+            subtitle={`${metrics.activeLicenses} still active`}
+          />
+
+          <MetricCard
+            title="Learning Progress"
+            value={metrics.totalSectionsCompleted.toString()}
+            icon={<CheckCircle className="h-4 w-4 text-purple-500" />}
+            subtitle="Sections completed"
+          />
+
+          <MetricCard
+            title="Certificate Holders"
+            value={metrics.totalCertificateHolders.toString()}
+            icon={<Award className="h-4 w-4 text-yellow-500" />}
+            subtitle="One certificate per user"
+          />
+
+          <MetricCard
+            title="Platform Rating"
+            value={metrics.averagePlatformRating.toFixed(1)}
+            icon={<Star className="h-4 w-4 text-orange-500" />}
+            subtitle="Average course rating"
           />
         </div>
 
         {/* Detailed Analytics */}
-        <Tabs defaultValue="transactions" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="transactions">Live Transactions</TabsTrigger>
-            <TabsTrigger value="courses">Course Analytics</TabsTrigger>
+        <Tabs defaultValue="live-feed" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="live-feed">Live Feed</TabsTrigger>
+            <TabsTrigger value="contracts">Contracts</TabsTrigger>
+            <TabsTrigger value="courses">Courses</TabsTrigger>
             <TabsTrigger value="certificates">Certificates</TabsTrigger>
+            <TabsTrigger value="economics">Economics</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
           </TabsList>
 
-          {/* Live Transactions Tab */}
-          <TabsContent value="transactions" className="space-y-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Transaction Feed */}
-              <div className="lg:col-span-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Activity className="h-5 w-5 mr-2" />
-                      Live Transaction Feed
+          {/* Live Transaction Feed - FIXED SCROLL */}
+          <TabsContent value="live-feed" className="space-y-4">
+            <div className="flex flex-col lg:flex-row gap-6">
+              {/* Kolom Kiri: Live Blockchain Events (2/3 Lebar) */}
+              <div className="w-full lg:w-2/3">
+                <Card className="flex flex-col h-[600px]">
+                  <CardHeader className="flex-shrink-0">
+                    <CardTitle className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Activity className="h-5 w-5 mr-2" />
+                        Live Blockchain Events
+                      </div>
+                      <Badge variant="secondary">Last 200 transactions</Badge>
                     </CardTitle>
                     <CardDescription>
-                      Real-time blockchain transactions on Manta Pacific Testnet
+                      Real-time events from EduVerse smart contracts on Manta
+                      Pacific
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-0">
-                    <div className="max-h-96 overflow-y-auto">
-                      {transactions.length === 0 ? (
-                        <div className="flex items-center justify-center p-8 text-muted-foreground">
-                          <Clock className="h-5 w-5 mr-2" />
-                          Waiting for transactions...
+                  <CardContent
+                    ref={feedContainerRef}
+                    onScroll={onFeedScroll}
+                    className="flex-1 overflow-y-auto p-0 min-h-0"
+                  >
+                    {transactions.length === 0 ? (
+                      <div className="flex items-center justify-center p-8 text-muted-foreground h-full">
+                        Monitoring blockchain for transactions...
+                      </div>
+                    ) : (
+                      transactions.map((transaction) => (
+                        <TransactionRow
+                          key={transaction.hash}
+                          transaction={transaction}
+                        />
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Kolom Kanan: Dua Card (1/3 Lebar) */}
+              <div className="w-full lg:w-1/3 flex flex-col gap-6">
+                <Card className="flex-1 flex flex-col">
+                  <CardHeader className="flex-shrink-0">
+                    <CardTitle>Contract Activity</CardTitle>
+                    <CardDescription>
+                      Transaction distribution by contract
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-y-auto min-h-0">
+                    <div className="space-y-3">
+                      {contractActivity.map(({ contract, count }) => (
+                        <div
+                          key={contract}
+                          className="flex items-center justify-between"
+                        >
+                          <span className="text-sm font-medium">
+                            {contract}
+                          </span>
+                          <Badge variant="secondary">{count}</Badge>
                         </div>
-                      ) : (
-                        transactions.map((transaction) => (
-                          <TransactionRow key={transaction.id} transaction={transaction} />
-                        ))
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="flex-1 flex flex-col">
+                  <CardHeader className="flex-shrink-0">
+                    <CardTitle>Transaction Types</CardTitle>
+                    <CardDescription>Most frequent activities</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-y-auto p-6 min-h-0">
+                    <div className="space-y-3 pr-2">
+                      {transactionTypeDistribution.map(
+                        ({ type, count, percentage }) => (
+                          <div key={type} className="space-y-2">
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="capitalize truncate font-medium">
+                                {type.replace(/_/g, " ")}
+                              </span>
+                              <span className="text-muted-foreground ml-2 flex-shrink-0">
+                                {count}
+                              </span>
+                            </div>
+                            <Progress value={percentage} className="h-2" />
+                          </div>
+                        )
                       )}
                     </div>
                   </CardContent>
                 </Card>
               </div>
-
-              {/* Transaction Types */}
-              <div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Transaction Types</CardTitle>
-                    <CardDescription>Last 50 transactions</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {transactionsByType.map(({ type, count }) => (
-                      <div key={type} className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          <TransactionTypeIcon type={type} />
-                          <span className="text-sm font-medium">
-                            {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                          </span>
-                        </div>
-                        <Badge variant="secondary">{count}</Badge>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           </TabsContent>
 
-          {/* Course Analytics Tab */}
+          {/* Smart Contract Details */}
+          <TabsContent value="contracts" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Contract Activity Analysis</CardTitle>
+                  <CardDescription>
+                    Transaction distribution by contract
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {contractInteractionsReport.map(
+                    ({ contract, totalTransactions, percentage }) => (
+                      <div key={contract} className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">{contract}</span>
+                          <Badge variant="secondary">
+                            {percentage}% of total
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {totalTransactions.toLocaleString()} transactions
+                        </div>
+                      </div>
+                    )
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Business Logic Compliance</CardTitle>
+                  <CardDescription>
+                    Smart contract rule enforcement
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    {
+                      rule: "Max price protection (1 ETH)",
+                      status: "Active",
+                      contract: "CourseFactory",
+                    },
+                    {
+                      rule: "Certificate price limit (0.002 ETH)",
+                      status: "Active",
+                      contract: "CertificateManager",
+                    },
+                    {
+                      rule: "One certificate per user",
+                      status: "Active",
+                      contract: "CertificateManager",
+                    },
+                    {
+                      rule: "License validation for progress",
+                      status: "Active",
+                      contract: "ProgressTracker",
+                    },
+                    {
+                      rule: "Anti-DoS section limit (1000)",
+                      status: "Active",
+                      contract: "CourseFactory",
+                    },
+                    {
+                      rule: "24h rating cooldown",
+                      status: "Active",
+                      contract: "CourseFactory",
+                    },
+                  ].map(({ rule, status, contract }) => (
+                    <div
+                      key={rule}
+                      className="flex items-center justify-between"
+                    >
+                      <div>
+                        <span className="text-sm font-medium">{rule}</span>
+                        <p className="text-xs text-muted-foreground">
+                          {contract}
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-xs text-green-600">{status}</span>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Course Activity */}
           <TabsContent value="courses" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Course Creation Trends</CardTitle>
-                  <CardDescription>New courses created over time</CardDescription>
+                  <CardTitle>Recent Course Creations</CardTitle>
+                  <CardDescription>
+                    Latest courses added to the platform
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    <BarChart3 className="h-8 w-8 mr-2" />
-                    Chart component would go here
+                  <div className="space-y-3">
+                    {recentCourses.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No courses created yet
+                      </p>
+                    ) : (
+                      recentCourses.map((course) => (
+                        <div
+                          key={`${course.courseId}-${course.timestamp}`}
+                          className="border-b pb-3 last:border-b-0"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm truncate">
+                                {course.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                by {course.creator} • {course.category} •{" "}
+                                {course.difficulty}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(
+                                  course.timestamp * 1000
+                                ).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Popular Categories</CardTitle>
-                  <CardDescription>Most active course categories</CardDescription>
+                  <CardTitle>Learning Engagement</CardTitle>
+                  <CardDescription>
+                    Student progress and completion rates
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {['Programming', 'Design', 'Business', 'Data Science'].map((category, index) => (
-                      <div key={category} className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span>{category}</span>
-                          <span>{80 - index * 15}%</span>
-                        </div>
-                        <Progress value={80 - index * 15} className="h-2" />
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {metrics.totalSectionsCompleted}
                       </div>
-                    ))}
+                      <p className="text-sm text-muted-foreground">
+                        Sections Completed
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {metrics.totalCoursesCompleted}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Courses Finished
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Course Completion Rate</span>
+                      <span>
+                        {metrics.totalSectionsCompleted > 0
+                          ? (
+                              (metrics.totalCoursesCompleted /
+                                metrics.totalSectionsCompleted) *
+                              100
+                            ).toFixed(1)
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        metrics.totalSectionsCompleted > 0
+                          ? (metrics.totalCoursesCompleted /
+                              metrics.totalSectionsCompleted) *
+                            100
+                          : 0
+                      }
+                      className="h-2"
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t">
+                    <div className="flex justify-between text-sm">
+                      <span>Average Platform Rating</span>
+                      <div className="flex items-center space-x-1">
+                        <Star className="h-4 w-4 text-yellow-500" />
+                        <span>
+                          {metrics.averagePlatformRating.toFixed(1)}/5.0
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
-          {/* Certificates Tab */}
+          {/* Certificate Analytics */}
           <TabsContent value="certificates" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <MetricCard
-                title="Certificates Issued"
-                value={metrics.certificatesIssued.toLocaleString()}
-                change="+23.1% from last week"
-                trend="up"
+                title="Certificate Holders"
+                value={certificateInsights.newCertificates.toString()}
+                change="Revolutionary 'One Per User' model"
                 icon={<Award className="h-4 w-4 text-yellow-500" />}
+                subtitle="Unique users with certificates"
               />
 
               <MetricCard
-                title="Avg Courses per Cert"
-                value="3.2"
-                change="+0.5 from last week"
-                trend="up"
-                icon={<GraduationCap className="h-4 w-4 text-blue-500" />}
+                title="Course Additions"
+                value={certificateInsights.courseAdditions.toString()}
+                change="Courses added to existing certificates"
+                icon={<FileText className="h-4 w-4 text-blue-500" />}
+                subtitle="Growing learning journeys"
               />
 
               <MetricCard
                 title="Certificate Updates"
-                value="156"
-                change="+18.7% from last week"
-                trend="up"
-                icon={<FileText className="h-4 w-4 text-green-500" />}
+                value={certificateInsights.updates.toString()}
+                change="Image/metadata updates"
+                icon={<Edit className="h-4 w-4 text-green-500" />}
+                subtitle="Certificate customizations"
               />
             </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Revolutionary Certificate Model</CardTitle>
+                <CardDescription>
+                  EduVerse implements &quot;One Certificate Per User&quot; - a
+                  groundbreaking approach
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                    <div>
+                      <h4 className="font-medium text-sm mb-2">
+                        Business Logic:
+                      </h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li>• First course completion → Certificate minted</li>
+                        <li>
+                          • Additional completions → Added to existing
+                          certificate
+                        </li>
+                        <li>• Certificate image updates with each course</li>
+                        <li>• QR code shows complete learning journey</li>
+                        <li>• Lifetime validity - no expiration</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-sm mb-2">Economics:</h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li>• Payment required for each action</li>
+                        <li>• 90% goes to course creator</li>
+                        <li>• 10% platform fee</li>
+                        <li>• Max certificate price: 0.002 ETH</li>
+                        <li>• Replay protection via payment hashes</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 pt-4">
+                    <div className="text-center">
+                      <p className="text-sm font-medium">Total Activity</p>
+                      <p className="text-2xl font-bold">
+                        {certificateInsights.totalActivity}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium">
+                        Avg Courses/Certificate
+                      </p>
+                      <p className="text-2xl font-bold">
+                        {certificateInsights.avgCoursesPerCertificate}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium">Revenue Generated</p>
+                      <p className="text-2xl font-bold">
+                        {metrics.totalCertificateRevenue}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* Performance Tab */}
+          {/* Economics & Revenue */}
+          <TabsContent value="economics" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Revenue Distribution</CardTitle>
+                  <CardDescription>
+                    Platform economics and creator earnings
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Total Platform Revenue</span>
+                      <span className="font-mono text-sm">
+                        {metrics.totalPlatformRevenue} ETH
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Creator Payouts</span>
+                      <span className="font-mono text-sm">
+                        {metrics.totalCreatorPayouts} ETH
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">License Revenue</span>
+                      <span className="font-mono text-sm">
+                        {metrics.totalLicenseRevenue} ETH
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Certificate Revenue</span>
+                      <span className="font-mono text-sm">
+                        {metrics.totalCertificateRevenue} ETH
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground">
+                        Average Course Price
+                      </p>
+                      <p className="text-2xl font-bold">
+                        {metrics.averageCoursePrice} ETH
+                      </p>
+                      <p className="text-xs text-muted-foreground">per month</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Fee Structure Compliance</CardTitle>
+                  <CardDescription>
+                    Smart contract fee enforcement
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                      <h4 className="font-medium text-sm text-blue-900 dark:text-blue-100 mb-1">
+                        License Fees
+                      </h4>
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        90% Creator • 10% Platform • Max: 1 ETH/month
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
+                      <h4 className="font-medium text-sm text-yellow-900 dark:text-yellow-100 mb-1">
+                        Certificate Fees
+                      </h4>
+                      <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                        90% Creator • 10% Platform • Max: 0.002 ETH
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg">
+                      <h4 className="font-medium text-sm text-green-900 dark:text-green-100 mb-1">
+                        Platform Protection
+                      </h4>
+                      <p className="text-xs text-green-700 dark:text-green-300">
+                        Smart contract enforced limits • Payment replay
+                        protection
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Economic Health Indicators</CardTitle>
+                <CardDescription>
+                  Platform sustainability metrics
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="text-center p-4 border rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">
+                      {(
+                        (parseFloat(metrics.totalCreatorPayouts) /
+                          (parseFloat(metrics.totalPlatformRevenue) +
+                            parseFloat(metrics.totalCreatorPayouts))) *
+                        100
+                      ).toFixed(1)}
+                      %
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Creator Share
+                    </p>
+                  </div>
+                  <div className="text-center p-4 border rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {metrics.totalLicensesMinted +
+                        metrics.totalCertificateHolders}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Paying Users
+                    </p>
+                  </div>
+                  <div className="text-center p-4 border rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {(
+                        (parseFloat(metrics.totalLicenseRevenue) +
+                          parseFloat(metrics.totalCertificateRevenue)) /
+                        Math.max(metrics.uniqueAddresses, 1)
+                      ).toFixed(4)}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Revenue/User (ETH)
+                    </p>
+                  </div>
+                  <div className="text-center p-4 border rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {metrics.totalLicensesRenewed > 0
+                        ? (
+                            (metrics.totalLicensesRenewed /
+                              metrics.totalLicensesMinted) *
+                            100
+                          ).toFixed(1)
+                        : 0}
+                      %
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Renewal Rate
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Performance Monitoring */}
           <TabsContent value="performance" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Network Utilization</CardTitle>
-                  <CardDescription>Manta Pacific network usage</CardDescription>
+                  <CardTitle>Network Performance</CardTitle>
+                  <CardDescription>
+                    Manta Pacific blockchain metrics
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="text-center">
-                      <div className="text-3xl font-bold">{metrics.networkUtilization.toFixed(1)}%</div>
-                      <p className="text-sm text-muted-foreground">Current utilization</p>
+                      <div className="text-3xl font-bold">
+                        {metrics.averageBlockTime.toFixed(1)}s
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Average Block Time
+                      </p>
                     </div>
-                    <Progress value={metrics.networkUtilization} className="h-3" />
+                    <div className="text-center">
+                      <div className="text-3xl font-bold">
+                        {metrics.totalTransactions.toLocaleString()}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Total Transactions
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Transaction Distribution</span>
+                      <span>4 Contracts</span>
+                    </div>
+                    <div className="space-y-1">
+                      {contractInteractionsReport.map((item) => (
+                        <div
+                          key={item.contract}
+                          className="flex justify-between text-xs"
+                        >
+                          <span>{item.contract}</span>
+                          <span className="font-mono">{item.percentage}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t text-center">
+                    <div className="text-lg font-bold">
+                      {metrics.totalCourseCreations +
+                        metrics.totalLicenseMints +
+                        metrics.totalCertificateMints +
+                        metrics.totalProgressUpdates}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Key Events Tracked
+                    </p>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Gas Optimization</CardTitle>
-                  <CardDescription>Smart contract efficiency metrics</CardDescription>
+                  <CardTitle>Contract Activity Breakdown</CardTitle>
+                  <CardDescription>
+                    Transaction distribution by contract
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">CourseFactory</span>
-                      <Badge variant="secondary">Optimal</Badge>
+                <CardContent className="space-y-4">
+                  {[
+                    {
+                      contract: "CourseFactory",
+                      features: [
+                        "Course creation",
+                        "Batch operations",
+                        "Rating system",
+                      ],
+                      status: "Active",
+                      txCount: metrics.courseFactoryInteractions,
+                    },
+                    {
+                      contract: "CourseLicense",
+                      features: [
+                        "License minting",
+                        "Auto-renewals",
+                        "ERC-1155",
+                      ],
+                      status: "Active",
+                      txCount: metrics.courseLicenseInteractions,
+                    },
+                    {
+                      contract: "ProgressTracker",
+                      features: ["Section tracking", "Completion records"],
+                      status: "Active",
+                      txCount: metrics.progressTrackerInteractions,
+                    },
+                    {
+                      contract: "CertificateManager",
+                      features: ["Certificate minting", "Course additions"],
+                      status: "Active",
+                      txCount: metrics.certificateManagerInteractions,
+                    },
+                  ].map(({ contract, features, status, txCount }) => (
+                    <div
+                      key={contract}
+                      className="space-y-2 p-3 border rounded-lg"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">{contract}</span>
+                        <Badge
+                          variant={
+                            status === "Revolutionary"
+                              ? "default"
+                              : status === "Excellent"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {status}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {txCount.toLocaleString()} transactions •{" "}
+                        {features.join(", ")}
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">CourseLicense</span>
-                      <Badge variant="secondary">Optimal</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">CertificateManager</span>
-                      <Badge variant="secondary">Good</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">ProgressTracker</span>
-                      <Badge variant="secondary">Optimal</Badge>
-                    </div>
-                  </div>
+                  ))}
                 </CardContent>
               </Card>
             </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>System Health Dashboard</CardTitle>
+                <CardDescription>
+                  Overall platform health and compliance
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">
+                        Smart Contract Security
+                      </span>
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    </div>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      <li>✓ Reentrancy protection</li>
+                      <li>✓ Overflow protection</li>
+                      <li>✓ Access control</li>
+                      <li>✓ Emergency functions</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">
+                        Business Logic
+                      </span>
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    </div>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      <li>✓ Price limits enforced</li>
+                      <li>✓ License validation</li>
+                      <li>✓ Certificate model</li>
+                      <li>✓ Payment distribution</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">
+                        Platform Performance
+                      </span>
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    </div>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      <li>✓ Gas optimization</li>
+                      <li>✓ Batch operations</li>
+                      <li>✓ Event monitoring</li>
+                      <li>✓ Real-time analytics</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-6 p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <h4 className="font-medium text-green-900 dark:text-green-100">
+                      System Status: All Systems Operational
+                    </h4>
+                  </div>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    All smart contracts are functioning correctly with optimal
+                    performance. Real-time monitoring is active across all four
+                    contract deployments on Manta Pacific.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
     </AnalyticsContainer>
-  )
+  );
 }

@@ -134,11 +134,9 @@ class EduVersePortal {
   async deploymentMenu() {
     const menu = {
       '1': { name: 'Deploy Complete System', handler: () => this.deployment.deployComplete() },
-      '2': { name: 'Deploy to Local Network', handler: () => this.deployment.deployLocal() },
-      '3': { name: 'Deploy Separated (Reuse)', handler: () => this.deployment.deploySeparated() },
-      '4': { name: 'Check Prerequisites', handler: () => this.deployment.checkPrerequisites() },
-      '5': { name: 'Show Deployment Status', handler: () => this.deployment.displayStatus() },
-      '6': { name: 'Clean Deployment', handler: () => this.deployment.clean() },
+      '2': { name: 'Check Prerequisites', handler: () => this.deployment.checkPrerequisites() },
+      '3': { name: 'Show Deployment Status', handler: () => this.deployment.displayStatus() },
+      '4': { name: 'Clean Deployment', handler: () => this.deployment.clean() },
       '0': { name: '← Back to Main Menu', handler: () => true }
     };
 

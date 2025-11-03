@@ -5,6 +5,7 @@
 
 const { network } = require("hardhat");
 const fs = require("fs");
+const { PATHS } = require("./core/system");
 
 // Network configurations based on Manta Pacific documentation
 const NETWORK_CONFIGS = {
@@ -15,24 +16,6 @@ const NETWORK_CONFIGS = {
     rpcUrl: "https://pacific-rpc.sepolia-testnet.manta.network/http",
     explorerUrl: "https://pacific-explorer.sepolia-testnet.manta.network",
     explorerApiUrl: "https://pacific-explorer.sepolia-testnet.manta.network/api",
-    currency: "ETH"
-  },
-  localhost: {
-    name: "localhost",
-    displayName: "Hardhat Local",
-    chainId: 31337,
-    rpcUrl: "http://127.0.0.1:8545",
-    explorerUrl: null,
-    explorerApiUrl: null,
-    currency: "ETH"
-  },
-  hardhat: {
-    name: "hardhat",
-    displayName: "Hardhat Network",
-    chainId: 31337,
-    rpcUrl: "internal",
-    explorerUrl: null,
-    explorerApiUrl: null,
     currency: "ETH"
   }
 };
@@ -47,11 +30,11 @@ function getCurrentNetwork() {
 
 function getDeployedContractsNetwork() {
   try {
-    if (!fs.existsSync("deployed-contracts.json")) {
+    if (!fs.existsSync(PATHS.deployedContracts)) {
       return null;
     }
 
-    const deployed = JSON.parse(fs.readFileSync("deployed-contracts.json", "utf8"));
+    const deployed = JSON.parse(fs.readFileSync(PATHS.deployedContracts, "utf8"));
     return {
       name: deployed.network,
       chainId: deployed.chainId,

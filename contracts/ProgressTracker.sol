@@ -24,13 +24,17 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
         uint256 sectionId;
         bool completed;
         uint256 completedAt;
+        uint256 startedAt;
+        uint256 viewCount;
     }
 
     // ============ Storage Mappings ============
     /// @dev student => courseId => sectionId => SectionProgress
-    mapping(address => mapping(uint256 => mapping(uint256 => SectionProgress))) public sectionProgress;
+    mapping(address => mapping(uint256 => mapping(uint256 => SectionProgress)))
+        public sectionProgress;
     /// @dev student => courseId => number of completed sections
-    mapping(address => mapping(uint256 => uint256)) public courseCompletedSections;
+    mapping(address => mapping(uint256 => uint256))
+        public courseCompletedSections;
     /// @dev student => courseId => completion status
     mapping(address => mapping(uint256 => bool)) public coursesCompleted;
     /// @dev student => total sections completed across all courses
@@ -44,13 +48,29 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
     /// @dev Thrown when section ID is invalid for course
     error SectionNotFound(uint256 courseId, uint256 sectionId);
     /// @dev Thrown when trying to complete already completed section
-    error SectionAlreadyCompleted(address student, uint256 courseId, uint256 sectionId);
+    error SectionAlreadyCompleted(
+        address student,
+        uint256 courseId,
+        uint256 sectionId
+    );
     /// @dev Thrown when contract address is zero
     error InvalidContractAddress();
 
     // ============ Events ============
+    /// @dev Emitted when student starts a section
+    event SectionStarted(
+        address indexed student,
+        uint256 indexed courseId,
+        uint256 indexed sectionId,
+        uint256 startedAt
+    );
     /// @dev Emitted when student completes a section
-    event SectionCompleted(address indexed student, uint256 indexed courseId, uint256 indexed sectionId);
+    event SectionCompleted(
+        address indexed student,
+        uint256 indexed courseId,
+        uint256 indexed sectionId,
+        uint256 completedAt
+    );
     /// @dev Emitted when student completes entire course
     event CourseCompleted(address indexed student, uint256 indexed courseId);
     /// @dev Emitted when admin resets student progress
@@ -61,7 +81,10 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @param _courseFactory Address of CourseFactory contract
      * @param _courseLicense Address of CourseLicense contract
      */
-    constructor(address _courseFactory, address _courseLicense) Ownable(msg.sender) {
+    constructor(
+        address _courseFactory,
+        address _courseLicense
+    ) Ownable(msg.sender) {
         if (_courseFactory == address(0) || _courseLicense == address(0)) {
             revert InvalidContractAddress();
         }
@@ -70,19 +93,74 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Marks a section as completed with enhanced validation and gas optimization
+     * @dev Marks a section as started for analytics tracking
      * @param courseId ID of the course
      * @param sectionId ID of the section
      * @notice Requires valid license and validates section exists
+     * @custom:goldsky Emits SectionStarted event for analytics
      */
-    function completeSection(uint256 courseId, uint256 sectionId) external nonReentrant {
+    function startSection(
+        uint256 courseId,
+        uint256 sectionId
+    ) external nonReentrant {
         // Gas-efficient custom error instead of require
         if (!courseLicense.hasValidLicense(msg.sender, courseId)) {
             revert NoValidLicense(msg.sender, courseId);
         }
 
         // Get course sections to validate section ID
-        CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
+        CourseFactory.CourseSection[] memory sections = courseFactory
+            .getCourseSections(courseId);
+        if (sectionId >= sections.length) {
+            revert SectionNotFound(courseId, sectionId);
+        }
+
+        // Get or initialize section progress
+        SectionProgress storage progress = sectionProgress[msg.sender][
+            courseId
+        ][sectionId];
+
+        // Initialize if first time
+        if (progress.startedAt == 0) {
+            progress.courseId = courseId;
+            progress.sectionId = sectionId;
+            progress.startedAt = block.timestamp;
+        }
+
+        // Increment view count
+        unchecked {
+            progress.viewCount += 1;
+        }
+
+        // Only emit if section not already completed
+        if (!progress.completed) {
+            emit SectionStarted(
+                msg.sender,
+                courseId,
+                sectionId,
+                block.timestamp
+            );
+        }
+    }
+
+    /**
+     * @dev Marks a section as completed with enhanced validation and gas optimization
+     * @param courseId ID of the course
+     * @param sectionId ID of the section
+     * @notice Requires valid license and validates section exists
+     */
+    function completeSection(
+        uint256 courseId,
+        uint256 sectionId
+    ) external nonReentrant {
+        // Gas-efficient custom error instead of require
+        if (!courseLicense.hasValidLicense(msg.sender, courseId)) {
+            revert NoValidLicense(msg.sender, courseId);
+        }
+
+        // Get course sections to validate section ID
+        CourseFactory.CourseSection[] memory sections = courseFactory
+            .getCourseSections(courseId);
         if (sectionId >= sections.length) {
             revert SectionNotFound(courseId, sectionId);
         }
@@ -92,13 +170,22 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
             revert SectionAlreadyCompleted(msg.sender, courseId, sectionId);
         }
 
+        // Get existing progress or initialize
+        SectionProgress storage progress = sectionProgress[msg.sender][
+            courseId
+        ][sectionId];
+
+        // If not started yet, initialize
+        if (progress.startedAt == 0) {
+            progress.courseId = courseId;
+            progress.sectionId = sectionId;
+            progress.startedAt = block.timestamp;
+            progress.viewCount = 1;
+        }
+
         // Mark section as completed - ATOMIC OPERATION
-        sectionProgress[msg.sender][courseId][sectionId] = SectionProgress({
-            courseId: courseId,
-            sectionId: sectionId,
-            completed: true,
-            completedAt: block.timestamp
-        });
+        progress.completed = true;
+        progress.completedAt = block.timestamp;
 
         // Gas-optimized increment with overflow protection
         uint256 completedCount;
@@ -124,8 +211,8 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
             emit CourseCompleted(msg.sender, courseId);
         }
 
-        // Emit event following OpenZeppelin conventions
-        emit SectionCompleted(msg.sender, courseId, sectionId);
+        // Emit event following OpenZeppelin conventions with completion timestamp
+        emit SectionCompleted(msg.sender, courseId, sectionId, block.timestamp);
     }
 
     /**
@@ -135,11 +222,11 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @param sectionId ID of the section
      * @return bool indicating if section is completed
      */
-    function isSectionCompleted(address student, uint256 courseId, uint256 sectionId)
-        external
-        view
-        returns (bool)
-    {
+    function isSectionCompleted(
+        address student,
+        uint256 courseId,
+        uint256 sectionId
+    ) external view returns (bool) {
         return sectionProgress[student][courseId][sectionId].completed;
     }
 
@@ -149,12 +236,12 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @param courseId ID of the course
      * @return percentage Percentage of course completed (0-100)
      */
-    function getCourseProgressPercentage(address student, uint256 courseId)
-        external
-        view
-        returns (uint256 percentage)
-    {
-        CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
+    function getCourseProgressPercentage(
+        address student,
+        uint256 courseId
+    ) external view returns (uint256 percentage) {
+        CourseFactory.CourseSection[] memory sections = courseFactory
+            .getCourseSections(courseId);
 
         if (sections.length == 0) {
             return 0;
@@ -170,11 +257,10 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @param courseId ID of the course
      * @return bool indicating if course is completed
      */
-    function isCourseCompleted(address student, uint256 courseId)
-        external
-        view
-        returns (bool)
-    {
+    function isCourseCompleted(
+        address student,
+        uint256 courseId
+    ) external view returns (bool) {
         return coursesCompleted[student][courseId];
     }
 
@@ -184,15 +270,15 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @param courseId ID of the course
      * @return progress Array of booleans indicating which sections are completed
      */
-    function getCourseSectionsProgress(address student, uint256 courseId)
-        external
-        view
-        returns (bool[] memory progress)
-    {
-        CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
+    function getCourseSectionsProgress(
+        address student,
+        uint256 courseId
+    ) external view returns (bool[] memory progress) {
+        CourseFactory.CourseSection[] memory sections = courseFactory
+            .getCourseSections(courseId);
         progress = new bool[](sections.length);
 
-        for (uint256 i = 0; i < sections.length;) {
+        for (uint256 i = 0; i < sections.length; ) {
             progress[i] = sectionProgress[student][courseId][i].completed;
             unchecked {
                 ++i;
@@ -207,11 +293,11 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @param sectionId ID of the section
      * @return SectionProgress struct with complete details
      */
-    function getSectionProgress(address student, uint256 courseId, uint256 sectionId)
-        external
-        view
-        returns (SectionProgress memory)
-    {
+    function getSectionProgress(
+        address student,
+        uint256 courseId,
+        uint256 sectionId
+    ) external view returns (SectionProgress memory) {
         return sectionProgress[student][courseId][sectionId];
     }
 
@@ -220,11 +306,9 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @return totalCompleted Total sections completed by student
      * @notice Useful for gamification and achievement systems
      */
-    function getTotalSectionsCompleted(address student)
-        external
-        view
-        returns (uint256 totalCompleted)
-    {
+    function getTotalSectionsCompleted(
+        address student
+    ) external view returns (uint256 totalCompleted) {
         return totalSectionsCompletedByUser[student];
     }
 
@@ -234,12 +318,14 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @param courseId ID of the course to reset
      * @notice Use only in emergency situations or data corruption
      */
-    function emergencyResetProgress(address student, uint256 courseId)
-        external
-        onlyOwner
-    {
+    function emergencyResetProgress(
+        address student,
+        uint256 courseId
+    ) external onlyOwner {
         // Get current progress for decrementing global counters
-        uint256 currentCompletedSections = courseCompletedSections[student][courseId];
+        uint256 currentCompletedSections = courseCompletedSections[student][
+            courseId
+        ];
         bool wasCourseCompleted = coursesCompleted[student][courseId];
 
         // Reset course completion status
@@ -255,8 +341,9 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
         }
 
         // Reset all section progress for the course
-        CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
-        for (uint256 i = 0; i < sections.length;) {
+        CourseFactory.CourseSection[] memory sections = courseFactory
+            .getCourseSections(courseId);
+        for (uint256 i = 0; i < sections.length; ) {
             delete sectionProgress[student][courseId][i];
             unchecked {
                 ++i;
@@ -271,83 +358,9 @@ contract ProgressTracker is Ownable, ReentrancyGuard {
      * @return count Number of courses completed by student
      * @notice Useful for certificate eligibility checks
      */
-    function getCompletedCoursesCount(address student)
-        external
-        view
-        returns (uint256 count)
-    {
+    function getCompletedCoursesCount(
+        address student
+    ) external view returns (uint256 count) {
         return totalCoursesCompletedByUser[student];
-    }
-
-    /**
-     * @dev Batch complete multiple sections (gas optimization for testing)
-     * @param courseId ID of the course
-     * @param sectionIds Array of section IDs to complete
-     * @notice Only for testing purposes, not recommended for production
-     */
-    function batchCompleteSections(uint256 courseId, uint256[] calldata sectionIds)
-        external
-        nonReentrant
-    {
-        if (!courseLicense.hasValidLicense(msg.sender, courseId)) {
-            revert NoValidLicense(msg.sender, courseId);
-        }
-
-        CourseFactory.CourseSection[] memory sections = courseFactory.getCourseSections(courseId);
-
-        for (uint256 i = 0; i < sectionIds.length;) {
-            uint256 sectionId = sectionIds[i];
-
-            if (sectionId >= sections.length) {
-                revert SectionNotFound(courseId, sectionId);
-            }
-
-            if (!sectionProgress[msg.sender][courseId][sectionId].completed) {
-                sectionProgress[msg.sender][courseId][sectionId] = SectionProgress({
-                    courseId: courseId,
-                    sectionId: sectionId,
-                    completed: true,
-                    completedAt: block.timestamp
-                });
-
-                emit SectionCompleted(msg.sender, courseId, sectionId);
-            }
-
-            unchecked {
-                ++i;
-            }
-        }
-
-        // Update completed sections count
-        uint256 completedCount = 0;
-        uint256 newlyCompletedSections = 0;
-
-        for (uint256 i = 0; i < sections.length;) {
-            if (sectionProgress[msg.sender][courseId][i].completed) {
-                unchecked {
-                    ++completedCount;
-                }
-            }
-            unchecked {
-                ++i;
-            }
-        }
-
-        // Calculate newly completed sections for global counter
-        uint256 previousCount = courseCompletedSections[msg.sender][courseId];
-        bool wasCourseCompleted = coursesCompleted[msg.sender][courseId];
-
-        if (completedCount > previousCount) {
-            newlyCompletedSections = completedCount - previousCount;
-            totalSectionsCompletedByUser[msg.sender] += newlyCompletedSections;
-        }
-
-        courseCompletedSections[msg.sender][courseId] = completedCount;
-
-        if (completedCount == sections.length && !wasCourseCompleted) {
-            coursesCompleted[msg.sender][courseId] = true;
-            totalCoursesCompletedByUser[msg.sender] += 1;
-            emit CourseCompleted(msg.sender, courseId);
-        }
     }
 }

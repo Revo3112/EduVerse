@@ -5,9 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { getSignedUrlCached } from '@/lib/ipfs-helpers';
 import { CATEGORY_NAMES, DIFFICULTY_NAMES, LearningCourseData } from '@/types/learning';
-import { Award, BookOpen, Calendar } from 'lucide-react';
+import { Award, BookOpen, Calendar, ImageIcon, Loader2 } from 'lucide-react';
 import Image from 'next/image';
+import { useEffect, useState } from 'react';
 
 interface LearningCourseCardProps {
   courseData: LearningCourseData;
@@ -55,6 +57,33 @@ export function LearningCourseCard({
   onViewCertificate
 }: LearningCourseCardProps) {
   const { course, progressPercentage, isCompleted, completedSections, totalSections, hasCertificate } = courseData;
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [thumbnailLoading, setThumbnailLoading] = useState(true);
+  const [thumbnailError, setThumbnailError] = useState(false);
+
+  // Fetch signed URL for thumbnail
+  useEffect(() => {
+    async function fetchThumbnailUrl() {
+      if (!course.thumbnailCID) {
+        setThumbnailLoading(false);
+        return;
+      }
+
+      try {
+        setThumbnailLoading(true);
+        setThumbnailError(false);
+        const result = await getSignedUrlCached(course.thumbnailCID, 3600); // 1 hour expiry with cache
+        setThumbnailUrl(result.signedUrl);
+      } catch (error) {
+        console.error('Failed to load thumbnail:', error);
+        setThumbnailError(true);
+      } finally {
+        setThumbnailLoading(false);
+      }
+    }
+
+    fetchThumbnailUrl();
+  }, [course.thumbnailCID]);
 
   // Determine course status for badge display
   const getStatusBadge = (): { variant: "default" | "secondary" | "destructive" | "outline", text: string } => {
@@ -76,35 +105,38 @@ export function LearningCourseCard({
   // Format price display (convert from wei to ETH)
   const priceInEth = Number(course.pricePerMonth) / 1e18;
 
-  // Generate IPFS URL for thumbnail (using a public gateway)
-  const thumbnailUrl = `https://ipfs.io/ipfs/${course.thumbnailCID}`;
-
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 border border-border bg-card">
       <CardHeader className="space-y-4">
         {/* Course Thumbnail */}
         <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
-          <Image
-            src={thumbnailUrl}
-            alt={course.title}
-            fill
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={(e) => {
-              // Fallback to placeholder if IPFS image fails to load
-              const target = e.target as HTMLImageElement;
-              target.src = 'data:image/svg+xml;base64,' + btoa(`
-                <svg width="400" height="225" xmlns="http://www.w3.org/2000/svg">
-                  <rect width="400" height="225" fill="#f3f4f6"/>
-                  <text x="200" y="112" text-anchor="middle" fill="#6b7280" font-family="Arial" font-size="16">
-                    Course Thumbnail
-                  </text>
-                </svg>
-              `);
-            }}
-          />
+          {thumbnailLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          )}
+
+          {!thumbnailLoading && thumbnailError && (
+            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm opacity-75">Thumbnail unavailable</p>
+              </div>
+            </div>
+          )}
+
+          {!thumbnailLoading && !thumbnailError && thumbnailUrl && (
+            <Image
+              src={thumbnailUrl}
+              alt={course.title}
+              fill
+              className="object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={() => setThumbnailError(true)}
+            />
+          )}
 
           {/* Course Status Badge */}
-          <div className="absolute top-3 right-3">
+          <div className="absolute top-3 right-3 z-20">
             <Badge variant={statusBadge.variant} className="shadow-md">
               {statusBadge.text}
             </Badge>

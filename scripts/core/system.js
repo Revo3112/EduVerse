@@ -25,6 +25,20 @@ const COLORS = {
   bgBlue: '\x1b[44m'
 };
 
+// Project root path resolver
+const PROJECT_ROOT = path.resolve(__dirname, '../..');
+
+// Centralized path configuration
+const PATHS = {
+  deployedContracts: path.join(PROJECT_ROOT, 'deployed-contracts.json'),
+  artifacts: path.join(PROJECT_ROOT, 'artifacts/contracts'),
+  mobileAbi: path.join(PROJECT_ROOT, 'EduVerseApp/src/constants/abi'),
+  mobileAddresses: path.join(PROJECT_ROOT, 'EduVerseApp/src/constants/abi/contract-addresses.json'),
+  mobileEnv: path.join(PROJECT_ROOT, 'EduVerseApp/.env'),
+  frontendAbi: path.join(PROJECT_ROOT, 'eduweb/abis'),
+  frontendAddresses: path.join(PROJECT_ROOT, 'eduweb/abis/contract-addresses.json')
+};
+
 const NETWORK_CONFIG = {
   mantaPacificTestnet: {
     name: "mantaPacificTestnet",
@@ -33,15 +47,30 @@ const NETWORK_CONFIG = {
     rpcUrl: "https://pacific-rpc.sepolia-testnet.manta.network/http",
     explorerUrl: "https://pacific-explorer.sepolia-testnet.manta.network",
     currency: "ETH"
-  },
-  localhost: {
-    name: "localhost",
-    displayName: "Hardhat Local",
-    chainId: 31337,
-    rpcUrl: "http://127.0.0.1:8545",
-    currency: "ETH"
   }
 };
+
+// Singleton readline interface to prevent resource leaks
+let readlineInstance = null;
+
+function getReadlineInterface() {
+  if (!readlineInstance) {
+    const readline = require('readline');
+    readlineInstance = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    // Cleanup on process exit
+    process.on('exit', () => {
+      if (readlineInstance) {
+        readlineInstance.close();
+        readlineInstance = null;
+      }
+    });
+  }
+  return readlineInstance;
+}
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -124,7 +153,9 @@ function executeCommand(command, description, options = {}) {
     Logger.info(`Executing: ${description}`);
     console.log(colorize(`📝 Command: ${command}`, 'dim'));
 
-    const child = spawn('cmd', ['/c', command], {
+    // Use shell-appropriate execution based on platform
+    const isWindows = process.platform === 'win32';
+    const child = spawn(isWindows ? 'cmd' : 'sh', [isWindows ? '/c' : '-c', command], {
       stdio: options.silent ? 'pipe' : 'inherit',
       cwd: process.cwd(),
       ...options
@@ -169,12 +200,21 @@ function executeCommand(command, description, options = {}) {
  */
 function getNetworkInfo() {
   try {
-    const deployedContracts = JSON.parse(fs.readFileSync('deployed-contracts.json', 'utf8'));
+    const deployedContracts = JSON.parse(fs.readFileSync(PATHS.deployedContracts, 'utf8'));
+
+    // Determine current network dynamically based on environment
+    let currentNetwork = 'hardhat'; // default
+    if (process.env.HARDHAT_NETWORK) {
+      currentNetwork = process.env.HARDHAT_NETWORK;
+    } else if (deployedContracts.network) {
+      currentNetwork = deployedContracts.network;
+    }
+
     return {
-      current: 'hardhat',
+      current: currentNetwork,
       deployed: deployedContracts.network,
       chainId: deployedContracts.chainId,
-      compatible: false,
+      compatible: currentNetwork === deployedContracts.network || currentNetwork === 'hardhat',
       contracts: deployedContracts
     };
   } catch (error) {
@@ -241,11 +281,11 @@ function ensureDirectory(dirPath) {
  */
 function getProjectStatus() {
   const status = {
-    deployedContracts: fileExists('deployed-contracts.json'),
-    mobileAbiFiles: fileExists('EduVerseApp/src/constants/abi/contract-addresses.json'),
-    frontendAbiFiles: fileExists('eduweb/abis/contract-addresses.json'),
-    mobileEnvFile: fileExists('EduVerseApp/.env'),
-    compiledContracts: fileExists('artifacts/contracts'),
+    deployedContracts: fileExists(PATHS.deployedContracts),
+    mobileAbiFiles: fileExists(PATHS.mobileAddresses),
+    frontendAbiFiles: fileExists(PATHS.frontendAddresses),
+    mobileEnvFile: fileExists(PATHS.mobileEnv),
+    compiledContracts: fileExists(PATHS.artifacts),
     networkInfo: getNetworkInfo()
   };
 
@@ -290,14 +330,8 @@ function displayProjectStatus() {
  */
 function pause(message = 'Press Enter to continue...') {
   return new Promise(resolve => {
-    const readline = require('readline');
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-
+    const rl = getReadlineInterface();
     rl.question(colorize(message, 'yellow'), () => {
-      rl.close();
       resolve();
     });
   });
@@ -308,14 +342,8 @@ function pause(message = 'Press Enter to continue...') {
  */
 function getUserInput(question) {
   return new Promise(resolve => {
-    const readline = require('readline');
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-
+    const rl = getReadlineInterface();
     rl.question(colorize(question, 'cyan'), (answer) => {
-      rl.close();
       resolve(answer.trim());
     });
   });
@@ -344,6 +372,8 @@ module.exports = {
   // Constants
   COLORS,
   NETWORK_CONFIG,
+  PATHS,
+  PROJECT_ROOT,
 
   // Classes
   Logger,
@@ -361,5 +391,6 @@ module.exports = {
   pause,
   getUserInput,
   validateNetworkCompatibility,
-  validateMantaNetwork
+  validateMantaNetwork,
+  getReadlineInterface
 };

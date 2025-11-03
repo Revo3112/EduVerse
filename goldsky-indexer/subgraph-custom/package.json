@@ -1,0 +1,53 @@
+{
+  "name": "eduverse-subgraph",
+  "version": "1.5.0",
+  "description": "EduVerse LMS Blockchain Indexer - Optimized 3-entity schema for Goldsky",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eduverse/eduverse-lms"
+  },
+  "author": "EduVerse Team",
+  "license": "MIT",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy:goldsky": "goldsky subgraph deploy eduverse-manta-pacific-sepolia/1.5.0 --path .",
+    "deploy:studio": "graph deploy --studio eduverse-manta-pacific",
+    "deploy:dev": "goldsky subgraph deploy eduverse-manta-pacific-sepolia-dev/1.5.0 --path .",
+    "create-local": "graph create --node http://localhost:8020/ eduverse",
+    "remove-local": "graph remove --node http://localhost:8020/ eduverse",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 eduverse",
+    "test": "graph test",
+    "clean": "rm -rf build generated",
+    "prepare": "npm run codegen",
+    "validate": "node scripts/validate-events.js",
+    "benchmark": "npx autocannon -d 60 -c 10 -m POST -H \"Content-Type: application/json\" -b '{\"query\":\"{courses(first:10){id title}}\"}' $SUBGRAPH_URL"
+  },
+  "dependencies": {
+    "@graphprotocol/graph-cli": "^0.69.0",
+    "@graphprotocol/graph-ts": "^0.35.1",
+    "assemblyscript": "^0.27.29"
+  },
+  "devDependencies": {
+    "matchstick-as": "^0.6.0",
+    "autocannon": "^7.11.0",
+    "ethers": "^6.8.0",
+    "graphql": "^16.8.1",
+    "graphql-request": "^6.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "keywords": [
+    "blockchain",
+    "subgraph",
+    "graphql",
+    "eduverse",
+    "lms",
+    "web3",
+    "education",
+    "goldsky",
+    "manta-pacific"
+  ]
+}

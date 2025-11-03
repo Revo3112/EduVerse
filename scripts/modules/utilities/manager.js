@@ -3,7 +3,7 @@
  * Handles ABI export, environment management, and other utilities
  */
 
-const { Logger, executeCommand, getNetworkInfo, colors, ensureDirectory, fileExists } = require('../../core/system');
+const { Logger, executeCommand, getNetworkInfo, ensureDirectory, fileExists, readJsonFile, writeJsonFile, PATHS } = require('../../core/system');
 const { ExportSystem } = require('../../export-system');
 const fs = require('fs');
 const path = require('path');
@@ -11,11 +11,11 @@ const path = require('path');
 class UtilitiesManager {
   constructor() {
     this.exportSystem = new ExportSystem();
-    // Keep abiPaths for backward compatibility with existing functions
+    // Use centralized paths from core system
     this.abiPaths = {
-      mobile: 'EduVerseApp/src/constants/abi',
-      frontend: 'eduweb/abis',
-      artifacts: 'artifacts/contracts'
+      mobile: PATHS.mobileAbi,
+      frontend: PATHS.frontendAbi,
+      artifacts: PATHS.artifacts
     };
   }
 
@@ -146,7 +146,7 @@ class UtilitiesManager {
    */
   async exportContractAddresses() {
     try {
-      const deployedContracts = readJsonFile('deployed-contracts.json');
+      const deployedContracts = readJsonFile(PATHS.deployedContracts);
 
       if (!deployedContracts) {
         throw new Error('No deployed contracts found');
@@ -167,11 +167,13 @@ class UtilitiesManager {
 
       // Export to mobile
       const mobileAddressPath = path.join(this.abiPaths.mobile, 'contract-addresses.json');
+      ensureDirectory(path.dirname(mobileAddressPath));
       writeJsonFile(mobileAddressPath, contractData);
       Logger.success("Exported contract addresses to mobile app");
 
       // Export to frontend
       const frontendAddressPath = path.join(this.abiPaths.frontend, 'contract-addresses.json');
+      ensureDirectory(path.dirname(frontendAddressPath));
       writeJsonFile(frontendAddressPath, contractData);
       Logger.success("Exported contract addresses to frontend");
 
@@ -227,7 +229,7 @@ ${contracts.map(contract =>
     Logger.header("Manual Mobile Environment Update");
 
     try {
-      const deployedContracts = readJsonFile('deployed-contracts.json');
+      const deployedContracts = readJsonFile(PATHS.deployedContracts);
 
       if (!deployedContracts) {
         throw new Error('No deployed contracts found');
@@ -299,7 +301,7 @@ EXPO_PUBLIC_NETWORK_NAME=${deployedContracts.network}
    */
   getUtilitiesStatus() {
     const status = {
-      hasDeployedContracts: fileExists('deployed-contracts.json'),
+      hasDeployedContracts: fileExists(PATHS.deployedContracts),
       hasCompiledArtifacts: fileExists(this.abiPaths.artifacts),
       hasMobileABIs: fileExists(path.join(this.abiPaths.mobile, 'contract-addresses.json')),
       hasFrontendABIs: fileExists(path.join(this.abiPaths.frontend, 'contract-addresses.json')),
