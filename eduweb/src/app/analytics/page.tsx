@@ -1537,18 +1537,24 @@ export default function AnalyticsPage() {
   }, [transactions]);
 
   const recentCourses = useMemo(() => {
-    // Recent course creations for detailed table
     return transactions
-      .filter((tx) => tx.eventType === "course_created")
+      .filter((tx) => tx.eventType === "COURSE_CREATED")
       .slice(0, 10)
-      .map((tx, index) => {
-        // Mock data since TransactionRecord doesn't have eventData
+      .map((tx) => {
+        const courseId = tx.eventData.course?.id || "0";
+        const title =
+          tx.eventData.course?.title ||
+          tx.eventData.description ||
+          "Untitled Course";
+        const creator = tx.from.slice(0, 6) + "..." + tx.from.slice(-4);
+        const category = tx.eventData.course?.category || "Other";
+        const difficulty = tx.eventData.course?.difficulty || "Beginner";
         return {
-          courseId: index + 1,
-          title: `Course #${index + 1}`,
-          creator: tx.from.slice(0, 8) + "...",
-          category: "General",
-          difficulty: "Intermediate",
+          courseId: parseInt(courseId, 10) || 0,
+          title,
+          creator,
+          category,
+          difficulty,
           timestamp: tx.timestamp,
         };
       });

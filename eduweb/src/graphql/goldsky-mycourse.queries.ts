@@ -616,6 +616,52 @@ export const GET_USER_CERTIFICATES_QUERY = gql`
 `;
 
 /**
+ * Query untuk get certificate by tokenId (QR verification)
+ */
+export const GET_CERTIFICATE_BY_TOKEN_ID = gql`
+  query GetCertificateByTokenId($tokenId: String!) {
+    certificate(id: $tokenId) {
+      id
+      tokenId
+      recipientAddress
+      recipientName
+      isValid
+      totalCourses
+      platformName
+      baseRoute
+      ipfsCID
+      totalRevenue
+      totalRevenueEth
+      createdAt
+      lastUpdated
+
+      completedCourses {
+        id
+        addedAt
+        pricePaid
+        pricePaidEth
+
+        course {
+          id
+          title
+          thumbnailCID
+          creatorName
+          category
+          difficulty
+        }
+
+        enrollment {
+          id
+          isCompleted
+          completionPercentage
+          completionDate
+        }
+      }
+    }
+  }
+`;
+
+/**
  * Query untuk user profile statistics
  */
 export const GET_USER_STATS_QUERY = gql`
@@ -719,6 +765,10 @@ export interface GetCourseProgressVariables {
 
 export interface GetUserCertificatesVariables {
   studentAddress: string; // Bytes format
+}
+
+export interface GetCertificateByTokenIdVariables {
+  tokenId: string; // tokenId as string
 }
 
 export interface GetUserStatsVariables {

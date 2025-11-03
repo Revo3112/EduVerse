@@ -304,8 +304,8 @@ function CourseDetailsContent() {
             <AlertDescription>{error || "Course not found"}</AlertDescription>
           </Alert>
           <div className="text-center mt-6">
-            <Button variant="outline" onClick={() => router.back()}>
-              <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
+            <Button variant="outline" onClick={() => router.push("/learning")}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Courses
             </Button>
           </div>
         </ContentContainer>
@@ -326,11 +326,11 @@ function CourseDetailsContent() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.back()}
+              onClick={() => router.push("/learning")}
               className="gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back
+              Back to Courses
             </Button>
             <Badge variant="outline" className="gap-2">
               <BookOpen className="h-3 w-3" />

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useActiveAccount } from "thirdweb/react";
+import { useSearchParams } from "next/navigation";
 import {
   Award,
   BookOpen,
@@ -15,6 +16,7 @@ import {
   QrCode,
   Download,
   Share2,
+  CheckCircle,
 } from "lucide-react";
 import { PageContainer } from "@/components/PageContainer";
 import { ThumbnailImage } from "@/components/ThumbnailImage";
@@ -28,7 +30,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { getUserCertificates } from "@/services/goldsky-mylearning.service";
+import {
+  getUserCertificates,
+  getCertificateByTokenId,
+} from "@/services/goldsky-mylearning.service";
 import type { CertificateData } from "@/services/goldsky-mylearning.service";
 import Image from "next/image";
 
@@ -386,23 +391,39 @@ export default function CertificatePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showQRCode, setShowQRCode] = useState(false);
+  const [verificationMode, setVerificationMode] = useState(false);
 
   const account = useActiveAccount();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     async function fetchCertificates() {
-      if (!account?.address) {
-        setIsLoading(false);
-        return;
-      }
-
       setIsLoading(true);
       setError(null);
 
       try {
-        const certData = await getUserCertificates(account.address);
-        const transformed = certData.map(transformCertificateData);
-        setCertificates(transformed);
+        const tokenIdParam = searchParams.get("tokenId");
+        const addressParam = searchParams.get("address");
+
+        if (tokenIdParam && addressParam) {
+          setVerificationMode(true);
+          const certData = await getCertificateByTokenId(tokenIdParam);
+
+          if (certData) {
+            const transformed = transformCertificateData(certData);
+            setCertificates([transformed]);
+          } else {
+            setError("Certificate not found or invalid.");
+          }
+        } else if (account?.address) {
+          setVerificationMode(false);
+          const certData = await getUserCertificates(account.address);
+          const transformed = certData.map(transformCertificateData);
+          setCertificates(transformed);
+        } else {
+          setIsLoading(false);
+          return;
+        }
       } catch (err) {
         console.error("[Certificates] Failed to fetch certificates:", err);
         setError(
@@ -414,7 +435,7 @@ export default function CertificatePage() {
     }
 
     fetchCertificates();
-  }, [account?.address]);
+  }, [account?.address, searchParams]);
 
   const handleCourseClick = useCallback((course: CourseInCertificate) => {
     setSelectedCourse(course);
@@ -448,7 +469,7 @@ export default function CertificatePage() {
     setShowQRCode(true);
   }, []);
 
-  if (!account) {
+  if (!account && !verificationMode) {
     return (
       <PageContainer maxWidth="xl" className="space-y-6 py-8">
         <div className="space-y-2">
@@ -522,13 +543,23 @@ export default function CertificatePage() {
 
   return (
     <>
-      <PageContainer maxWidth="xl" className="space-y-8 py-8">
-        <div className="space-y-3">
-          <h1 className="text-4xl font-bold text-foreground">My Certificate</h1>
-          <p className="text-lg text-muted-foreground max-w-3xl">
-            Your lifetime blockchain-verified certificate that grows with your
-            achievements. All credentials are permanently stored on Manta
-            Pacific and verifiable on-chain.
+      <PageContainer maxWidth="xl" className="space-y-6 py-8">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <h1 className="text-4xl font-bold text-foreground">
+              {verificationMode ? "Certificate Verification" : "My Certificate"}
+            </h1>
+            {verificationMode && (
+              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Verification Mode
+              </Badge>
+            )}
+          </div>
+          <p className="text-lg text-muted-foreground">
+            {verificationMode
+              ? "Viewing blockchain-verified certificate from QR code scan. All data is pulled directly from Manta Pacific blockchain via Goldsky indexer."
+              : "Your lifetime blockchain-verified certificate that grows with your achievements. All credentials are permanently stored on Manta Pacific and verifiable on-chain."}
           </p>
         </div>
 

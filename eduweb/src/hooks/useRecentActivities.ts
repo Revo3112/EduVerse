@@ -316,7 +316,12 @@ export interface BlockchainTransactionEvent {
   eventData: {
     description: string;
     metadata?: string;
-    course?: { id: string; title: string };
+    course?: {
+      id: string;
+      title: string;
+      category: string;
+      difficulty: string;
+    };
     enrollment?: { id: string };
     certificate?: { id: string; tokenId: string };
   };
@@ -342,7 +347,14 @@ export function transformActivityToTransaction(
     eventData: {
       description: activity.description,
       metadata: activity.metadata ?? undefined,
-      course: activity.course ?? undefined,
+      course: activity.course
+        ? {
+            id: activity.course.id,
+            title: activity.course.title,
+            category: activity.course.category,
+            difficulty: activity.course.difficulty,
+          }
+        : undefined,
       enrollment: activity.enrollment ?? undefined,
       certificate: activity.certificate ?? undefined,
     },

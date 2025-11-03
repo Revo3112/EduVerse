@@ -13,6 +13,7 @@ import {
   GET_ENROLLMENT_DETAIL_QUERY,
   CHECK_ENROLLMENT_STATUS_QUERY,
   GET_USER_CERTIFICATES_QUERY,
+  GET_CERTIFICATE_BY_TOKEN_ID,
   GET_USER_STATS_QUERY,
   type MyCoursesResponse,
   type GoldskyEnrollment,
@@ -24,6 +25,7 @@ import {
   type GetEnrollmentDetailVariables,
   type CheckEnrollmentStatusVariables,
   type GetUserCertificatesVariables,
+  type GetCertificateByTokenIdVariables,
   type GetUserStatsVariables,
 } from "@/graphql/goldsky-mycourse.queries";
 import { normalizeAddress } from "@/lib/address-helper";
@@ -796,6 +798,49 @@ export async function getUserCertificates(
 }
 
 /**
+ * Get certificate by tokenId (for QR verification)
+ */
+export async function getCertificateByTokenId(
+  tokenId: string
+): Promise<CertificateData | null> {
+  if (!tokenId) {
+    return null;
+  }
+
+  const cacheKey = `certificate-${tokenId}`;
+
+  const cached = getCachedData<CertificateData>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const client = getGraphQLClient();
+    const variables: GetCertificateByTokenIdVariables = {
+      tokenId,
+    };
+
+    const data = await executeWithRetry(async () => {
+      return await client.request<{ certificate: GoldskyCertificate | null }>(
+        GET_CERTIFICATE_BY_TOKEN_ID,
+        variables
+      );
+    });
+
+    if (!data.certificate) {
+      return null;
+    }
+
+    const result = transformCertificate(data.certificate);
+    setCachedData(cacheKey, result);
+
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get user statistics
  */
 export async function getUserStats(
@@ -836,12 +881,111 @@ export async function getUserStats(
 }
 
 /**
- * Refresh/invalidate cache untuk specific user
+ * Check certificate eligibility for a specific course
+ * Business Logic:
+ * 1. User must have completed ALL sections of the course (isCompleted === true)
+ * 2. Completion can be before or after license expiry
+ * 3. If not completed and license expired, must renew first
  */
-export function refreshUserData(studentAddress: string): void {
+export async function checkCertificateEligibility(
+  studentAddress: string,
+  courseId: string
+): Promise<{
+  eligible: boolean;
+  reason: string | null;
+  enrollmentData?: EnrollmentData;
+}> {
+  if (!studentAddress || !courseId) {
+    return {
+      eligible: false,
+      reason: "Invalid student address or course ID",
+    };
+  }
+
   const normalizedAddress = normalizeAddress(studentAddress);
-  clearCache(`my-courses-${normalizedAddress}`);
-  clearCache(`user-stats-${normalizedAddress}`);
+
+  try {
+    const client = getGraphQLClient();
+    const variables: CheckEnrollmentStatusVariables = {
+      studentAddress: normalizedAddress,
+      courseId,
+    };
+
+    const data = await executeWithRetry(async () => {
+      return await client.request<{
+        studentCourseEnrollments: Array<{
+          enrollment: GoldskyEnrollment;
+          course: GoldskyCourse;
+        }>;
+      }>(CHECK_ENROLLMENT_STATUS_QUERY, variables);
+    });
+
+    if (
+      !data.studentCourseEnrollments ||
+      data.studentCourseEnrollments.length === 0
+    ) {
+      return {
+        eligible: false,
+        reason:
+          "You have not enrolled in this course. Please purchase a license first.",
+      };
+    }
+
+    const enrollmentRaw = data.studentCourseEnrollments[0].enrollment;
+    const courseRaw = data.studentCourseEnrollments[0].course;
+
+    if (courseRaw.isDeleted || !courseRaw.isActive) {
+      return {
+        eligible: false,
+        reason: "This course is no longer available.",
+      };
+    }
+
+    if (!enrollmentRaw.isCompleted) {
+      const now = Math.floor(Date.now() / 1000);
+      const expiry = bigIntToNumber(enrollmentRaw.licenseExpiry);
+      const isExpired = now > expiry;
+
+      if (isExpired) {
+        return {
+          eligible: false,
+          reason:
+            "You have not completed this course and your license has expired. Please renew your license to continue learning and complete the course.",
+        };
+      } else {
+        return {
+          eligible: false,
+          reason: `You have not completed this course yet. Progress: ${enrollmentRaw.completionPercentage}%. Please complete all sections first.`,
+        };
+      }
+    }
+
+    const enrollmentData = transformEnrollment(enrollmentRaw);
+
+    return {
+      eligible: true,
+      reason: null,
+      enrollmentData,
+    };
+  } catch (error) {
+    console.error("[checkCertificateEligibility] Error:", error);
+    return {
+      eligible: false,
+      reason: `Error checking eligibility: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    };
+  }
+}
+
+/**
+ * Helper untuk clear cache untuk specific user
+ * Useful untuk force refresh setelah transaction berhasil
+ */
+export function refreshUserData(address: string): void {
+  const normalizedAddress = normalizeAddress(address);
+  clearCache(`mycourses-${normalizedAddress}`);
+  clearCache(`userstats-${normalizedAddress}`);
   clearCache(`certificates-${normalizedAddress}`);
 }
 

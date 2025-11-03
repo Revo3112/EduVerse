@@ -24,6 +24,7 @@ import {
   getUserCertificateId,
   getCertificateCompletedCourses,
 } from "@/services/certificate-blockchain.service";
+import { checkCertificateEligibility } from "@/services/goldsky-mylearning.service";
 
 interface GetCertificateModalProps {
   isOpen: boolean;
@@ -112,7 +113,10 @@ export function GetCertificateModal({
         setCheckingEligibility(true);
 
         // Check eligibility FIRST (before any other operations)
-        const eligibilityResult = await checkEligibility(courseId);
+        const eligibilityResult = await checkCertificateEligibility(
+          address,
+          courseId.toString()
+        );
         setEligible(eligibilityResult.eligible);
         setEligibilityReason(eligibilityResult.reason || null);
 
@@ -317,7 +321,9 @@ export function GetCertificateModal({
       const baseRoute =
         typeof window !== "undefined"
           ? `${window.location.origin}/certificates`
-          : "http://localhost:3000/certificates";
+          : `${
+              process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+            }/certificates`;
 
       // Call blockchain mint/update via hook
       await mintOrUpdateCertificate(

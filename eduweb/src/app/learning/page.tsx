@@ -136,8 +136,8 @@ export default function LearningPage() {
       thumbnailCID: courseData.thumbnailCID,
       creator: courseData.creator as `0x${string}`,
       creatorName: courseData.creatorName,
-      category: parseInt(courseData.category),
-      difficulty: parseInt(courseData.difficulty),
+      category: courseData.category,
+      difficulty: courseData.difficulty,
       pricePerMonth: BigInt(Math.floor(courseData.pricePerMonth * 1e18)),
       totalSections: courseData.totalSections,
       totalDuration: BigInt(courseData.totalDuration),
@@ -594,6 +594,37 @@ export default function LearningPage() {
                             }
                           >
                             View Course
+                          </Button>
+                        )}
+
+                        {enrollment.isCompleted &&
+                          !enrollment.hasCertificate && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleOpenCertificateModal(enrollment)
+                              }
+                              disabled={actions.isMintingCertificate}
+                            >
+                              <Award className="w-4 h-4 mr-2" />
+                              {actions.isMintingCertificate
+                                ? "Minting..."
+                                : "Get Certificate"}
+                            </Button>
+                          )}
+
+                        {enrollment.isCompleted && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenRatingModal(enrollment)}
+                            disabled={actions.isSubmittingRating}
+                          >
+                            <Star className="w-4 h-4 mr-2" />
+                            {actions.isSubmittingRating
+                              ? "Submitting..."
+                              : "Rate Course"}
                           </Button>
                         )}
                       </div>

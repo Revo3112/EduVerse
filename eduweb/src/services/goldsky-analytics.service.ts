@@ -136,6 +136,8 @@ export interface ActivityEventData {
   course: {
     id: string;
     title: string;
+    category: string;
+    difficulty: string;
   } | null;
   enrollment: {
     id: string;
@@ -226,6 +228,8 @@ interface GraphQLCourse {
   category?: string;
   difficulty?: string;
   price?: string;
+  priceInEth?: string;
+  sectionsCount?: string;
   sections?: GraphQLCourseSection[];
 }
 
@@ -242,12 +246,10 @@ interface GraphQLCourseSection {
 interface GraphQLUserProfile {
   id: string;
   lastActivityAt?: string;
-  totalCoursesCreated?: string;
-  totalCoursesEnrolled?: string;
-  totalCertificatesEarned?: string;
   isBlacklisted?: boolean;
   coursesEnrolled?: string;
   coursesCompleted?: string;
+  coursesCreated?: string;
   totalRevenue?: string;
   totalSectionsCompleted?: string;
 }
@@ -288,6 +290,8 @@ interface GraphQLActivityEvent {
   course: {
     id: string;
     title: string;
+    category: string;
+    difficulty: string;
   } | null;
   enrollment: {
     id: string;
@@ -325,12 +329,12 @@ function calculateAverage(values: number[]): number {
 }
 
 /**
- * Calculate platform fee (2% of revenue)
+ * Calculate platform fee (10% of revenue)
  */
 function calculatePlatformFee(revenue: string): string {
   try {
     const revenueBigInt = BigInt(revenue);
-    const fee = (revenueBigInt * BigInt(200)) / BigInt(10000); // 2%
+    const fee = (revenueBigInt * BigInt(10)) / BigInt(100); // 10%
     return fee.toString();
   } catch {
     return "0";
@@ -411,11 +415,11 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalyticsData> {
     const totalRevenueStr = totalRevenue.toString();
     const totalRevenueEth = weiToEth(totalRevenueStr);
 
-    // Calculate platform fees (2%)
+    // Calculate platform fees (10%)
     const platformFees = calculatePlatformFee(totalRevenueStr);
     const platformFeesEth = weiToEth(platformFees);
 
-    // Calculate creator revenue (98%)
+    // Calculate creator revenue (90%)
     const creatorRevenue = (totalRevenue - BigInt(platformFees)).toString();
     const creatorRevenueEth = weiToEth(creatorRevenue);
 
@@ -574,7 +578,7 @@ export async function getCourseAnalytics(): Promise<CourseAnalyticsData> {
 
     // Price statistics
     const prices = courses
-      .map((c: GraphQLCourse) => parseFloat(c.price || "0"))
+      .map((c: GraphQLCourse) => parseFloat(c.priceInEth || "0"))
       .filter((p: number) => p > 0);
     const averagePrice =
       prices.length > 0 ? calculateAverage(prices).toFixed(6) : "0";
@@ -593,7 +597,8 @@ export async function getCourseAnalytics(): Promise<CourseAnalyticsData> {
 
     // Section statistics
     const totalSections = courses.reduce(
-      (sum: number, c: GraphQLCourse) => sum + (c.sections?.length || 0),
+      (sum: number, c: GraphQLCourse) =>
+        sum + parseInt(c.sectionsCount || "0", 10),
       0
     );
     const averageSectionsPerCourse =
@@ -674,10 +679,10 @@ export async function getUserAnalytics(): Promise<UserAnalyticsData> {
     const uniqueAddresses = new Set(users.map((u: GraphQLUserProfile) => u.id))
       .size;
     const activeStudents = users.filter(
-      (u: GraphQLUserProfile) => parseBigIntSafe(u.totalCoursesEnrolled) > 0
+      (u: GraphQLUserProfile) => parseBigIntSafe(u.coursesEnrolled) > 0
     ).length;
     const activeCreators = users.filter(
-      (u: GraphQLUserProfile) => parseBigIntSafe(u.totalCoursesCreated) > 0
+      (u: GraphQLUserProfile) => parseBigIntSafe(u.coursesCreated) > 0
     ).length;
     const blacklistedUsers = users.filter(
       (u: GraphQLUserProfile) => u.isBlacklisted
@@ -1044,6 +1049,8 @@ export async function getRecentActivities(
         course {
           id
           title
+          category
+          difficulty
         }
         enrollment {
           id
@@ -1076,6 +1083,8 @@ export async function getRecentActivities(
         ? {
             id: event.course.id,
             title: event.course.title,
+            category: event.course.category,
+            difficulty: event.course.difficulty,
           }
         : null,
       enrollment: event.enrollment

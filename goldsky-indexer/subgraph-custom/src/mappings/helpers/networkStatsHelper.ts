@@ -80,7 +80,21 @@ export function updateNetworkStats(
 
   if (!stats.lastBlockTimestamp.equals(ZERO_BI)) {
     let timeDiff = event.block.timestamp.minus(stats.lastBlockTimestamp);
-    stats.averageBlockTime = timeDiff.toBigDecimal();
+    let blockDiff = event.block.number.minus(stats.lastBlockNumber);
+
+    if (blockDiff.gt(ZERO_BI)) {
+      let newBlockTime = timeDiff.toBigDecimal().div(blockDiff.toBigDecimal());
+
+      if (stats.averageBlockTime.equals(ZERO_BD)) {
+        stats.averageBlockTime = newBlockTime;
+      } else {
+        let alpha = BigDecimal.fromString("0.1");
+        let oneMinusAlpha = BigDecimal.fromString("0.9");
+        stats.averageBlockTime = stats.averageBlockTime
+          .times(oneMinusAlpha)
+          .plus(newBlockTime.times(alpha));
+      }
+    }
   }
 
   stats.lastBlockNumber = event.block.number;
