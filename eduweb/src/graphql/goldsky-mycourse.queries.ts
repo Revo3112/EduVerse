@@ -512,19 +512,47 @@ export const CHECK_ENROLLMENT_STATUS_QUERY = gql`
 
       enrollment {
         id
+        courseId
+        student
         isActive
         status
         licenseExpiry
+        durationMonths
         isCompleted
         completionPercentage
+        sectionsCompleted
         hasCertificate
+        certificateTokenId
+        pricePaidEth
+        totalSpentEth
+        totalRenewals
+        purchasedAt
+        lastActivityAt
+        completionDate
       }
 
       course {
         id
+        creator
+        creatorName
         title
+        description
+        thumbnailCID
+        category
+        difficulty
+        priceInEth
         isActive
         isDeleted
+        totalEnrollments
+        activeEnrollments
+        completedStudents
+        totalRevenueEth
+        averageRating
+        totalRatings
+        sectionsCount
+        totalDuration
+        createdAt
+        updatedAt
       }
     }
   }
