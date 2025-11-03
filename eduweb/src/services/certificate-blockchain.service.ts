@@ -662,7 +662,7 @@ export function generatePaymentHash(
   // Pack data using thirdweb's encodePacked
   const packed = encodePacked(
     ["address", "uint256", "uint256", "bytes32"],
-    [userAddress, courseId, BigInt(timestamp), nonceHash]
+    [userAddress as `0x${string}`, courseId, BigInt(timestamp), nonceHash]
   );
 
   // Hash with keccak256
