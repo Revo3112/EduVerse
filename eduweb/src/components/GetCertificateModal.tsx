@@ -197,7 +197,7 @@ export function GetCertificateModal({
     // Pack the data using thirdweb's encodePacked
     const packed = encodePacked(
       ["address", "uint256", "uint256", "bytes32"],
-      [userAddress, courseId, BigInt(timestamp), nonceHash]
+      [userAddress as `0x${string}`, courseId, BigInt(timestamp), nonceHash]
     );
 
     // Return keccak256 hash of packed data
@@ -305,7 +305,7 @@ export function GetCertificateModal({
 
       // Generate payment hash (bytes32 keccak256)
       const paymentHash = generatePaymentHash(
-        address,
+        address as string,
         courseId,
         Date.now(),
         crypto.randomUUID()
