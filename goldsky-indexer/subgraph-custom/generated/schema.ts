@@ -3462,58 +3462,6 @@ export class NetworkStats extends Entity {
     this.set("totalTransactions", Value.fromBigInt(value));
   }
 
-  get totalGasUsed(): BigInt {
-    let value = this.get("totalGasUsed");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set totalGasUsed(value: BigInt) {
-    this.set("totalGasUsed", Value.fromBigInt(value));
-  }
-
-  get totalGasCost(): BigDecimal {
-    let value = this.get("totalGasCost");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set totalGasCost(value: BigDecimal) {
-    this.set("totalGasCost", Value.fromBigDecimal(value));
-  }
-
-  get averageGasPrice(): BigDecimal {
-    let value = this.get("averageGasPrice");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set averageGasPrice(value: BigDecimal) {
-    this.set("averageGasPrice", Value.fromBigDecimal(value));
-  }
-
-  get averageBlockTime(): BigDecimal {
-    let value = this.get("averageBlockTime");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set averageBlockTime(value: BigDecimal) {
-    this.set("averageBlockTime", Value.fromBigDecimal(value));
-  }
-
   get lastBlockNumber(): BigInt {
     let value = this.get("lastBlockNumber");
     if (!value || value.kind == ValueKind.NULL) {
@@ -3538,6 +3486,19 @@ export class NetworkStats extends Entity {
 
   set lastBlockTimestamp(value: BigInt) {
     this.set("lastBlockTimestamp", Value.fromBigInt(value));
+  }
+
+  get averageBlockTime(): BigDecimal {
+    let value = this.get("averageBlockTime");
+    if (!value || value.kind == ValueKind.NULL) {
+      throw new Error("Cannot return null for a required field.");
+    } else {
+      return value.toBigDecimal();
+    }
+  }
+
+  set averageBlockTime(value: BigDecimal) {
+    this.set("averageBlockTime", Value.fromBigDecimal(value));
   }
 
   get totalCourseCreations(): BigInt {
@@ -3714,45 +3675,6 @@ export class DailyNetworkStats extends Entity {
     this.set("transactionCount", Value.fromBigInt(value));
   }
 
-  get gasUsed(): BigInt {
-    let value = this.get("gasUsed");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set gasUsed(value: BigInt) {
-    this.set("gasUsed", Value.fromBigInt(value));
-  }
-
-  get gasCost(): BigDecimal {
-    let value = this.get("gasCost");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set gasCost(value: BigDecimal) {
-    this.set("gasCost", Value.fromBigDecimal(value));
-  }
-
-  get averageGasPrice(): BigDecimal {
-    let value = this.get("averageGasPrice");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set averageGasPrice(value: BigDecimal) {
-    this.set("averageGasPrice", Value.fromBigDecimal(value));
-  }
-
   get blockCount(): BigInt {
     let value = this.get("blockCount");
     if (!value || value.kind == ValueKind.NULL) {
@@ -3764,19 +3686,6 @@ export class DailyNetworkStats extends Entity {
 
   set blockCount(value: BigInt) {
     this.set("blockCount", Value.fromBigInt(value));
-  }
-
-  get totalBlockTime(): BigDecimal {
-    let value = this.get("totalBlockTime");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set totalBlockTime(value: BigDecimal) {
-    this.set("totalBlockTime", Value.fromBigDecimal(value));
   }
 
   get courseTransactions(): BigInt {
@@ -3857,32 +3766,6 @@ export class DailyNetworkStats extends Entity {
     this.set("failedTransactions", Value.fromBigInt(value));
   }
 
-  get totalValueTransferred(): BigDecimal {
-    let value = this.get("totalValueTransferred");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set totalValueTransferred(value: BigDecimal) {
-    this.set("totalValueTransferred", Value.fromBigDecimal(value));
-  }
-
-  get uniqueUsers(): BigInt {
-    let value = this.get("uniqueUsers");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set uniqueUsers(value: BigInt) {
-    this.set("uniqueUsers", Value.fromBigInt(value));
-  }
-
   get startBlock(): BigInt {
     let value = this.get("startBlock");
     if (!value || value.kind == ValueKind.NULL) {
@@ -3907,321 +3790,6 @@ export class DailyNetworkStats extends Entity {
 
   set endBlock(value: BigInt) {
     this.set("endBlock", Value.fromBigInt(value));
-  }
-}
-
-export class TransactionRecord extends Entity {
-  constructor(id: string) {
-    super();
-    this.set("id", Value.fromString(id));
-  }
-
-  save(): void {
-    let id = this.get("id");
-    assert(id != null, "Cannot save TransactionRecord entity without an ID");
-    if (id) {
-      assert(
-        id.kind == ValueKind.STRING,
-        `Entities of type TransactionRecord must have an ID of type String but the id '${id.displayData()}' is of type ${id.displayKind()}`,
-      );
-      store.set("TransactionRecord", id.toString(), this);
-    }
-  }
-
-  static loadInBlock(id: string): TransactionRecord | null {
-    return changetype<TransactionRecord | null>(
-      store.get_in_block("TransactionRecord", id),
-    );
-  }
-
-  static load(id: string): TransactionRecord | null {
-    return changetype<TransactionRecord | null>(
-      store.get("TransactionRecord", id),
-    );
-  }
-
-  get id(): string {
-    let value = this.get("id");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toString();
-    }
-  }
-
-  set id(value: string) {
-    this.set("id", Value.fromString(value));
-  }
-
-  get hash(): Bytes {
-    let value = this.get("hash");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set hash(value: Bytes) {
-    this.set("hash", Value.fromBytes(value));
-  }
-
-  get blockNumber(): BigInt {
-    let value = this.get("blockNumber");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set blockNumber(value: BigInt) {
-    this.set("blockNumber", Value.fromBigInt(value));
-  }
-
-  get timestamp(): BigInt {
-    let value = this.get("timestamp");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set timestamp(value: BigInt) {
-    this.set("timestamp", Value.fromBigInt(value));
-  }
-
-  get gasUsed(): BigInt {
-    let value = this.get("gasUsed");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigInt();
-    }
-  }
-
-  set gasUsed(value: BigInt) {
-    this.set("gasUsed", Value.fromBigInt(value));
-  }
-
-  get gasPrice(): BigDecimal {
-    let value = this.get("gasPrice");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set gasPrice(value: BigDecimal) {
-    this.set("gasPrice", Value.fromBigDecimal(value));
-  }
-
-  get value(): BigDecimal {
-    let value = this.get("value");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBigDecimal();
-    }
-  }
-
-  set value(value: BigDecimal) {
-    this.set("value", Value.fromBigDecimal(value));
-  }
-
-  get from(): Bytes {
-    let value = this.get("from");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set from(value: Bytes) {
-    this.set("from", Value.fromBytes(value));
-  }
-
-  get to(): Bytes {
-    let value = this.get("to");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set to(value: Bytes) {
-    this.set("to", Value.fromBytes(value));
-  }
-
-  get contractAddress(): Bytes {
-    let value = this.get("contractAddress");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toBytes();
-    }
-  }
-
-  set contractAddress(value: Bytes) {
-    this.set("contractAddress", Value.fromBytes(value));
-  }
-
-  get functionName(): string {
-    let value = this.get("functionName");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toString();
-    }
-  }
-
-  set functionName(value: string) {
-    this.set("functionName", Value.fromString(value));
-  }
-
-  get success(): boolean {
-    let value = this.get("success");
-    if (!value || value.kind == ValueKind.NULL) {
-      return false;
-    } else {
-      return value.toBoolean();
-    }
-  }
-
-  set success(value: boolean) {
-    this.set("success", Value.fromBoolean(value));
-  }
-
-  get eventType(): string {
-    let value = this.get("eventType");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toString();
-    }
-  }
-
-  set eventType(value: string) {
-    this.set("eventType", Value.fromString(value));
-  }
-
-  get eventAction(): string {
-    let value = this.get("eventAction");
-    if (!value || value.kind == ValueKind.NULL) {
-      throw new Error("Cannot return null for a required field.");
-    } else {
-      return value.toString();
-    }
-  }
-
-  set eventAction(value: string) {
-    this.set("eventAction", Value.fromString(value));
-  }
-
-  get course(): string | null {
-    let value = this.get("course");
-    if (!value || value.kind == ValueKind.NULL) {
-      return null;
-    } else {
-      return value.toString();
-    }
-  }
-
-  set course(value: string | null) {
-    if (!value) {
-      this.unset("course");
-    } else {
-      this.set("course", Value.fromString(<string>value));
-    }
-  }
-
-  get enrollment(): string | null {
-    let value = this.get("enrollment");
-    if (!value || value.kind == ValueKind.NULL) {
-      return null;
-    } else {
-      return value.toString();
-    }
-  }
-
-  set enrollment(value: string | null) {
-    if (!value) {
-      this.unset("enrollment");
-    } else {
-      this.set("enrollment", Value.fromString(<string>value));
-    }
-  }
-
-  get certificate(): string | null {
-    let value = this.get("certificate");
-    if (!value || value.kind == ValueKind.NULL) {
-      return null;
-    } else {
-      return value.toString();
-    }
-  }
-
-  set certificate(value: string | null) {
-    if (!value) {
-      this.unset("certificate");
-    } else {
-      this.set("certificate", Value.fromString(<string>value));
-    }
-  }
-
-  get userProfile(): string | null {
-    let value = this.get("userProfile");
-    if (!value || value.kind == ValueKind.NULL) {
-      return null;
-    } else {
-      return value.toString();
-    }
-  }
-
-  set userProfile(value: string | null) {
-    if (!value) {
-      this.unset("userProfile");
-    } else {
-      this.set("userProfile", Value.fromString(<string>value));
-    }
-  }
-
-  get inputData(): string | null {
-    let value = this.get("inputData");
-    if (!value || value.kind == ValueKind.NULL) {
-      return null;
-    } else {
-      return value.toString();
-    }
-  }
-
-  set inputData(value: string | null) {
-    if (!value) {
-      this.unset("inputData");
-    } else {
-      this.set("inputData", Value.fromString(<string>value));
-    }
-  }
-
-  get errorMessage(): string | null {
-    let value = this.get("errorMessage");
-    if (!value || value.kind == ValueKind.NULL) {
-      return null;
-    } else {
-      return value.toString();
-    }
-  }
-
-  set errorMessage(value: string | null) {
-    if (!value) {
-      this.unset("errorMessage");
-    } else {
-      this.set("errorMessage", Value.fromString(<string>value));
-    }
   }
 }
 

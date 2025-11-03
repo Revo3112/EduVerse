@@ -12,7 +12,6 @@ import {
   FileText,
   Globe,
   Lock,
-  PlayCircle,
   RefreshCw,
   Shield,
   Star,
@@ -24,12 +23,8 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import {
-  useActiveAccount,
-  useReadContract,
-  useSendTransaction,
-} from "thirdweb/react";
-import { prepareContractCall } from "thirdweb";
+import { useActiveAccount, useReadContract } from "thirdweb/react";
+
 import { toast } from "sonner";
 
 import { ContentContainer } from "@/components/PageContainer";
@@ -44,7 +39,6 @@ import { progressTracker } from "@/lib/contracts";
 import { executeQuery } from "@/lib/graphql-client";
 import { GET_COURSE_DETAILS } from "@/lib/graphql-queries";
 
-// GraphQL query for enrollment
 const GET_ENROLLMENT_BY_STUDENT_COURSE = `
   query GetEnrollmentByStudentAndCourse($enrollmentId: ID!) {
     studentCourseEnrollment(id: $enrollmentId) {
@@ -134,7 +128,6 @@ function CourseDetailsContent() {
     null
   );
   const [copiedAddress, setCopiedAddress] = useState<string>("");
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const contractAddresses = {
     CourseFactory: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72",
@@ -158,9 +151,8 @@ function CourseDetailsContent() {
       }
       setCopiedAddress(contractName);
       setTimeout(() => setCopiedAddress(""), 2000);
-    } catch (err) {
-      console.error("Failed to copy text: ", err);
-      alert(`Failed to copy. Please copy manually: ${address}`);
+    } catch {
+      toast.error("Failed to copy address");
     }
   };
 
@@ -170,30 +162,22 @@ function CourseDetailsContent() {
     return !isNaN(parsed) && parsed > 0 ? BigInt(parsed) : BigInt(1);
   }, [searchParams]);
 
-  // Read section completions from ProgressTracker contract
-  const { data: sectionCompletions, refetch: refetchCompletions } =
-    useReadContract({
-      contract: progressTracker,
-      method:
-        "function getCourseSectionsProgress(address student, uint256 courseId) view returns (bool[] progress)",
-      params: [address || "0x0", courseId] as const,
-      queryOptions: {
-        enabled: !!address && !!enrollmentData?.isActive,
-      },
-    });
+  const { data: sectionCompletions } = useReadContract({
+    contract: progressTracker,
+    method:
+      "function getCourseSectionsProgress(address student, uint256 courseId) view returns (bool[] progress)",
+    params: [address || "0x0", courseId] as const,
+    queryOptions: {
+      enabled: !!address && !!enrollmentData?.isActive,
+    },
+  });
 
-  // Transaction hooks
-  const { mutate: sendTransaction, isPending: isSending } =
-    useSendTransaction();
-
-  // Fetch course and enrollment data
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         setError("");
 
-        // Fetch course from Goldsky
         const courseResponse = await executeQuery<{ course: CourseData }>(
           GET_COURSE_DETAILS,
           { courseId: courseId.toString() }
@@ -206,7 +190,6 @@ function CourseDetailsContent() {
 
         setCourseData(courseResponse.course);
 
-        // Fetch enrollment if wallet connected
         if (address) {
           const enrollmentId = `${address.toLowerCase()}-${courseId}`;
           const enrollmentResponse = await executeQuery<{
@@ -223,18 +206,16 @@ function CourseDetailsContent() {
             setEnrollmentData(null);
           }
         }
-      } catch (err) {
+      } catch {
         setError("Failed to fetch course data. Please try again.");
-        console.error("Course fetch error:", err);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [courseId, address, refreshTrigger]);
+  }, [courseId, address]);
 
-  // Process sections with status
   const sectionsWithStatus = useMemo((): SectionWithStatus[] => {
     if (!courseData) return [];
 
@@ -274,80 +255,16 @@ function CourseDetailsContent() {
     };
   }, [courseData, sectionCompletions]);
 
-  // Transaction handlers
-  const handleStartSection = async (sectionId: string) => {
-    if (!address) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-
-    try {
-      const tx = prepareContractCall({
-        contract: progressTracker,
-        method: "function startSection(uint256 courseId, uint256 sectionId)",
-        params: [courseId, BigInt(sectionId)],
-      });
-
-      sendTransaction(tx, {
-        onSuccess: () => {
-          toast.success("Section started!");
-          setTimeout(() => {
-            refetchCompletions();
-          }, 2000);
-        },
-        onError: (error) => {
-          toast.error("Failed to start section");
-          console.error(error);
-        },
-      });
-    } catch (error) {
-      toast.error("Failed to prepare transaction");
-      console.error(error);
-    }
-  };
-
-  const handleCompleteSection = async (sectionId: string) => {
-    if (!address) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-
-    try {
-      const tx = prepareContractCall({
-        contract: progressTracker,
-        method: "function completeSection(uint256 courseId, uint256 sectionId)",
-        params: [courseId, BigInt(sectionId)],
-      });
-
-      sendTransaction(tx, {
-        onSuccess: () => {
-          toast.success("Section completed! 🎉");
-          setTimeout(() => {
-            refetchCompletions();
-            setRefreshTrigger((prev) => prev + 1);
-          }, 2000);
-        },
-        onError: (error) => {
-          toast.error("Failed to complete section");
-          console.error(error);
-        },
-      });
-    } catch (error) {
-      toast.error("Failed to prepare transaction");
-      console.error(error);
-    }
-  };
-
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case "Beginner":
-        return "bg-green-100 text-green-800 border-green-200";
+        return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20";
       case "Intermediate":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+        return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20";
       case "Advanced":
-        return "bg-red-100 text-red-800 border-red-200";
+        return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20";
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
+        return "bg-muted text-muted-foreground border-border";
     }
   };
 
@@ -364,14 +281,14 @@ function CourseDetailsContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 flex items-center justify-center p-6">
-        <div className="w-full max-w-7xl animate-pulse space-y-8">
-          <div className="space-y-4">
-            <div className="h-8 bg-gray-200 rounded w-3/4"></div>
-            <div className="h-4 bg-gray-200 rounded w-full"></div>
-            <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-5xl animate-pulse space-y-6">
+          <div className="space-y-3">
+            <div className="h-8 bg-muted rounded w-3/4"></div>
+            <div className="h-4 bg-muted rounded w-full"></div>
+            <div className="h-4 bg-muted rounded w-2/3"></div>
           </div>
-          <div className="h-64 bg-gray-200 rounded-lg"></div>
+          <div className="h-48 bg-muted rounded-xl"></div>
         </div>
       </div>
     );
@@ -379,7 +296,7 @@ function CourseDetailsContent() {
 
   if (error || !courseData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <ContentContainer>
           <Alert variant="destructive" className="max-w-2xl mx-auto">
             <AlertCircle className="h-5 w-5" />
@@ -402,13 +319,13 @@ function CourseDetailsContent() {
   const isCourseCompleted = enrollmentData?.isCompleted || false;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20">
+    <div className="min-h-screen bg-background">
       <ContentContainer>
-        <div className="max-w-7xl mx-auto space-y-8 py-8">
-          {/* Header */}
+        <div className="max-w-5xl mx-auto space-y-6 py-6">
           <div className="flex items-center justify-between">
             <Button
               variant="ghost"
+              size="sm"
               onClick={() => router.back()}
               className="gap-2"
             >
@@ -416,15 +333,14 @@ function CourseDetailsContent() {
               Back
             </Button>
             <Badge variant="outline" className="gap-2">
-              <BookOpen className="h-4 w-4" />
-              Course ID: {courseId.toString()}
+              <BookOpen className="h-3 w-3" />
+              Course #{courseId.toString()}
             </Badge>
           </div>
 
-          {/* Wallet Alert */}
           {!address && (
             <Alert>
-              <Wallet className="h-5 w-5" />
+              <Wallet className="h-4 w-4" />
               <AlertTitle>Connect Wallet</AlertTitle>
               <AlertDescription>
                 Connect your wallet to enroll and track progress.
@@ -432,15 +348,15 @@ function CourseDetailsContent() {
             </Alert>
           )}
 
-          {/* Enrollment Status */}
           {address && !isEnrolled && (
             <Alert>
-              <AlertCircle className="h-5 w-5" />
+              <AlertCircle className="h-4 w-4" />
               <AlertTitle>Not Enrolled</AlertTitle>
               <AlertDescription>
                 You need to purchase this course to access the content.
                 <Button
-                  className="mt-4"
+                  size="sm"
+                  className="mt-3"
                   onClick={() => router.push(`/explore?courseId=${courseId}`)}
                 >
                   Enroll Now
@@ -451,13 +367,14 @@ function CourseDetailsContent() {
 
           {isExpired && (
             <Alert variant="destructive">
-              <AlertCircle className="h-5 w-5" />
+              <AlertCircle className="h-4 w-4" />
               <AlertTitle>License Expired</AlertTitle>
               <AlertDescription>
                 Your license has expired. Renew to continue learning.
                 <Button
                   variant="outline"
-                  className="mt-4"
+                  size="sm"
+                  className="mt-3"
                   onClick={() => router.push(`/learning`)}
                 >
                   Renew License
@@ -466,42 +383,39 @@ function CourseDetailsContent() {
             </Alert>
           )}
 
-          {/* Course Header */}
-          <Card className="border-2">
+          <Card>
             <CardContent className="p-6">
-              <div className="grid md:grid-cols-[1fr,300px] gap-8">
+              <div className="grid lg:grid-cols-[1fr_240px] gap-6">
                 <div className="space-y-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h1 className="text-3xl font-bold mb-2">
-                        {courseData.title}
-                      </h1>
-                      <p className="text-muted-foreground text-lg">
-                        {courseData.description}
-                      </p>
-                    </div>
+                  <div>
+                    <h1 className="text-2xl font-bold tracking-tight mb-2">
+                      {courseData.title}
+                    </h1>
+                    <p className="text-muted-foreground leading-relaxed">
+                      {courseData.description}
+                    </p>
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
-                    <Badge variant="outline" className="gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="gap-1.5">
                       <User className="h-3 w-3" />
                       {courseData.creatorName}
                     </Badge>
-                    <Badge variant="outline" className="gap-2">
+                    <Badge variant="outline" className="gap-1.5">
                       <Globe className="h-3 w-3" />
                       {courseData.category}
                     </Badge>
                     <Badge
                       variant="outline"
-                      className={`gap-2 ${getDifficultyColor(
+                      className={`gap-1.5 ${getDifficultyColor(
                         courseData.difficulty
                       )}`}
                     >
                       <Shield className="h-3 w-3" />
                       {courseData.difficulty}
                     </Badge>
-                    <Badge variant="outline" className="gap-2">
-                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                    <Badge variant="outline" className="gap-1.5">
+                      <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
                       {parseFloat(courseData.averageRating).toFixed(1)} (
                       {courseData.totalRatings})
                     </Badge>
@@ -509,33 +423,33 @@ function CourseDetailsContent() {
 
                   <Separator />
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                      <div className="text-2xl font-bold">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="text-center p-3 bg-muted/50 rounded-lg">
+                      <div className="text-xl font-bold">
                         {courseData.sections.length}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         Sections
                       </div>
                     </div>
-                    <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                      <div className="text-2xl font-bold">
+                    <div className="text-center p-3 bg-muted/50 rounded-lg">
+                      <div className="text-xl font-bold">
                         {courseData.totalEnrollments}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         Students
                       </div>
                     </div>
-                    <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                      <div className="text-2xl font-bold">
+                    <div className="text-center p-3 bg-muted/50 rounded-lg">
+                      <div className="text-xl font-bold">
                         {parseFloat(courseData.completionRate).toFixed(0)}%
                       </div>
                       <div className="text-xs text-muted-foreground">
                         Completion
                       </div>
                     </div>
-                    <div className="text-center p-3 bg-secondary/50 rounded-lg">
-                      <div className="text-2xl font-bold">
+                    <div className="text-center p-3 bg-muted/50 rounded-lg">
+                      <div className="text-xl font-bold">
                         {courseData.priceInEth} ETH
                       </div>
                       <div className="text-xs text-muted-foreground">Price</div>
@@ -544,13 +458,13 @@ function CourseDetailsContent() {
                 </div>
 
                 {courseData.thumbnailCID && (
-                  <div className="relative aspect-video rounded-lg overflow-hidden border-2">
+                  <div className="relative aspect-video lg:aspect-[4/3] rounded-lg overflow-hidden border">
                     <ThumbnailImage
                       cid={courseData.thumbnailCID}
                       alt={courseData.title}
                       fallback={
-                        <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                          <BookOpen className="h-12 w-12 text-white/70" />
+                        <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                          <BookOpen className="h-10 w-10 text-muted-foreground" />
                         </div>
                       }
                       className="object-cover"
@@ -561,11 +475,10 @@ function CourseDetailsContent() {
             </CardContent>
           </Card>
 
-          {/* Progress Card */}
           {isEnrolled && isLicenseActive && (
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <Trophy className="h-5 w-5 text-yellow-500" />
                   Your Progress
                 </CardTitle>
@@ -580,19 +493,19 @@ function CourseDetailsContent() {
                       {completedSectionsCount} / {courseData.sections.length}
                     </span>
                   </div>
-                  <Progress value={progressPercentage} className="h-3" />
+                  <Progress value={progressPercentage} className="h-2" />
                   <p className="text-xs text-muted-foreground text-right">
                     {progressPercentage.toFixed(1)}% Complete
                   </p>
                 </div>
 
                 {isCourseCompleted && (
-                  <Alert className="bg-green-50 border-green-200">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    <AlertTitle className="text-green-800">
+                  <Alert className="border-green-500/20 bg-green-500/10">
+                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <AlertTitle className="text-green-700 dark:text-green-400">
                       Course Completed!
                     </AlertTitle>
-                    <AlertDescription className="text-green-700">
+                    <AlertDescription className="text-green-600/90 dark:text-green-400/90">
                       Congratulations! You can now add this to your certificate.
                       <Button
                         variant="outline"
@@ -610,16 +523,15 @@ function CourseDetailsContent() {
             </Card>
           )}
 
-          {/* Sections */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
                 <Video className="h-5 w-5" />
                 Course Content
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {sectionsWithStatus.map((section, index) => {
                   const isLocked = section.status === "locked";
                   const isCompleted = section.status === "completed";
@@ -629,39 +541,39 @@ function CourseDetailsContent() {
                   return (
                     <div
                       key={section.id}
-                      className={`p-4 rounded-lg border-2 transition-all ${
+                      className={`p-4 rounded-lg border transition-colors ${
                         isCompleted
-                          ? "bg-green-50 border-green-200"
+                          ? "bg-green-500/5 border-green-500/20"
                           : isLocked
-                          ? "bg-gray-50 border-gray-200 opacity-60"
-                          : "bg-white border-primary/20 hover:border-primary/40"
+                          ? "bg-muted/30 border-border opacity-60"
+                          : "bg-card border-border hover:border-primary/40"
                       }`}
                     >
                       <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-4 flex-1">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
                           <div
-                            className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                            className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold ${
                               isCompleted
                                 ? "bg-green-500 text-white"
                                 : isLocked
-                                ? "bg-gray-300 text-gray-500"
+                                ? "bg-muted text-muted-foreground"
                                 : "bg-primary/10 text-primary"
                             }`}
                           >
                             {isCompleted ? (
-                              <Check className="h-5 w-5" />
+                              <Check className="h-4 w-4" />
                             ) : isLocked ? (
-                              <Lock className="h-5 w-5" />
+                              <Lock className="h-4 w-4" />
                             ) : (
-                              <span className="font-semibold">{index + 1}</span>
+                              <span>{index + 1}</span>
                             )}
                           </div>
 
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-base truncate">
+                            <h3 className="font-semibold text-sm truncate">
                               {section.title}
                             </h3>
-                            <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                               <span className="flex items-center gap-1">
                                 <Timer className="h-3 w-3" />
                                 {formatDuration(section.duration)}
@@ -674,11 +586,11 @@ function CourseDetailsContent() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           {isCompleted && (
                             <Badge
                               variant="outline"
-                              className="bg-green-50 text-green-700 border-green-200"
+                              className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
                             >
                               Completed
                             </Badge>
@@ -687,7 +599,7 @@ function CourseDetailsContent() {
                           {isLocked && (
                             <Badge
                               variant="outline"
-                              className="bg-gray-50 text-gray-500"
+                              className="bg-muted text-muted-foreground"
                             >
                               Locked
                             </Badge>
@@ -695,6 +607,12 @@ function CourseDetailsContent() {
 
                           {canStart && !isCompleted && (
                             <>
+                              <Badge
+                                variant="outline"
+                                className="bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
+                              >
+                                Ongoing
+                              </Badge>
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -706,27 +624,6 @@ function CourseDetailsContent() {
                               >
                                 <Eye className="mr-2 h-4 w-4" />
                                 Watch
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleStartSection(section.sectionId)
-                                }
-                                disabled={isSending}
-                              >
-                                <PlayCircle className="mr-2 h-4 w-4" />
-                                Start
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  handleCompleteSection(section.sectionId)
-                                }
-                                disabled={isSending}
-                              >
-                                <Check className="mr-2 h-4 w-4" />
-                                Complete
                               </Button>
                             </>
                           )}
@@ -754,20 +651,19 @@ function CourseDetailsContent() {
             </CardContent>
           </Card>
 
-          {/* Contract Addresses */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
                 <Shield className="h-5 w-5" />
                 Smart Contracts
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3">
+              <div className="grid gap-2">
                 {Object.entries(contractAddresses).map(([name, address]) => (
                   <div
                     key={name}
-                    className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-2 rounded-full bg-green-500" />
@@ -803,7 +699,7 @@ function CourseDetailsContent() {
 
 function CourseDetailsLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center space-y-4">
         <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary" />
         <p className="text-muted-foreground">Loading course details...</p>

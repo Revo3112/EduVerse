@@ -330,23 +330,23 @@ export function transformActivityToTransaction(
   activity: ActivityEventData
 ): BlockchainTransactionEvent {
   return {
-    hash: activity.transactionHash,
+    hash: `${activity.id}-${activity.transactionHash}-${activity.timestamp}`,
     blockNumber: activity.blockNumber,
     timestamp: activity.timestamp,
     from: activity.user.address,
-    to: "", // Not available in ActivityEvent
-    value: "0", // Not tracked in ActivityEvent
-    gasUsed: "0", // Not tracked in ActivityEvent
-    gasPrice: "0", // Not tracked in ActivityEvent
+    to: "",
+    value: "0",
+    gasUsed: "0",
+    gasPrice: "0",
     eventType: activity.type,
     eventData: {
       description: activity.description,
-      metadata: activity.metadata ?? undefined, // Convert null to undefined
+      metadata: activity.metadata ?? undefined,
       course: activity.course ?? undefined,
       enrollment: activity.enrollment ?? undefined,
       certificate: activity.certificate ?? undefined,
     },
-    status: "success", // Activities are only stored for successful transactions
+    status: "success",
   };
 }
 

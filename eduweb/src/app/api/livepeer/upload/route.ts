@@ -47,11 +47,40 @@ export async function POST(request: NextRequest) {
     console.log(`[API Upload] Requesting upload URL for: ${name}`);
     console.log(`[API Upload] IPFS enabled: ${enableIPFS}`);
 
-    // Request upload URL from Livepeer with IPFS if requested
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createPayload: any = {
       name,
       staticMp4,
+      profiles: [
+        {
+          name: "360p",
+          bitrate: 800000,
+          fps: 30,
+          width: 640,
+          height: 360,
+        },
+        {
+          name: "480p",
+          bitrate: 1400000,
+          fps: 30,
+          width: 854,
+          height: 480,
+        },
+        {
+          name: "720p",
+          bitrate: 2800000,
+          fps: 30,
+          width: 1280,
+          height: 720,
+        },
+        {
+          name: "1080p",
+          bitrate: 5000000,
+          fps: 30,
+          width: 1920,
+          height: 1080,
+        },
+      ],
     };
 
     if (enableIPFS) {
@@ -72,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[API Upload] Upload URL requested successfully`);
     console.log(`  - Asset ID: ${data.asset.id}`);
-    console.log(`  - Playback ID: ${data.asset.playbackId || 'pending'}`);
+    console.log(`  - Playback ID: ${data.asset.playbackId || "pending"}`);
 
     // Return upload URLs and asset info to client
     return NextResponse.json({
@@ -84,9 +113,11 @@ export async function POST(request: NextRequest) {
         playbackId: data.asset.playbackId,
         name: data.asset.name,
       },
-      task: data.task ? {
-        id: data.task.id,
-      } : undefined,
+      task: data.task
+        ? {
+            id: data.task.id,
+          }
+        : undefined,
     });
   } catch (error) {
     console.error("[API Upload] Failed to request upload URL:", error);

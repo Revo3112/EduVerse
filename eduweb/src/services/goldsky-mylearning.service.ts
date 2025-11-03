@@ -26,7 +26,7 @@ import {
   type GetUserCertificatesVariables,
   type GetUserStatsVariables,
 } from "@/graphql/goldsky-mycourse.queries";
-import { normalizeAddress, debugAddress } from "@/lib/address-helper";
+import { normalizeAddress } from "@/lib/address-helper";
 
 // ============================================================================
 // CONFIGURATION
@@ -146,9 +146,6 @@ async function executeWithRetry<T>(
     return await operation();
   } catch (error: unknown) {
     if (retries > 0) {
-      console.warn(
-        `Goldsky request failed, retrying... (${retries} attempts left)`
-      );
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
       return executeWithRetry(operation, retries - 1);
     }
@@ -619,8 +616,6 @@ export async function getMyCourses(studentAddress: string): Promise<{
 
   const normalizedAddress = normalizeAddress(studentAddress);
 
-  debugAddress("getMyCourses input", studentAddress);
-
   const cacheKey = `my-courses-${normalizedAddress}`;
   const cached = getCachedData<{
     enrollments: EnrollmentData[];
@@ -637,40 +632,12 @@ export async function getMyCourses(studentAddress: string): Promise<{
       studentAddress: normalizedAddress,
     };
 
-    console.log("[Goldsky Debug] Querying address:", normalizedAddress);
-    console.log("[Goldsky Debug] Variables:", JSON.stringify(variables));
-
     const data = await executeWithRetry(async () => {
       return await client.request<MyCoursesResponse>(
         GET_MY_COURSES_QUERY,
         variables
       );
     });
-
-    console.log(
-      "[Goldsky Debug] Response enrollments count:",
-      data.enrollments?.length || 0
-    );
-
-    if (data.enrollments && data.enrollments.length > 0) {
-      console.log(
-        "[Goldsky Debug] Found enrollments for address:",
-        normalizedAddress
-      );
-      console.log(
-        "[Goldsky Debug] Enrollment IDs:",
-        data.enrollments.map((e) => e.id).join(", ")
-      );
-    } else {
-      console.log(
-        "[Goldsky Debug] No enrollments found for address:",
-        normalizedAddress
-      );
-      console.log(
-        "[Goldsky Debug] This could mean:",
-        "1) No courses enrolled yet, 2) Address mismatch, 3) Subgraph not fully synced"
-      );
-    }
 
     const result = {
       enrollments: (data.enrollments || []).map(transformEnrollment),
@@ -681,13 +648,7 @@ export async function getMyCourses(studentAddress: string): Promise<{
     setCachedData(cacheKey, result);
 
     return result;
-  } catch (error) {
-    console.error(
-      "[Goldsky Debug] getMyCourses error for address:",
-      normalizedAddress
-    );
-    console.error("[Goldsky Debug] Error details:", error);
-
+  } catch {
     return {
       enrollments: [],
       userStats: transformUserStats(null),
@@ -730,8 +691,7 @@ export async function getEnrollmentDetail(
     setCachedData(cacheKey, result);
 
     return result;
-  } catch (error) {
-    console.error("getEnrollmentDetail error:", error);
+  } catch {
     return null;
   }
 }
@@ -790,8 +750,7 @@ export async function checkEnrollmentStatus(
     setCachedData(cacheKey, result);
 
     return result;
-  } catch (error) {
-    console.error("checkEnrollmentStatus error:", error);
+  } catch {
     return { isEnrolled: false, enrollment: null };
   }
 }
@@ -831,8 +790,7 @@ export async function getUserCertificates(
     setCachedData(cacheKey, result);
 
     return result;
-  } catch (error) {
-    console.error("getUserCertificates error:", error);
+  } catch {
     return [];
   }
 }
@@ -872,8 +830,7 @@ export async function getUserStats(
     setCachedData(cacheKey, result);
 
     return result;
-  } catch (error) {
-    console.error("getUserStats error:", error);
+  } catch {
     return transformUserStats(null);
   }
 }

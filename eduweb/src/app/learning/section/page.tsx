@@ -42,7 +42,6 @@ interface CourseSection {
   sectionId: string;
   title: string;
   contentCID: string;
-  description: string;
   duration: string;
   orderId: string;
   createdAt: string;
@@ -211,43 +210,17 @@ function SectionLearningContent() {
   const go = (orderId: string) =>
     router.push(`/learning/section?courseId=${courseId}&sectionId=${orderId}`);
 
-  const handleStartSection = async () => {
-    if (!studentAddress) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-    if (isSending) return;
-
-    try {
-      const transaction = prepareContractCall({
-        contract: progressTracker,
-        method: "function startSection(uint256 courseId, uint256 sectionId)",
-        params: [BigInt(courseId), BigInt(sectionId)],
-      });
-
-      sendTransaction(transaction, {
-        onSuccess: () => {
-          toast.success("Section started successfully");
-          refetchProgress();
-          setRefreshTrigger((t) => t + 1);
-        },
-        onError: (error) => {
-          console.error("[Start Section] Error:", error);
-          toast.error("Failed to start section");
-        },
-      });
-    } catch (error) {
-      console.error("[Start Section] Error:", error);
-      toast.error("Failed to prepare transaction");
-    }
-  };
-
   const handleCompleteSection = async () => {
     if (!studentAddress) {
       toast.error("Please connect your wallet");
       return;
     }
     if (isSending) return;
+
+    if (sectionProgress?.completed) {
+      toast.info("Section already completed");
+      return;
+    }
 
     try {
       const transaction = prepareContractCall({
@@ -273,6 +246,11 @@ function SectionLearningContent() {
     }
   };
 
+  const canNavigateToNext = useMemo(() => {
+    if (!nav.next) return false;
+    return sectionProgress?.completed || false;
+  }, [nav.next, sectionProgress?.completed]);
+
   const enrichedSection: EnrichedCourseSection | null = useMemo(() => {
     if (!section) return null;
     return {
@@ -281,7 +259,7 @@ function SectionLearningContent() {
       contentCID: section.contentCID,
       orderId: BigInt(section.orderId),
       title: section.title,
-      description: section.description || "",
+      description: course?.description || "",
       duration: BigInt(section.duration || "0"),
       videoMetadata: {
         thumbnailCID: "",
@@ -291,7 +269,7 @@ function SectionLearningContent() {
         estimatedSize: 0,
       },
     } as EnrichedCourseSection;
-  }, [section, courseId]);
+  }, [section, courseId, course?.description]);
 
   if (loading) {
     return (
@@ -362,64 +340,41 @@ function SectionLearningContent() {
                 section={enrichedSection}
                 progress={sectionProgress}
                 onProgressUpdate={() => {}}
+                onComplete={() => {}}
               />
             )}
             <div className="bg-card rounded-xl shadow-sm border p-6 mt-6">
-              <div className="flex items-center gap-3 mb-4">
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <BookOpen className="h-3 w-3" /> Section{" "}
-                  {parseInt(section.orderId, 10) + 1}
-                </Badge>
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" /> {fmtDuration(section.duration)}
-                </Badge>
-                {sectionProgress?.completed && (
-                  <Badge className="bg-green-100 text-green-800 border-green-200">
-                    <CheckCircle className="h-3 w-3 mr-1" /> Completed
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <BookOpen className="h-3 w-3" /> Section{" "}
+                    {parseInt(section.orderId, 10) + 1}
                   </Badge>
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />{" "}
+                    {fmtDuration(section.duration)}
+                  </Badge>
+                  {sectionProgress?.completed && (
+                    <Badge className="bg-green-100 text-green-800 border-green-200">
+                      <CheckCircle className="h-3 w-3 mr-1" /> Completed
+                    </Badge>
+                  )}
+                </div>
+                {!sectionProgress?.completed && (
+                  <Button
+                    onClick={handleCompleteSection}
+                    disabled={isSending}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {isSending ? "Processing..." : "Finish Section"}
+                  </Button>
                 )}
               </div>
               <h1 className="text-3xl font-bold mb-4">{section.title}</h1>
               <p className="text-muted-foreground leading-relaxed mb-6">
-                {section.description || "No description available."}
+                {course?.description || "No description available."}
               </p>
-              <div className="flex gap-3">
-                {!sectionProgress?.completed && (
-                  <>
-                    <Button
-                      onClick={handleStartSection}
-                      disabled={isSending}
-                      variant="outline"
-                    >
-                      {isSending ? (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />{" "}
-                          Processing…
-                        </>
-                      ) : (
-                        "Mark as Started"
-                      )}
-                    </Button>
-                    <Button
-                      onClick={handleCompleteSection}
-                      disabled={isSending}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      {isSending ? (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />{" "}
-                          Processing…
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="h-4 w-4 mr-2" /> Complete
-                          Section
-                        </>
-                      )}
-                    </Button>
-                  </>
-                )}
-              </div>
             </div>
             <div className="bg-gradient-to-r from-primary/5 to-purple/5 rounded-lg p-6 mt-6 border border-primary/20">
               <div className="flex items-center justify-center mb-4">
@@ -449,14 +404,27 @@ function SectionLearningContent() {
                   </div>
                 </Button>
                 <Button
-                  onClick={() => nav.next && go(nav.next.orderId)}
+                  onClick={() => {
+                    if (canNavigateToNext) {
+                      if (nav.next) {
+                        go(nav.next.orderId);
+                      }
+                    } else {
+                      toast.warning(
+                        "Please finish this section before continuing"
+                      );
+                    }
+                  }}
                   disabled={!nav.next}
                   variant="outline"
                   className="h-auto p-4 flex items-center gap-3 justify-end hover:bg-background/80 hover:border-primary/40 disabled:opacity-50"
                 >
                   <div className="min-w-0 flex-1 text-right">
                     <div className="text-xs text-muted-foreground mb-1">
-                      Next
+                      Next{" "}
+                      {!canNavigateToNext &&
+                        nav.next &&
+                        "(Complete section first)"}
                     </div>
                     <div className="text-sm font-medium truncate">
                       {nav.next?.title || "No next section"}
@@ -483,6 +451,17 @@ function SectionLearningContent() {
                   <div className="text-sm text-muted-foreground">
                     {completedCount} of {course.sectionsCount} sections
                   </div>
+                  {!sectionProgress?.completed && (
+                    <Button
+                      onClick={handleCompleteSection}
+                      disabled={isSending}
+                      className="w-full mt-4 bg-green-600 hover:bg-green-700"
+                      size="sm"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Finish Section
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

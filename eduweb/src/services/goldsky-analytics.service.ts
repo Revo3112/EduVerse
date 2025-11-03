@@ -10,6 +10,19 @@
  */
 
 import { fetchGraphQL } from "./goldsky.service";
+import { request } from "graphql-request";
+import {
+  ANALYTICS_NETWORK_STATS,
+  ANALYTICS_PLATFORM_STATS,
+} from "@/graphql/goldsky-analytics.queries";
+
+const GOLDSKY_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
+
+if (!GOLDSKY_ENDPOINT) {
+  console.error(
+    "[Goldsky Analytics] NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT not configured"
+  );
+}
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -136,18 +149,69 @@ export interface ActivityEventData {
 /**
  * Comprehensive analytics combining all data sources
  */
-export interface ComprehensiveAnalytics {
+interface ComprehensiveAnalytics {
   platform: PlatformAnalyticsData;
   courses: CourseAnalyticsData;
   users: UserAnalyticsData;
   progress: ProgressAnalyticsData;
   licenses: LicenseAnalyticsData;
   certificates: CertificateAnalyticsData;
+  network: {
+    totalTransactions: number;
+    totalCourseCreations: number;
+    totalLicenseMints: number;
+    totalCertificateMints: number;
+    totalProgressUpdates: number;
+    courseFactoryInteractions: number;
+    courseLicenseInteractions: number;
+    progressTrackerInteractions: number;
+    certificateManagerInteractions: number;
+    averageBlockTime: number;
+  };
 }
+
+export type { ComprehensiveAnalytics };
 
 // ============================================================================
 // GRAPHQL RESPONSE TYPES
 // ============================================================================
+
+interface NetworkStatsData {
+  id: string;
+  totalTransactions: string;
+  totalCourseCreations: string;
+  totalLicenseMints: string;
+  totalCertificateMints: string;
+  totalProgressUpdates: string;
+  courseFactoryInteractions: string;
+  courseLicenseInteractions: string;
+  progressTrackerInteractions: string;
+  certificateManagerInteractions: string;
+  lastBlockNumber: string;
+  lastBlockTimestamp: string;
+  averageBlockTime: string;
+}
+
+interface PlatformStatsData {
+  id: string;
+  totalUsers: string;
+  totalCourses: string;
+  totalEnrollments: string;
+  totalCertificates: string;
+  totalRevenue: string;
+  totalRevenueEth: string;
+  platformFees: string;
+  platformFeesEth: string;
+  creatorRevenue: string;
+  creatorRevenueEth: string;
+  averageCoursePrice: string;
+  averageCompletionRate: string;
+  averageRating: string;
+  dailyActiveUsers: string;
+  monthlyActiveUsers: string;
+  lastUpdateTimestamp: string;
+  lastUpdateBlock: string;
+}
 
 interface GraphQLCourse {
   id: string;
@@ -575,6 +639,18 @@ export async function getCourseAnalytics(): Promise<CourseAnalyticsData> {
  * Aggregates UserProfile data
  */
 export async function getUserAnalytics(): Promise<UserAnalyticsData> {
+  if (!GOLDSKY_ENDPOINT) {
+    return {
+      uniqueAddresses: 0,
+      activeStudents: 0,
+      activeCreators: 0,
+      blacklistedUsers: 0,
+      studentsWithEnrollments: 0,
+      studentsWithCompletions: 0,
+      creatorsWithRevenue: 0,
+    };
+  }
+
   const query = `
     query GetUserAnalytics {
       userProfiles(first: 1000) {
@@ -589,7 +665,10 @@ export async function getUserAnalytics(): Promise<UserAnalyticsData> {
   `;
 
   try {
-    const data = await fetchGraphQL(query, {}, "getUserAnalytics");
+    const data = await request<{ userProfiles: GraphQLUserProfile[] }>(
+      GOLDSKY_ENDPOINT,
+      query
+    );
     const users: GraphQLUserProfile[] = data.userProfiles || [];
 
     const uniqueAddresses = new Set(users.map((u: GraphQLUserProfile) => u.id))
@@ -645,6 +724,17 @@ export async function getUserAnalytics(): Promise<UserAnalyticsData> {
  * Aggregates data from UserProfile and CourseSection
  */
 export async function getProgressAnalytics(): Promise<ProgressAnalyticsData> {
+  if (!GOLDSKY_ENDPOINT) {
+    return {
+      totalSectionsCompleted: 0,
+      totalCoursesCompleted: 0,
+      uniqueStudentsWithProgress: 0,
+      averageCompletionPercentage: "0",
+      totalSectionsStarted: 0,
+      averageDropoffRate: "0",
+    };
+  }
+
   const query = `
     query GetProgressAnalytics {
       userProfiles(first: 1000) {
@@ -662,7 +752,10 @@ export async function getProgressAnalytics(): Promise<ProgressAnalyticsData> {
   `;
 
   try {
-    const data = await fetchGraphQL(query, {}, "getProgressAnalytics");
+    const data = await request<{
+      userProfiles: GraphQLUserProfile[];
+      courseSections: GraphQLCourseSection[];
+    }>(GOLDSKY_ENDPOINT, query);
     const users: GraphQLUserProfile[] = data.userProfiles || [];
     const sections: GraphQLCourseSection[] = data.courseSections || [];
 
@@ -738,21 +831,36 @@ export async function getProgressAnalytics(): Promise<ProgressAnalyticsData> {
  * Aggregates data from Enrollment entities
  */
 export async function getLicenseAnalytics(): Promise<LicenseAnalyticsData> {
+  if (!GOLDSKY_ENDPOINT) {
+    return {
+      totalLicensesMinted: 0,
+      totalLicensesRenewed: 0,
+      activeLicenses: 0,
+      expiredLicenses: 0,
+      totalLicenseRevenue: "0",
+      totalLicenseRevenueEth: "0",
+      averageLicensePrice: "0",
+      averageRenewalCount: "0",
+    };
+  }
+
   const query = `
     query GetLicenseAnalytics {
       enrollments(first: 1000) {
         id
         isActive
         totalRenewals
-        totalSpent
-        totalSpentEth
-        licenseExpiry
+        pricePaid
+        pricePaidEth
       }
     }
   `;
 
   try {
-    const data = await fetchGraphQL(query, {}, "getLicenseAnalytics");
+    const data = await request<{ enrollments: GraphQLEnrollment[] }>(
+      GOLDSKY_ENDPOINT,
+      query
+    );
     const enrollments: GraphQLEnrollment[] = data.enrollments || [];
 
     const totalLicensesMinted = enrollments.length;
@@ -825,6 +933,17 @@ export async function getLicenseAnalytics(): Promise<LicenseAnalyticsData> {
  * Aggregates data from Certificate and CertificateCourse entities
  */
 export async function getCertificateAnalytics(): Promise<CertificateAnalyticsData> {
+  if (!GOLDSKY_ENDPOINT) {
+    return {
+      totalCertificateHolders: 0,
+      totalCoursesInCertificates: 0,
+      certificateUpdates: 0,
+      totalCertificateRevenue: "0",
+      totalCertificateRevenueEth: "0",
+      averageCoursesPerCertificate: "0",
+    };
+  }
+
   const query = `
     query GetCertificateAnalytics {
       certificates(first: 1000) {
@@ -832,6 +951,7 @@ export async function getCertificateAnalytics(): Promise<CertificateAnalyticsDat
         totalCourses
         totalRevenue
         totalRevenueEth
+        lastUpdated
       }
       certificateCourses(first: 1000) {
         id
@@ -840,7 +960,10 @@ export async function getCertificateAnalytics(): Promise<CertificateAnalyticsDat
   `;
 
   try {
-    const data = await fetchGraphQL(query, {}, "getCertificateAnalytics");
+    const data = await request<{
+      certificates: GraphQLCertificate[];
+      certificateCourses: Array<{ id: string }>;
+    }>(GOLDSKY_ENDPOINT, query);
     const certificates: GraphQLCertificate[] = data.certificates || [];
     const certificateCourses: Array<{ id: string }> =
       data.certificateCourses || [];
@@ -981,17 +1104,194 @@ export async function getRecentActivities(
  * Get all analytics in one call
  * Combines data from all analytics functions
  */
+async function getNetworkStats(): Promise<{
+  totalTransactions: number;
+  totalCourseCreations: number;
+  totalLicenseMints: number;
+  totalCertificateMints: number;
+  totalProgressUpdates: number;
+  courseFactoryInteractions: number;
+  courseLicenseInteractions: number;
+  progressTrackerInteractions: number;
+  certificateManagerInteractions: number;
+  averageBlockTime: number;
+}> {
+  if (!GOLDSKY_ENDPOINT) {
+    console.error(
+      "[Goldsky Analytics] Cannot fetch network stats: Endpoint not configured. Please set NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT in .env.local"
+    );
+    return {
+      totalTransactions: 0,
+      totalCourseCreations: 0,
+      totalLicenseMints: 0,
+      totalCertificateMints: 0,
+      totalProgressUpdates: 0,
+      courseFactoryInteractions: 0,
+      courseLicenseInteractions: 0,
+      progressTrackerInteractions: 0,
+      certificateManagerInteractions: 0,
+      averageBlockTime: 2.1,
+    };
+  }
+
+  try {
+    const data = await request<{ networkStats: NetworkStatsData | null }>(
+      GOLDSKY_ENDPOINT,
+      ANALYTICS_NETWORK_STATS
+    );
+
+    const stats = data.networkStats;
+
+    if (!stats) {
+      return {
+        totalTransactions: 0,
+        totalCourseCreations: 0,
+        totalLicenseMints: 0,
+        totalCertificateMints: 0,
+        totalProgressUpdates: 0,
+        courseFactoryInteractions: 0,
+        courseLicenseInteractions: 0,
+        progressTrackerInteractions: 0,
+        certificateManagerInteractions: 0,
+        averageBlockTime: 2.1,
+      };
+    }
+
+    return {
+      totalTransactions: parseInt(stats.totalTransactions),
+      totalCourseCreations: parseInt(stats.totalCourseCreations),
+      totalLicenseMints: parseInt(stats.totalLicenseMints),
+      totalCertificateMints: parseInt(stats.totalCertificateMints),
+      totalProgressUpdates: parseInt(stats.totalProgressUpdates),
+      courseFactoryInteractions: parseInt(stats.courseFactoryInteractions),
+      courseLicenseInteractions: parseInt(stats.courseLicenseInteractions),
+      progressTrackerInteractions: parseInt(stats.progressTrackerInteractions),
+      certificateManagerInteractions: parseInt(
+        stats.certificateManagerInteractions
+      ),
+      averageBlockTime: parseFloat(stats.averageBlockTime),
+    };
+  } catch (error) {
+    console.error("[Goldsky Analytics] getNetworkStats failed:", error);
+    return {
+      totalTransactions: 0,
+      totalCourseCreations: 0,
+      totalLicenseMints: 0,
+      totalCertificateMints: 0,
+      totalProgressUpdates: 0,
+      courseFactoryInteractions: 0,
+      courseLicenseInteractions: 0,
+      progressTrackerInteractions: 0,
+      certificateManagerInteractions: 0,
+      averageBlockTime: 2.1,
+    };
+  }
+}
+
+async function getPlatformStatsFromSubgraph(): Promise<{
+  totalUsers: number;
+  totalCourses: number;
+  totalEnrollments: number;
+  totalCertificates: number;
+  totalRevenueEth: string;
+  platformFeesEth: string;
+  creatorRevenueEth: string;
+  averageCoursePrice: string;
+  averageCompletionRate: string;
+  averageRating: string;
+}> {
+  if (!GOLDSKY_ENDPOINT) {
+    console.error(
+      "[Goldsky Analytics] Cannot fetch platform stats: Endpoint not configured. Please set NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT in .env.local"
+    );
+    return {
+      totalUsers: 0,
+      totalCourses: 0,
+      totalEnrollments: 0,
+      totalCertificates: 0,
+      totalRevenueEth: "0",
+      platformFeesEth: "0",
+      creatorRevenueEth: "0",
+      averageCoursePrice: "0",
+      averageCompletionRate: "0",
+      averageRating: "0",
+    };
+  }
+
+  try {
+    const data = await request<{ platformStats: PlatformStatsData | null }>(
+      GOLDSKY_ENDPOINT,
+      ANALYTICS_PLATFORM_STATS
+    );
+
+    const stats = data.platformStats;
+
+    if (!stats) {
+      return {
+        totalUsers: 0,
+        totalCourses: 0,
+        totalEnrollments: 0,
+        totalCertificates: 0,
+        totalRevenueEth: "0",
+        platformFeesEth: "0",
+        creatorRevenueEth: "0",
+        averageCoursePrice: "0",
+        averageCompletionRate: "0",
+        averageRating: "0",
+      };
+    }
+
+    return {
+      totalUsers: parseInt(stats.totalUsers),
+      totalCourses: parseInt(stats.totalCourses),
+      totalEnrollments: parseInt(stats.totalEnrollments),
+      totalCertificates: parseInt(stats.totalCertificates),
+      totalRevenueEth: stats.totalRevenueEth,
+      platformFeesEth: stats.platformFeesEth,
+      creatorRevenueEth: stats.creatorRevenueEth,
+      averageCoursePrice: stats.averageCoursePrice,
+      averageCompletionRate: stats.averageCompletionRate,
+      averageRating: stats.averageRating,
+    };
+  } catch (error) {
+    console.error(
+      "[Goldsky Analytics] getPlatformStatsFromSubgraph failed:",
+      error
+    );
+    return {
+      totalUsers: 0,
+      totalCourses: 0,
+      totalEnrollments: 0,
+      totalCertificates: 0,
+      totalRevenueEth: "0",
+      platformFeesEth: "0",
+      creatorRevenueEth: "0",
+      averageCoursePrice: "0",
+      averageCompletionRate: "0",
+      averageRating: "0",
+    };
+  }
+}
+
 export async function getComprehensiveAnalytics(): Promise<ComprehensiveAnalytics> {
   try {
-    const [platform, courses, users, progress, licenses, certificates] =
-      await Promise.all([
-        getPlatformAnalytics(),
-        getCourseAnalytics(),
-        getUserAnalytics(),
-        getProgressAnalytics(),
-        getLicenseAnalytics(),
-        getCertificateAnalytics(),
-      ]);
+    const [
+      platform,
+      courses,
+      users,
+      progress,
+      licenses,
+      certificates,
+      networkStats,
+    ] = await Promise.all([
+      getPlatformAnalytics(),
+      getCourseAnalytics(),
+      getUserAnalytics(),
+      getProgressAnalytics(),
+      getLicenseAnalytics(),
+      getCertificateAnalytics(),
+      getNetworkStats(),
+    ]);
 
     return {
       platform,
@@ -1000,6 +1300,7 @@ export async function getComprehensiveAnalytics(): Promise<ComprehensiveAnalytic
       progress,
       licenses,
       certificates,
+      network: networkStats,
     };
   } catch (error) {
     console.error(
@@ -1023,6 +1324,8 @@ const goldskyAnalyticsService = {
   getCertificateAnalytics,
   getRecentActivities,
   getComprehensiveAnalytics,
+  getNetworkStats,
+  getPlatformStatsFromSubgraph,
 };
 
 export default goldskyAnalyticsService;

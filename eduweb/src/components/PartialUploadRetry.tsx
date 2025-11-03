@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AlertCircle, RefreshCw, X, CheckCircle, Loader2 } from "lucide-react";
+import { AlertCircle, RefreshCw, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 import { waitForReceipt } from "thirdweb";
@@ -55,9 +55,7 @@ export function PartialUploadRetry() {
             setPartialDraft(draft);
           }
         }
-      } catch (error) {
-        console.error("[PartialUploadRetry] Failed to load draft:", error);
-      }
+      } catch {}
     };
 
     loadPartialDraft();
@@ -72,8 +70,7 @@ export function PartialUploadRetry() {
     }
 
     setIsRetrying(true);
-    const { courseId, failedBatches, totalBatches } =
-      partialDraft.partialUpload;
+    const { courseId, failedBatches } = partialDraft.partialUpload;
 
     try {
       toast.info("Retrying failed batches...", {
@@ -101,10 +98,6 @@ export function PartialUploadRetry() {
         const startIdx = batchIndex * BATCH_SIZE;
         const endIdx = Math.min(startIdx + BATCH_SIZE, allSections.length);
         const batch = allSections.slice(startIdx, endIdx);
-
-        console.log(
-          `[Retry] Processing batch ${batchNumber} (${batch.length} sections)`
-        );
 
         toast.info(`Retrying batch ${batchNumber}...`, {
           description: `${batch.length} sections`,
@@ -137,14 +130,12 @@ export function PartialUploadRetry() {
             );
           }
 
-          console.log(`[Retry] ✅ Batch ${batchNumber} successful`);
           retriedBatches.push(batchNumber);
 
           toast.success(`Batch ${batchNumber} uploaded!`, {
             description: `${batch.length} sections added`,
           });
         } catch (batchError) {
-          console.error(`[Retry] ❌ Batch ${batchNumber} failed:`, batchError);
           stillFailed.push(batchNumber);
 
           toast.error(`Batch ${batchNumber} failed again`, {
@@ -189,7 +180,6 @@ export function PartialUploadRetry() {
         });
       }
     } catch (error) {
-      console.error("[Retry] Fatal error:", error);
       toast.error("Retry failed", {
         description:
           error instanceof Error ? error.message : "Unknown error occurred",

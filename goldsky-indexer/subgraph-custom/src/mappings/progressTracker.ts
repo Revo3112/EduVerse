@@ -11,8 +11,11 @@ import {
   Enrollment,
   UserProfile,
   CourseSection,
+  StudentCourseEnrollment,
 } from "../../generated/schema";
 import { Address } from "@graphprotocol/graph-ts";
+import { updateNetworkStats } from "./helpers/networkStatsHelper";
+import { createActivityEvent } from "./helpers/activityEventHelper";
 
 // ============================================================================
 // CONSTANTS
@@ -75,23 +78,81 @@ function getCourseSectionsCount(courseId: BigInt): BigInt {
 }
 
 /**
- * Find enrollment by student and courseId
- * Since we need to find enrollment by student + course, not by tokenId
+ * Get or create UserProfile
+ * Pattern copied from courseLicense.ts to prevent null references
  */
-function findEnrollment(student: Bytes, courseId: BigInt): Enrollment | null {
-  // Unfortunately, we need to load by ID (tokenId)
-  // The best approach is to query or maintain a mapping
-  // For now, we'll return null and handle this in the event handler
-  // In production, consider adding a composite ID mapping
-  return null;
-}
-
-/**
- * Get or load UserProfile
- */
-function getOrLoadUserProfile(address: Bytes): UserProfile | null {
+function getOrCreateUserProfile(
+  address: Bytes,
+  timestamp: BigInt,
+  txHash: Bytes,
+  blockNumber: BigInt,
+): UserProfile {
   let id = address.toHexString().toLowerCase();
-  return UserProfile.load(id);
+  let profile = UserProfile.load(id);
+
+  if (!profile) {
+    profile = new UserProfile(id);
+    profile.address = address;
+
+    // Initialize student statistics
+    profile.coursesEnrolled = ZERO_BI;
+    profile.coursesCompleted = ZERO_BI;
+    profile.activeEnrollments = ZERO_BI;
+    profile.totalSpentOnCourses = ZERO_BI;
+    profile.totalSpentOnCoursesEth = ZERO_BD;
+    profile.totalSpentOnCertificates = ZERO_BI;
+    profile.totalSpentOnCertificatesEth = ZERO_BD;
+    profile.totalSpent = ZERO_BI;
+    profile.totalSpentEth = ZERO_BD;
+
+    // Initialize instructor statistics
+    profile.coursesCreated = ZERO_BI;
+    profile.activeCoursesCreated = ZERO_BI;
+    profile.deletedCoursesCreated = ZERO_BI;
+    profile.totalStudents = ZERO_BI;
+    profile.totalRevenue = ZERO_BI;
+    profile.totalRevenueEth = ZERO_BD;
+    profile.averageRating = ZERO_BD;
+    profile.totalRatingsReceived = ZERO_BI;
+
+    // Initialize certificate data
+    profile.hasCertificate = false;
+    profile.certificateTokenId = ZERO_BI;
+    profile.certificateName = "";
+    profile.totalCoursesInCertificate = ZERO_BI;
+    profile.certificateMintedAt = ZERO_BI;
+    profile.certificateLastUpdated = ZERO_BI;
+
+    // Initialize activity tracking
+    profile.totalSectionsCompleted = ZERO_BI;
+    profile.lastActivityAt = timestamp;
+    profile.firstEnrollmentAt = ZERO_BI;
+    profile.firstCourseCreatedAt = ZERO_BI;
+
+    // Initialize growth metrics
+    profile.enrollmentsThisMonth = ZERO_BI;
+    profile.completionsThisMonth = ZERO_BI;
+    profile.revenueThisMonth = ZERO_BI;
+    profile.revenueThisMonthEth = ZERO_BD;
+
+    // Initialize moderation status
+    profile.isBlacklisted = false;
+    profile.blacklistedAt = ZERO_BI;
+    profile.blacklistedBy = Bytes.fromHexString(
+      "0x0000000000000000000000000000000000000000",
+    );
+
+    // Timestamps
+    profile.createdAt = timestamp;
+    profile.updatedAt = timestamp;
+
+    // Transaction references
+    profile.firstTxHash = txHash;
+    profile.lastTxHash = txHash;
+    profile.blockNumber = blockNumber;
+  }
+
+  return profile as UserProfile;
 }
 
 /**
@@ -125,23 +186,23 @@ export function handleSectionStarted(event: SectionStarted): void {
   let courseId = event.params.courseId;
   let sectionId = event.params.sectionId;
 
-  // Update UserProfile activity timestamp
-  let student = getOrLoadUserProfile(studentAddress);
-  if (student != null) {
-    student.lastActivityAt = event.block.timestamp;
-    student.updatedAt = event.block.timestamp;
-    student.lastTxHash = event.transaction.hash;
-    student.save();
-  }
+  let student = getOrCreateUserProfile(
+    studentAddress,
+    event.block.timestamp,
+    event.transaction.hash,
+    event.block.number,
+  );
+  student.lastActivityAt = event.block.timestamp;
+  student.updatedAt = event.block.timestamp;
+  student.lastTxHash = event.transaction.hash;
+  student.save();
 
-  // ✅ NEW: Track section analytics
   let compositeSectionId = courseId.toString() + "-" + sectionId.toString();
   let section = CourseSection.load(compositeSectionId);
 
   if (section != null && !section.isDeleted) {
     section.startedCount = section.startedCount.plus(ONE_BI);
 
-    // Calculate dropoff rate: (started - completed) / started
     if (section.startedCount.gt(ZERO_BI)) {
       let notCompleted = section.startedCount.minus(section.completedCount);
       section.dropoffRate = notCompleted
@@ -165,6 +226,28 @@ export function handleSectionStarted(event: SectionStarted): void {
       ],
     );
   }
+
+  updateNetworkStats(event, "SECTION_STARTED");
+
+  let course = Course.load(courseId.toString());
+  let courseName =
+    course != null ? course.title : "Course #" + courseId.toString();
+
+  createActivityEvent(
+    event,
+    "SECTION_STARTED",
+    studentAddress,
+    "Started section in " + courseName,
+    courseId.toString(),
+    null,
+    null,
+    null,
+  );
+
+  log.info(
+    "ActivityEvent created for SectionStarted - Student: {}, Course: {}",
+    [studentAddress.toHexString(), courseId.toString()],
+  );
 }
 
 /**
@@ -177,32 +260,26 @@ export function handleSectionCompleted(event: SectionCompleted): void {
   let courseId = event.params.courseId;
   let sectionId = event.params.sectionId;
 
-  // Get total sections in course
   let totalSections = getCourseSectionsCount(courseId);
 
-  // Load or find enrollment
-  // Note: In production, you'd want a better way to find enrollment by student+course
-  // For now, we update all enrollments for this course (should be only one per student)
+  let student = getOrCreateUserProfile(
+    studentAddress,
+    event.block.timestamp,
+    event.transaction.hash,
+    event.block.number,
+  );
+  student.totalSectionsCompleted = student.totalSectionsCompleted.plus(ONE_BI);
+  student.lastActivityAt = event.block.timestamp;
+  student.updatedAt = event.block.timestamp;
+  student.lastTxHash = event.transaction.hash;
+  student.save();
 
-  // Update student's UserProfile
-  let student = getOrLoadUserProfile(studentAddress);
-  if (student != null) {
-    student.totalSectionsCompleted =
-      student.totalSectionsCompleted.plus(ONE_BI);
-    student.lastActivityAt = event.block.timestamp;
-    student.updatedAt = event.block.timestamp;
-    student.lastTxHash = event.transaction.hash;
-    student.save();
-  }
-
-  // ✅ NEW: Track section analytics
   let compositeSectionId = courseId.toString() + "-" + sectionId.toString();
   let section = CourseSection.load(compositeSectionId);
 
   if (section != null && !section.isDeleted) {
     section.completedCount = section.completedCount.plus(ONE_BI);
 
-    // Calculate dropoff rate: (started - completed) / started
     if (section.startedCount.gt(ZERO_BI)) {
       let notCompleted = section.startedCount.minus(section.completedCount);
       section.dropoffRate = notCompleted
@@ -227,13 +304,71 @@ export function handleSectionCompleted(event: SectionCompleted): void {
     );
   }
 
-  // Note: To properly update Enrollment, we need to iterate through user's enrollments
-  // or maintain a mapping. This is a limitation of the current schema design.
-  // Alternative: Use event.transaction.from or add a mapping in the schema
+  let scEnrollmentId =
+    studentAddress.toHexString().toLowerCase() + "-" + courseId.toString();
+  let scEnrollment = StudentCourseEnrollment.load(scEnrollmentId);
 
-  // For the comprehensive solution, you'd query enrollments:
-  // let enrollments = student.enrollments.load();
-  // Then find the one matching courseId and update it
+  if (scEnrollment != null) {
+    let enrollmentId = scEnrollment.enrollmentId.toString();
+    let enrollment = Enrollment.load(enrollmentId);
+
+    if (enrollment != null) {
+      enrollment.sectionsCompleted = enrollment.sectionsCompleted.plus(ONE_BI);
+
+      if (!totalSections.equals(ZERO_BI)) {
+        enrollment.completionPercentage = calculateCompletionPercentage(
+          enrollment.sectionsCompleted,
+          totalSections,
+        );
+      }
+
+      enrollment.lastActivityAt = event.block.timestamp;
+      enrollment.lastTxHash = event.transaction.hash;
+      enrollment.save();
+
+      log.info("Enrollment {} updated - Sections: {}/{}, Percentage: {}%", [
+        enrollmentId,
+        enrollment.sectionsCompleted.toString(),
+        totalSections.toString(),
+        enrollment.completionPercentage.toString(),
+      ]);
+    } else {
+      log.warning("Enrollment not found: {}", [enrollmentId]);
+    }
+  } else {
+    log.warning("StudentCourseEnrollment not found: {}", [scEnrollmentId]);
+  }
+
+  updateNetworkStats(event, "SECTION_COMPLETED");
+
+  let course = Course.load(courseId.toString());
+  let courseName =
+    course != null ? course.title : "Course #" + courseId.toString();
+  let scEnrollmentId2 =
+    studentAddress.toHexString().toLowerCase() + "-" + courseId.toString();
+  let scEnrollment2 = StudentCourseEnrollment.load(scEnrollmentId2);
+  let enrollmentIdStr =
+    scEnrollment2 != null ? scEnrollment2.enrollmentId.toString() : "";
+
+  createActivityEvent(
+    event,
+    "SECTION_COMPLETED",
+    studentAddress,
+    "Completed section in " + courseName,
+    courseId.toString(),
+    enrollmentIdStr != null && enrollmentIdStr != "" ? enrollmentIdStr : null,
+    null,
+    null,
+  );
+
+  log.info(
+    "ActivityEvent created for SectionCompleted - Student: {}, Course: {}, Enrollment: {}",
+    [
+      studentAddress.toHexString(),
+      courseId.toString(),
+      enrollmentIdStr != null ? enrollmentIdStr : "",
+    ],
+  );
 }
 
 /**
@@ -246,12 +381,10 @@ export function handleCourseCompleted(event: CourseCompleted): void {
   let courseId = event.params.courseId;
   let courseIdStr = courseId.toString();
 
-  // Update Course statistics
   let course = Course.load(courseIdStr);
   if (course != null) {
     course.completedStudents = course.completedStudents.plus(ONE_BI);
 
-    // Recalculate completion rate
     if (!course.totalEnrollments.equals(ZERO_BI)) {
       course.completionRate = calculateCompletionRate(
         course.completedStudents,
@@ -263,32 +396,79 @@ export function handleCourseCompleted(event: CourseCompleted): void {
     course.save();
   }
 
-  // Update student's UserProfile
-  let student = getOrLoadUserProfile(studentAddress);
-  if (student != null) {
-    student.coursesCompleted = student.coursesCompleted.plus(ONE_BI);
-    student.completionsThisMonth = student.completionsThisMonth.plus(ONE_BI);
-    student.lastActivityAt = event.block.timestamp;
-    student.updatedAt = event.block.timestamp;
-    student.lastTxHash = event.transaction.hash;
-    student.save();
+  let student = getOrCreateUserProfile(
+    studentAddress,
+    event.block.timestamp,
+    event.transaction.hash,
+    event.block.number,
+  );
+  student.coursesCompleted = student.coursesCompleted.plus(ONE_BI);
+  student.completionsThisMonth = student.completionsThisMonth.plus(ONE_BI);
+  student.lastActivityAt = event.block.timestamp;
+  student.updatedAt = event.block.timestamp;
+  student.lastTxHash = event.transaction.hash;
+  student.save();
+
+  let scEnrollmentId =
+    studentAddress.toHexString().toLowerCase() + "-" + courseId.toString();
+  let scEnrollment = StudentCourseEnrollment.load(scEnrollmentId);
+
+  if (scEnrollment != null) {
+    let enrollmentId = scEnrollment.enrollmentId.toString();
+    let enrollment = Enrollment.load(enrollmentId);
+
+    if (enrollment != null) {
+      enrollment.isCompleted = true;
+      enrollment.completionDate = event.block.timestamp;
+      enrollment.completionPercentage = BigInt.fromI32(100);
+      enrollment.status = "COMPLETED";
+      enrollment.lastActivityAt = event.block.timestamp;
+      enrollment.lastTxHash = event.transaction.hash;
+      enrollment.save();
+
+      log.info("Enrollment {} marked as completed at {}", [
+        enrollmentId,
+        event.block.timestamp.toString(),
+      ]);
+    } else {
+      log.warning("Enrollment not found: {}", [enrollmentId]);
+    }
+  } else {
+    log.warning("StudentCourseEnrollment not found: {}", [scEnrollmentId]);
   }
 
-  // Update all enrollments for this student-course combination
-  // Note: This is a workaround for the lack of composite key lookup
-  // In production, consider adding a derived field or mapping
+  updateNetworkStats(event, "COURSE_COMPLETED");
 
-  // Since we can't efficiently query enrollments by student+course in AssemblyScript,
-  // we need to use a different approach:
-  // 1. Maintain a mapping in the License contract events (enrollmentId)
-  // 2. Or iterate through user's enrollments (expensive)
-  // 3. Or use a composite ID pattern
+  let courseForCompleted = Course.load(courseIdStr);
+  let courseName =
+    courseForCompleted != null
+      ? courseForCompleted.title
+      : "Course #" + courseIdStr;
+  let scEnrollmentId2 =
+    studentAddress.toHexString().toLowerCase() + "-" + courseId.toString();
+  let scEnrollment2 = StudentCourseEnrollment.load(scEnrollmentId2);
+  let enrollmentIdStr =
+    scEnrollment2 != null ? scEnrollment2.enrollmentId.toString() : "";
 
-  // For this implementation, we'll document that enrollment updates
-  // should be done through the license tokenId when available
+  createActivityEvent(
+    event,
+    "COURSE_COMPLETED",
+    studentAddress,
+    "Completed course: " + courseName,
+    courseIdStr,
+    enrollmentIdStr != null && enrollmentIdStr != "" ? enrollmentIdStr : null,
+    null,
+    null,
+  );
 
-  // Alternative: Store a mapping of student+courseId -> enrollmentId
-  // This would require modifying the LicenseMinted handler to store this mapping
+  log.info(
+    "ActivityEvent created for CourseCompleted - Student: {}, Course: {}, Enrollment: {}",
+    [
+      studentAddress.toHexString(),
+      courseIdStr,
+      enrollmentIdStr != null ? enrollmentIdStr : "",
+    ],
+  );
 }
 
 /**
@@ -301,14 +481,11 @@ export function handleProgressReset(event: ProgressReset): void {
   let courseId = event.params.courseId;
   let courseIdStr = courseId.toString();
 
-  // Update Course statistics (decrement completed students)
   let course = Course.load(courseIdStr);
   if (course != null) {
-    // Only decrement if there were completed students
     if (course.completedStudents.gt(ZERO_BI)) {
       course.completedStudents = course.completedStudents.minus(ONE_BI);
 
-      // Recalculate completion rate
       if (!course.totalEnrollments.equals(ZERO_BI)) {
         course.completionRate = calculateCompletionRate(
           course.completedStudents,
@@ -321,59 +498,65 @@ export function handleProgressReset(event: ProgressReset): void {
     course.save();
   }
 
-  // Update student's UserProfile (decrement completed courses)
-  let student = getOrLoadUserProfile(studentAddress);
-  if (student != null) {
-    if (student.coursesCompleted.gt(ZERO_BI)) {
-      student.coursesCompleted = student.coursesCompleted.minus(ONE_BI);
+  let student = getOrCreateUserProfile(
+    studentAddress,
+    event.block.timestamp,
+    event.transaction.hash,
+    event.block.number,
+  );
+  if (student.coursesCompleted.gt(ZERO_BI)) {
+    student.coursesCompleted = student.coursesCompleted.minus(ONE_BI);
+  }
+  student.lastActivityAt = event.block.timestamp;
+  student.updatedAt = event.block.timestamp;
+  student.lastTxHash = event.transaction.hash;
+  student.save();
+
+  let scEnrollmentId =
+    studentAddress.toHexString().toLowerCase() + "-" + courseId.toString();
+  let scEnrollment = StudentCourseEnrollment.load(scEnrollmentId);
+
+  if (scEnrollment != null) {
+    let enrollmentId = scEnrollment.enrollmentId.toString();
+    let enrollment = Enrollment.load(enrollmentId);
+
+    if (enrollment != null) {
+      enrollment.isCompleted = false;
+      enrollment.completionDate = ZERO_BI;
+      enrollment.completionPercentage = ZERO_BI;
+      enrollment.sectionsCompleted = ZERO_BI;
+      enrollment.status = determineEnrollmentStatus(false, false);
+      enrollment.lastActivityAt = event.block.timestamp;
+      enrollment.lastTxHash = event.transaction.hash;
+      enrollment.save();
+
+      log.info("Enrollment {} progress reset", [enrollmentId]);
+    } else {
+      log.warning("Enrollment not found: {}", [enrollmentId]);
     }
-    student.lastActivityAt = event.block.timestamp;
-    student.updatedAt = event.block.timestamp;
-    student.lastTxHash = event.transaction.hash;
-    student.save();
+  } else {
+    log.warning("StudentCourseEnrollment not found: {}", [scEnrollmentId]);
   }
 
-  // Reset enrollment completion status
-  // Similar challenge as above - need to find enrollment by student+course
-  // Document that this should be called with the enrollment tokenId if available
+  updateNetworkStats(event, "PROGRESS_RESET");
+
+  let courseForReset = Course.load(courseIdStr);
+  let courseName =
+    courseForReset != null ? courseForReset.title : "Course #" + courseIdStr;
+
+  createActivityEvent(
+    event,
+    "PROGRESS_RESET",
+    studentAddress,
+    "Progress reset for " + courseName,
+    courseIdStr,
+    null,
+    null,
+    null,
+  );
+
+  log.info(
+    "ActivityEvent created for ProgressReset - Student: {}, Course: {}",
+    [studentAddress.toHexString(), courseIdStr],
+  );
 }
-
-// ============================================================================
-// NOTES ON IMPLEMENTATION
-// ============================================================================
-//
-// **Enrollment Lookup Challenge:**
-// The main challenge in this implementation is efficiently finding Enrollment
-// entities by student address + courseId combination.
-//
-// **Solutions:**
-// 1. **Current Approach**: Update Course and UserProfile only
-//    - Pros: Simple, efficient, no additional storage
-//    - Cons: Enrollment completion tracking less granular
-//
-// 2. **Enhanced Approach** (recommended for production):
-//    - Add a mapping entity: StudentCourseEnrollment
-//      type StudentCourseEnrollment @entity {
-//        id: ID! # student-courseId composite
-//        enrollment: Enrollment!
-//      }
-//    - Create this mapping in handleLicenseMinted
-//    - Use it here to quickly find enrollment
-//
-// 3. **Alternative**: Use derived field queries
-//    - Load all enrollments for student
-//    - Filter by courseId
-//    - More expensive but works without schema changes
-//
-// **For MVP with 3-entity constraint:**
-// The current implementation prioritizes Course and UserProfile accuracy.
-// Enrollment-level progress can be updated via:
-// - Certificate minting (triggers completion update)
-// - License renewal (opportunity to sync progress)
-// - Periodic sync jobs (off-chain)
-//
-// ============================================================================
-
-// ============================================================================
-// END OF FILE
-// ============================================================================

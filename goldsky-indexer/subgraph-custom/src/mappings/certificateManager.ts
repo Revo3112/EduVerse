@@ -1,4 +1,10 @@
-import { BigDecimal, BigInt, Bytes, log } from "@graphprotocol/graph-ts";
+import {
+  BigInt,
+  BigDecimal,
+  Bytes,
+  log,
+  ethereum,
+} from "@graphprotocol/graph-ts";
 import {
   BaseRouteUpdated,
   CertificateMinted,
@@ -18,6 +24,7 @@ import {
   CourseAddedToCertificateEvent,
   Enrollment,
   PlatformStats,
+  StudentCourseEnrollment,
   UserProfile,
 } from "../../generated/schema";
 
@@ -30,6 +37,12 @@ const ZERO_BIGINT = BigInt.fromI32(0);
 const ZERO_BIGDECIMAL = BigDecimal.fromString("0");
 const ONE_BIGINT = BigInt.fromI32(1);
 const WEI_TO_ETH = BigDecimal.fromString("1000000000000000000");
+import {
+  updateNetworkStats,
+  incrementPlatformCounter,
+  addPlatformRevenue,
+} from "./helpers/networkStatsHelper";
+import { createActivityEvent } from "./helpers/activityEventHelper";
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -39,11 +52,16 @@ function weiToEth(wei: BigInt): BigDecimal {
   return wei.toBigDecimal().div(WEI_TO_ETH);
 }
 
-function getOrCreateUserProfile(address: Bytes): UserProfile {
-  let profile = UserProfile.load(address.toHexString());
+function getOrCreateUserProfile(
+  address: Bytes,
+  event: ethereum.Event,
+): UserProfile {
+  let id = address.toHexString().toLowerCase();
+  let profile = UserProfile.load(id);
+  let isNewUser = profile == null;
 
-  if (profile == null) {
-    profile = new UserProfile(address.toHexString());
+  if (isNewUser) {
+    profile = new UserProfile(id);
     profile.address = address;
 
     // Initialize all fields (same as courseFactory.ts)
@@ -86,9 +104,11 @@ function getOrCreateUserProfile(address: Bytes): UserProfile {
     profile.isBlacklisted = false;
     profile.blacklistedAt = ZERO_BIGINT;
     profile.blacklistedBy = Bytes.fromHexString(ZERO_ADDRESS);
+
+    incrementPlatformCounter("USER", event);
   }
 
-  return profile;
+  return profile as UserProfile;
 }
 
 // ============================================================================
@@ -114,7 +134,7 @@ export function handleCertificateMinted(event: CertificateMinted): void {
   // Create Certificate entity
   let certificate = new Certificate(certificateId);
   certificate.tokenId = tokenId;
-  certificate.owner = event.params.owner.toHexString();
+  certificate.owner = event.params.owner.toHexString().toLowerCase();
   certificate.recipientAddress = event.params.owner; // ✅ FIX: Add direct address field for queries
   certificate.recipientName = event.params.recipientName;
   certificate.isValid = true;
@@ -136,8 +156,9 @@ export function handleCertificateMinted(event: CertificateMinted): void {
   certificate.blockNumber = event.block.number;
   certificate.save();
 
-  // Update UserProfile
-  let profile = getOrCreateUserProfile(event.params.owner);
+  // Update UserProfile (use lowercase address for consistency)
+  let profile = getOrCreateUserProfile(event.params.owner, event);
+  profile.certificate = certificateId; // ✅ Link UserProfile to Certificate
   profile.hasCertificate = true;
   profile.certificateTokenId = tokenId;
   profile.certificateName = event.params.recipientName;
@@ -160,10 +181,53 @@ export function handleCertificateMinted(event: CertificateMinted): void {
   profile.lastActivityAt = event.block.timestamp;
   profile.save();
 
-  log.info("[Certificate] Minted tokenId: {} for owner: {}", [
+  log.info("Certificate minted: tokenId={}, owner={}", [
     certificateId,
     event.params.owner.toHexString(),
   ]);
+
+  // Track platform revenue
+  let platformFeePercent = BigInt.fromI32(10);
+  let platformFee = mintPrice
+    .times(platformFeePercent)
+    .div(BigInt.fromI32(100));
+  let creatorRevenue = mintPrice.minus(platformFee);
+  addPlatformRevenue(
+    mintPrice,
+    weiToEth(mintPrice),
+    platformFee,
+    weiToEth(platformFee),
+    creatorRevenue,
+    weiToEth(creatorRevenue),
+    event,
+  );
+
+  // Track network stats
+  updateNetworkStats(event, "CERTIFICATE_MINTED");
+  incrementPlatformCounter("CERTIFICATE", event);
+
+  // Create activity event
+  if (certificate != null) {
+    createActivityEvent(
+      event,
+      "CERTIFICATE_MINTED",
+      event.params.owner,
+      "Minted certificate: " + certificate.recipientName,
+      null,
+      null,
+      certificateId,
+      null,
+    );
+
+    log.info(
+      "ActivityEvent created for CertificateMinted - Owner: {}, TokenId: {}, Name: {}",
+      [
+        event.params.owner.toHexString(),
+        tokenId.toString(),
+        certificate.recipientName,
+      ],
+    );
+  }
 }
 
 /**
@@ -205,7 +269,7 @@ export function handleCourseAddedToCertificate(
     // Edge case: Certificate not minted yet (shouldn't happen, but defensive coding)
     certificate = new Certificate(certificateId);
     certificate.tokenId = tokenId;
-    certificate.owner = owner.toHexString();
+    certificate.owner = owner.toHexString().toLowerCase();
     certificate.recipientAddress = owner; // ✅ FIX: Add direct address field for queries
     certificate.recipientName = "Unknown"; // Will be updated by CertificateMinted
     certificate.isValid = true;
@@ -226,15 +290,52 @@ export function handleCourseAddedToCertificate(
   // Determine if this is the first course (10% fee) or not (2% fee)
   let isFirstCourse = certificate.totalCourses.equals(ZERO_BIGINT);
 
+  // Link to Enrollment for payment/completion data
+  // Use StudentCourseEnrollment to find the actual enrollment tokenId
+  let scEnrollmentId =
+    owner.toHexString().toLowerCase() + "-" + courseId.toString();
+  let scEnrollment = StudentCourseEnrollment.load(scEnrollmentId);
+
+  // ✅ CRITICAL FIX: Only create CertificateCourse if Enrollment exists
+  if (scEnrollment == null) {
+    // StudentCourseEnrollment doesn't exist yet - skip creating CertificateCourse
+    // This can happen if events are processed out of order
+    // The certificate will be updated when the enrollment is created
+    log.warning(
+      "StudentCourseEnrollment not found for certificate course add: {}",
+      [scEnrollmentId],
+    );
+    updateNetworkStats(event, "COURSE_ADDED_TO_CERTIFICATE_SKIPPED");
+    return;
+  }
+
+  // Get the actual enrollment using the tokenId from StudentCourseEnrollment
+  let enrollmentId = scEnrollment.enrollmentId.toString();
+  let enrollment = Enrollment.load(enrollmentId);
+
+  if (enrollment == null) {
+    // Enrollment entity doesn't exist - this shouldn't happen but handle defensively
+    log.error(
+      "Enrollment not found but StudentCourseEnrollment exists: enrollmentId={}, scEnrollmentId={}",
+      [enrollmentId, scEnrollmentId],
+    );
+    updateNetworkStats(event, "COURSE_ADDED_TO_CERTIFICATE_SKIPPED");
+    return;
+  }
+
+  // Verify Course exists before creating junction
+  let course = Course.load(courseId.toString());
+  if (course == null) {
+    // Course doesn't exist - skip
+    updateNetworkStats(event, "COURSE_ADDED_TO_CERTIFICATE_SKIPPED");
+    return;
+  }
+
   // Create CertificateCourse junction entity
   let certCourseId = certificateId + "-" + courseId.toString();
   let certCourse = new CertificateCourse(certCourseId);
   certCourse.certificate = certificateId;
   certCourse.course = courseId.toString();
-
-  // Link to Enrollment for payment/completion data
-  // Enrollment ID format: "studentAddress-courseId"
-  let enrollmentId = owner.toHexString() + "-" + courseId.toString();
   certCourse.enrollment = enrollmentId;
 
   certCourse.addedAt = event.block.timestamp;
@@ -254,7 +355,7 @@ export function handleCourseAddedToCertificate(
   courseEvent.courseId = courseId;
   courseEvent.course = courseId.toString();
   courseEvent.student = owner;
-  courseEvent.userProfile = owner.toHexString();
+  courseEvent.userProfile = owner.toHexString().toLowerCase();
   courseEvent.pricePaid = event.params.pricePaid;
   courseEvent.pricePaidEth = weiToEth(event.params.pricePaid);
   courseEvent.blockTimestamp = event.block.timestamp;
@@ -269,7 +370,7 @@ export function handleCourseAddedToCertificate(
   certificate.save();
 
   // Update UserProfile
-  let profile = getOrCreateUserProfile(owner);
+  let profile = getOrCreateUserProfile(owner, event);
   profile.totalCoursesInCertificate =
     profile.totalCoursesInCertificate.plus(ONE_BIGINT);
   profile.certificateLastUpdated = event.block.timestamp;
@@ -288,19 +389,17 @@ export function handleCourseAddedToCertificate(
   profile.lastActivityAt = event.block.timestamp;
   profile.save();
 
-  // Update Enrollment entity to link certificate
-  let enrollment = Enrollment.load(enrollmentId);
-  if (enrollment != null) {
-    enrollment.hasCertificate = true;
-    enrollment.certificateTokenId = tokenId;
-    enrollment.certificateAddedAt = event.block.timestamp;
-    enrollment.certificatePrice = addPrice;
-    enrollment.certificate = certificateId; // Link to Certificate entity
-    enrollment.save();
-  }
+  // Update Enrollment entity to link certificate (already loaded above)
+  enrollment.hasCertificate = true;
+  enrollment.certificateTokenId = tokenId;
+  enrollment.certificateAddedAt = event.block.timestamp;
+  enrollment.certificatePrice = addPrice;
+  enrollment.certificate = certificateId; // Link to Certificate entity
+  enrollment.lastActivityAt = event.block.timestamp;
+  enrollment.lastTxHash = event.transaction.hash;
+  enrollment.save();
 
   // Update Course creator revenue (90% or 98% goes to creator)
-  let course = Course.load(courseId.toString());
   if (course != null) {
     // Calculate creator revenue based on platform fee
     // First course: 10% platform fee → 90% to creator
@@ -327,6 +426,47 @@ export function handleCourseAddedToCertificate(
       creator.save();
     }
   }
+
+  // Track platform revenue
+  let platformFeePercent = isFirstCourse ? 1000 : 200;
+  let platformFee = addPrice
+    .times(BigInt.fromI32(platformFeePercent))
+    .div(BigInt.fromI32(10000));
+  let creatorRevenue = addPrice.minus(platformFee);
+  addPlatformRevenue(
+    addPrice,
+    weiToEth(addPrice),
+    platformFee,
+    weiToEth(platformFee),
+    creatorRevenue,
+    weiToEth(creatorRevenue),
+    event,
+  );
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_ADDED_TO_CERTIFICATE");
+
+  // Create activity event
+  let courseForActivity = Course.load(courseId.toString());
+  let courseName =
+    courseForActivity != null
+      ? courseForActivity.title
+      : "Course #" + courseId.toString();
+  createActivityEvent(
+    event,
+    "COURSE_ADDED_TO_CERTIFICATE",
+    owner,
+    "Added course to certificate: " + courseName,
+    courseId.toString(),
+    null,
+    certificateId,
+    null,
+  );
+
+  log.info(
+    "ActivityEvent created for CourseAddedToCertificate - Student: {}, TokenId: {}, CourseId: {}",
+    [owner.toHexString(), tokenId.toString(), courseId.toString()],
+  );
 }
 
 /**
@@ -343,12 +483,36 @@ export function handleCertificateUpdated(event: CertificateUpdated): void {
     certificate.lastUpdated = event.block.timestamp;
     certificate.save();
 
-    // Update UserProfile
+    // Update UserProfile (certificate.owner is already lowercase from creation)
     let profile = UserProfile.load(certificate.owner);
     if (profile != null) {
       profile.certificateLastUpdated = event.block.timestamp;
+      profile.updatedAt = event.block.timestamp;
+      profile.lastActivityAt = event.block.timestamp;
       profile.save();
     }
+  }
+
+  // Track network stats
+  updateNetworkStats(event, "CERTIFICATE_UPDATED");
+
+  // Create activity event
+  if (certificate != null) {
+    createActivityEvent(
+      event,
+      "CERTIFICATE_UPDATED",
+      certificate.recipientAddress,
+      "Updated certificate: " + certificate.recipientName,
+      null,
+      null,
+      certificateId,
+      null,
+    );
+
+    log.info(
+      "ActivityEvent created for CertificateUpdated - Owner: {}, CertificateId: {}",
+      [certificate.recipientAddress.toHexString(), certificateId],
+    );
   }
 }
 
@@ -370,6 +534,28 @@ export function handleCertificateRevoked(event: CertificateRevoked): void {
       certificateId,
       event.params.reason,
     ]);
+  }
+
+  // Track network stats
+  updateNetworkStats(event, "CERTIFICATE_REVOKED");
+
+  // Create activity event
+  if (certificate != null) {
+    createActivityEvent(
+      event,
+      "CERTIFICATE_REVOKED",
+      certificate.recipientAddress,
+      "Certificate revoked",
+      null,
+      null,
+      certificateId,
+      null,
+    );
+
+    log.info(
+      "ActivityEvent created for CertificateRevoked - Owner: {}, CertificateId: {}",
+      [certificate.recipientAddress.toHexString(), certificateId],
+    );
   }
 }
 
@@ -400,6 +586,28 @@ export function handleCertificatePaymentRecorded(
     certificateId,
     event.params.payer.toHexString(),
   ]);
+
+  // Track network stats
+  updateNetworkStats(event, "CERTIFICATE_PAYMENT_RECORDED");
+
+  // Create activity event
+  if (certificate != null) {
+    createActivityEvent(
+      event,
+      "CERTIFICATE_PAYMENT_RECORDED",
+      certificate.recipientAddress,
+      "Certificate payment recorded",
+      null,
+      null,
+      certificateId,
+      null,
+    );
+
+    log.info(
+      "ActivityEvent created for CertificatePaymentRecorded - Owner: {}, CertificateId: {}",
+      [certificate.recipientAddress.toHexString(), certificateId],
+    );
+  }
 }
 
 // ============================================================================
@@ -425,6 +633,9 @@ export function handleBaseRouteUpdated(event: BaseRouteUpdated): void {
       event.params.newBaseRoute,
     ]);
   }
+
+  // Track network stats
+  updateNetworkStats(event, "BASE_ROUTE_UPDATED");
 }
 
 /**
@@ -463,6 +674,9 @@ export function handleDefaultBaseRouteUpdated(
   stats.save();
 
   log.info("Default base route updated: {}", [event.params.newBaseRoute]);
+
+  // Track network stats
+  updateNetworkStats(event, "DEFAULT_BASE_ROUTE_UPDATED");
 }
 
 /**
@@ -499,6 +713,9 @@ export function handlePlatformNameUpdated(event: PlatformNameUpdated): void {
   stats.save();
 
   log.info("Platform name updated: {}", [event.params.newPlatformName]);
+
+  // Track network stats
+  updateNetworkStats(event, "PLATFORM_NAME_UPDATED");
 }
 
 /**
@@ -536,6 +753,9 @@ export function handleCourseAdditionFeeUpdated(
   stats.save();
 
   log.info("Course addition fee updated: {}", [event.params.newFee.toString()]);
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_ADDITION_FEE_UPDATED");
 }
 
 /**
@@ -559,4 +779,7 @@ export function handleCourseCertificatePriceSet(
       event.params.price.toString(),
     ]);
   }
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_CERTIFICATE_PRICE_SET");
 }

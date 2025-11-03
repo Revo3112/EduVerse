@@ -223,15 +223,17 @@ export function useAnalytics(
 // UTILITY HOOK - useAnalyticsMetrics
 // ============================================================================
 
-/**
- * Simplified metrics interface matching analytics page format
- */
 export interface EduVerseAnalyticsMetrics {
   // Network
   totalTransactions: number;
-  totalGasUsed: string;
-  totalGasCost: string;
-  averageGasPrice: string;
+  totalCourseCreations: number;
+  totalLicenseMints: number;
+  totalCertificateMints: number;
+  totalProgressUpdates: number;
+  courseFactoryInteractions: number;
+  courseLicenseInteractions: number;
+  progressTrackerInteractions: number;
+  certificateManagerInteractions: number;
   averageBlockTime: number;
 
   // Users
@@ -283,48 +285,41 @@ export function useAnalyticsMetrics(options: UseAnalyticsOptions = {}): {
   const { analytics, isLoading, isError, error, refresh } =
     useAnalytics(options);
 
-  // Transform data to match expected format
   const metrics: EduVerseAnalyticsMetrics | null = analytics
     ? {
-        // Network metrics (use defaults for now - will be replaced with NetworkStats)
-        totalTransactions: 0,
-        totalGasUsed: "0",
-        totalGasCost: "0",
-        averageGasPrice: "0",
-        averageBlockTime: 2.1, // Manta Pacific average
-
-        // User metrics
+        totalTransactions: analytics.network.totalTransactions,
+        totalCourseCreations: analytics.network.totalCourseCreations,
+        totalLicenseMints: analytics.network.totalLicenseMints,
+        totalCertificateMints: analytics.network.totalCertificateMints,
+        totalProgressUpdates: analytics.network.totalProgressUpdates,
+        courseFactoryInteractions: analytics.network.courseFactoryInteractions,
+        courseLicenseInteractions: analytics.network.courseLicenseInteractions,
+        progressTrackerInteractions:
+          analytics.network.progressTrackerInteractions,
+        certificateManagerInteractions:
+          analytics.network.certificateManagerInteractions,
+        averageBlockTime: analytics.network.averageBlockTime,
         uniqueAddresses: analytics.users.uniqueAddresses,
         activeStudents: analytics.users.activeStudents,
         activeCreators: analytics.users.activeCreators,
-
-        // Course metrics
         totalCourses: analytics.courses.totalCourses,
         activeCourses: analytics.courses.activeCourses,
         totalSections: analytics.courses.totalSections,
         coursesWithRatings: analytics.courses.coursesWithRatings,
         averagePlatformRating: parseFloat(analytics.courses.averageRating),
-
-        // Progress metrics
         totalSectionsCompleted: analytics.progress.totalSectionsCompleted,
         totalCoursesCompleted: analytics.progress.totalCoursesCompleted,
         uniqueStudentsWithProgress:
           analytics.progress.uniqueStudentsWithProgress,
-
-        // License metrics
         totalLicensesMinted: analytics.licenses.totalLicensesMinted,
         totalLicensesRenewed: analytics.licenses.totalLicensesRenewed,
         activeLicenses: analytics.licenses.activeLicenses,
         totalLicenseRevenue: analytics.licenses.totalLicenseRevenueEth,
-
-        // Certificate metrics
         totalCertificateHolders: analytics.certificates.totalCertificateHolders,
         totalCourseAdditions: analytics.certificates.totalCoursesInCertificates,
         certificateUpdates: analytics.certificates.certificateUpdates,
         totalCertificateRevenue:
           analytics.certificates.totalCertificateRevenueEth,
-
-        // Economic metrics
         totalPlatformRevenue: analytics.platform.totalRevenueEth,
         totalCreatorPayouts: analytics.platform.creatorRevenueEth,
         averageCoursePrice: analytics.courses.averagePrice,

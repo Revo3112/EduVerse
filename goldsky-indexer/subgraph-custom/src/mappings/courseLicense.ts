@@ -1,4 +1,10 @@
-import { BigInt, BigDecimal, Bytes } from "@graphprotocol/graph-ts";
+import {
+  BigInt,
+  BigDecimal,
+  Bytes,
+  Address,
+  log,
+} from "@graphprotocol/graph-ts";
 import {
   LicenseMinted,
   LicenseRenewed,
@@ -13,6 +19,15 @@ import {
   TeacherStudent,
 } from "../../generated/schema";
 
+import { Address } from "@graphprotocol/graph-ts";
+import {
+  updateNetworkStats,
+  incrementPlatformCounter,
+  addPlatformRevenue,
+  updateAverageCoursePrice,
+} from "./helpers/networkStatsHelper";
+import { createActivityEvent } from "./helpers/activityEventHelper";
+
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -20,9 +35,9 @@ import {
 const ZERO_BI = BigInt.fromI32(0);
 const ONE_BI = BigInt.fromI32(1);
 const ZERO_BD = BigDecimal.fromString("0");
-const WEI_TO_ETH = BigDecimal.fromString("1000000000000000000"); // 10^18
-const PLATFORM_FEE_PERCENTAGE = BigInt.fromI32(200); // 2% = 200 basis points
-const BASIS_POINTS = BigInt.fromI32(10000);
+const WEI_TO_ETH = BigDecimal.fromString("1000000000000000000");
+const PLATFORM_FEE_PERCENTAGE = BigInt.fromI32(10);
+const BASIS_POINTS = BigInt.fromI32(100);
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -61,8 +76,9 @@ function getOrCreateUserProfile(
 ): UserProfile {
   let id = address.toHexString().toLowerCase();
   let profile = UserProfile.load(id);
+  let isNewUser = profile == null;
 
-  if (profile == null) {
+  if (isNewUser) {
     profile = new UserProfile(id);
     profile.address = address;
 
@@ -122,9 +138,11 @@ function getOrCreateUserProfile(
     profile.firstTxHash = txHash;
     profile.lastTxHash = txHash;
     profile.blockNumber = blockNumber;
+
+    // User counter will be incremented when enrollment is created
   }
 
-  return profile;
+  return profile as UserProfile;
 }
 
 /**
@@ -330,6 +348,47 @@ export function handleLicenseMinted(event: LicenseMinted): void {
   userProfile.updatedAt = event.block.timestamp;
   userProfile.lastTxHash = event.transaction.hash;
   userProfile.save();
+
+  // Track network stats
+  updateNetworkStats(event, "LICENSE_MINTED");
+  incrementPlatformCounter("ENROLLMENT", event);
+
+  // Track platform revenue
+  addPlatformRevenue(
+    event.params.pricePaid,
+    weiToEth(event.params.pricePaid),
+    enrollment.platformFee,
+    weiToEth(enrollment.platformFee),
+    enrollment.creatorRevenue,
+    weiToEth(enrollment.creatorRevenue),
+    event,
+  );
+
+  updateAverageCoursePrice(event);
+
+  // Create activity event
+  let courseForEvent = Course.load(courseId.toString());
+  let courseName =
+    courseForEvent != null ? courseForEvent.title : "Course #" + courseId;
+  createActivityEvent(
+    event,
+    "LICENSE_MINTED",
+    studentAddress,
+    "Enrolled in " + courseName,
+    courseId.toString(),
+    enrollmentId.toString(),
+    null,
+    null,
+  );
+
+  log.info(
+    "ActivityEvent created for LicenseMinted - Student: {}, CourseId: {}, EnrollmentId: {}",
+    [
+      studentAddress.toHexString(),
+      courseId.toString(),
+      enrollmentId.toString(),
+    ],
+  );
 }
 
 /**
@@ -404,11 +463,49 @@ export function handleLicenseRenewed(event: LicenseRenewed): void {
       student.save();
     }
   }
+
+  // Track network stats
+  updateNetworkStats(event, "LICENSE_RENEWED");
+
+  // Track platform revenue for renewal
+  let platformFee = calculatePlatformFee(event.params.pricePaid);
+  let creatorRevenue = calculateCreatorRevenue(event.params.pricePaid);
+  addPlatformRevenue(
+    event.params.pricePaid,
+    weiToEth(event.params.pricePaid),
+    platformFee,
+    weiToEth(platformFee),
+    creatorRevenue,
+    weiToEth(creatorRevenue),
+    event,
+  );
+
+  updateAverageCoursePrice(event);
+
+  // Create activity event
+  let enrollmentEntity = Enrollment.load(enrollmentId);
+  if (enrollmentEntity != null) {
+    let courseForRenewal = Course.load(enrollmentEntity.courseId.toString());
+    let courseName =
+      courseForRenewal != null
+        ? courseForRenewal.title
+        : "Course #" + enrollmentEntity.courseId.toString();
+    createActivityEvent(
+      event,
+      "LICENSE_RENEWED",
+      event.params.student,
+      "Renewed license for " + courseName,
+      enrollmentEntity.courseId.toString(),
+      enrollmentId,
+      null,
+      null,
+    );
+  }
 }
 
 /**
  * Handler for LicenseExpired event
- * Marks enrollment as expired and updates active enrollment counts
+ * Marks enrollment as expired and updates Course activeEnrollments count
  */
 export function handleLicenseExpired(event: LicenseExpired): void {
   let enrollmentId = event.params.tokenId.toString();
@@ -440,6 +537,26 @@ export function handleLicenseExpired(event: LicenseExpired): void {
       student.save();
     }
   }
+
+  // Track network stats
+  updateNetworkStats(event, "LICENSE_EXPIRED");
+
+  // Create activity event
+  let course = Course.load(event.params.courseId.toString());
+  let courseName =
+    course != null
+      ? course.title
+      : "Course #" + event.params.courseId.toString();
+  createActivityEvent(
+    event,
+    "LICENSE_EXPIRED",
+    event.params.student,
+    "License expired for " + courseName,
+    event.params.courseId.toString(),
+    enrollmentId,
+    null,
+    null,
+  );
 }
 
 // ============================================================================
@@ -474,6 +591,39 @@ export function handleRevenueRecorded(event: RevenueRecorded): void {
       creator.updatedAt = event.block.timestamp;
       creator.save();
     }
+  }
+
+  // Track network stats
+  updateNetworkStats(event, "REVENUE_RECORDED");
+
+  // Create activity event
+  let courseForRevenue = Course.load(courseId);
+  let courseName =
+    courseForRevenue != null ? courseForRevenue.title : "Course #" + courseId;
+  let creatorProfile =
+    courseForRevenue != null
+      ? UserProfile.load(courseForRevenue.creator.toHexString().toLowerCase())
+      : null;
+  if (creatorProfile != null) {
+    createActivityEvent(
+      event,
+      "REVENUE_RECORDED",
+      creatorProfile.address,
+      "Revenue recorded for " + courseName,
+      courseId.toString(),
+      null,
+      null,
+      null,
+    );
+
+    log.info(
+      "ActivityEvent created for RevenueRecorded - Creator: {}, CourseId: {}, Amount: {}",
+      [
+        event.params.creator.toHexString(),
+        courseId.toString(),
+        event.params.amount.toString(),
+      ],
+    );
   }
 }
 

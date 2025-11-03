@@ -5,7 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Copy, CheckCircle2, AlertCircle, Wallet, RefreshCw } from "lucide-react";
+import {
+  Copy,
+  CheckCircle2,
+  AlertCircle,
+  Wallet,
+  RefreshCw,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -45,8 +51,8 @@ export default function WalletDebugPage() {
                   title
                 }
               }
-            }`
-          })
+            }`,
+          }),
         }
       );
 
@@ -174,7 +180,8 @@ export default function WalletDebugPage() {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>No Wallet Connected</AlertTitle>
                 <AlertDescription>
-                  Please connect your wallet using the Connect Wallet button in the navigation
+                  Please connect your wallet using the Connect Wallet button in
+                  the navigation
                 </AlertDescription>
               </Alert>
             )}
@@ -187,7 +194,8 @@ export default function WalletDebugPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              This is the address that has an active enrollment in the Goldsky subgraph:
+              This is the address that has an active enrollment in the Goldsky
+              subgraph:
             </p>
             <code className="text-sm bg-muted p-2 rounded block font-mono break-all">
               0xc584f07acd9e7d7a925d77760037386647574337
@@ -195,12 +203,16 @@ export default function WalletDebugPage() {
 
             {account?.address && (
               <div className="pt-2">
-                {account.address.toLowerCase() === "0xc584f07acd9e7d7a925d77760037386647574337" ? (
+                {account.address.toLowerCase() ===
+                "0xc584f07acd9e7d7a925d77760037386647574337" ? (
                   <Alert className="border-green-600">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <AlertTitle className="text-green-600">Address Match!</AlertTitle>
+                    <AlertTitle className="text-green-600">
+                      Address Match!
+                    </AlertTitle>
                     <AlertDescription>
-                      Your connected wallet matches the enrollment address. Enrollments should appear in My Learning.
+                      Your connected wallet matches the enrollment address.
+                      Enrollments should appear in My Learning.
                     </AlertDescription>
                   </Alert>
                 ) : (
@@ -208,8 +220,9 @@ export default function WalletDebugPage() {
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Address Mismatch</AlertTitle>
                     <AlertDescription>
-                      Your connected wallet does not match the enrollment address.
-                      Please switch to the wallet that enrolled in the course.
+                      Your connected wallet does not match the enrollment
+                      address. Please switch to the wallet that enrolled in the
+                      course.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -225,19 +238,24 @@ export default function WalletDebugPage() {
           <CardContent>
             <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
               <li>
-                <strong>Check MetaMask:</strong> Open MetaMask and verify which account is currently selected
+                <strong>Check MetaMask:</strong> Open MetaMask and verify which
+                account is currently selected
               </li>
               <li>
-                <strong>Multiple Accounts:</strong> If you have multiple accounts, make sure you select the one used for enrollment
+                <strong>Multiple Accounts:</strong> If you have multiple
+                accounts, make sure you select the one used for enrollment
               </li>
               <li>
-                <strong>Transaction History:</strong> Check your MetaMask transaction history for the course purchase
+                <strong>Transaction History:</strong> Check your MetaMask
+                transaction history for the course purchase
               </li>
               <li>
-                <strong>Address Format:</strong> Ethereum addresses are case-insensitive but should always start with 0x
+                <strong>Address Format:</strong> Ethereum addresses are
+                case-insensitive but should always start with 0x
               </li>
               <li>
-                <strong>Goldsky Query:</strong> Use the "Test Goldsky Query" button above to verify if enrollments exist
+                <strong>Goldsky Query:</strong> Use the &quot;Test Goldsky
+                Query&quot; button above to verify if enrollments exist
               </li>
             </ol>
           </CardContent>
@@ -254,8 +272,11 @@ export default function WalletDebugPage() {
               <AlertDescription>
                 <ol className="list-decimal list-inside space-y-1 mt-2">
                   <li>Open MetaMask extension</li>
-                  <li>Click on the account dropdown (top center)</li>
-                  <li>Select the account ending in: <code className="font-mono">...74337</code></li>
+                  <li>Click on the account dropdown at the top center</li>
+                  <li>
+                    Select the account ending in:{" "}
+                    <code className="font-mono">...74337</code>
+                  </li>
                   <li>Refresh this page</li>
                   <li>Navigate to My Learning page</li>
                 </ol>

@@ -744,14 +744,6 @@ export const GET_COURSE_DETAILS = gql`
         orderId
         createdAt
       }
-
-      ratings(first: 20, orderBy: submittedAt, orderDirection: desc) {
-        id
-        user
-        rating
-        submittedAt
-        updatedAt
-      }
     }
   }
 `;
@@ -783,7 +775,6 @@ export const GET_SECTION_DETAILS = gql`
         sectionId
         title
         contentCID
-        description
         duration
         orderId
         createdAt
@@ -795,7 +786,6 @@ export const GET_SECTION_DETAILS = gql`
       sectionId
       title
       contentCID
-      description
       duration
       orderId
       createdAt

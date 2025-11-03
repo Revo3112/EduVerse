@@ -30,6 +30,7 @@ interface VideoQuality {
 interface LivepeerPlayerViewProps {
   playbackId: string;
   onProgressUpdate: (time: number) => void;
+  onComplete?: () => void;
   chapters?: { title: string; startTime: number; endTime: number }[];
 }
 
@@ -46,6 +47,7 @@ interface LivepeerPlayerViewProps {
 export function LivepeerPlayerView({
   playbackId,
   onProgressUpdate,
+  onComplete,
   chapters = [],
 }: LivepeerPlayerViewProps) {
   const playerRef = useRef<HTMLVideoElement>(null);
@@ -72,7 +74,9 @@ export function LivepeerPlayerView({
   const [showHoverTooltip, setShowHoverTooltip] = useState(false);
 
   // Quality selector state
-  const [availableQualities, setAvailableQualities] = useState<VideoQuality[]>([]);
+  const [availableQualities, setAvailableQualities] = useState<VideoQuality[]>(
+    []
+  );
   const [currentQuality, setCurrentQuality] = useState<string>("Auto");
   const [showQualityMenu, setShowQualityMenu] = useState(false);
 
@@ -83,7 +87,10 @@ export function LivepeerPlayerView({
       setError(null);
 
       try {
-        console.log("[Livepeer Player] Fetching playback source for:", playbackId);
+        console.log(
+          "[Livepeer Player] Fetching playback source for:",
+          playbackId
+        );
 
         // Use server action to fetch source with official getSrc()
         const { getLivepeerSource } = await import("@/app/actions/livepeer");
@@ -100,10 +107,11 @@ export function LivepeerPlayerView({
 
         // Check if video is still processing
         // Processing state is determined by missing HLS renditions
-        const processing = result.playbackInfo?.meta?.source?.some(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (s: any) => s.hrn === "HLS" && !s.url
-        ) ?? false;
+        const processing =
+          result.playbackInfo?.meta?.source?.some(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (s: any) => s.hrn === "HLS" && !s.url
+          ) ?? false;
 
         setIsProcessing(processing);
 
@@ -122,7 +130,7 @@ export function LivepeerPlayerView({
         setAvailableQualities(renditions);
 
         // Set default quality to Auto (HLS) if available
-        const hlsQuality = renditions.find(r => r.type === "HLS");
+        const hlsQuality = renditions.find((r) => r.type === "HLS");
         if (hlsQuality) {
           setCurrentQuality(hlsQuality.label);
         } else if (renditions.length > 0) {
@@ -136,10 +144,15 @@ export function LivepeerPlayerView({
         // Enhanced error messages
         let errorMessage = "Failed to load video";
         if (err instanceof Error) {
-          if (err.message.includes("Failed to fetch") || err.message.includes("fetch")) {
-            errorMessage = "Network error. Please check your connection and try again.";
+          if (
+            err.message.includes("Failed to fetch") ||
+            err.message.includes("fetch")
+          ) {
+            errorMessage =
+              "Network error. Please check your connection and try again.";
           } else if (err.message.includes("processing")) {
-            errorMessage = "Video is being processed. Please wait a moment and refresh.";
+            errorMessage =
+              "Video is being processed. Please wait a moment and refresh.";
           } else {
             errorMessage = err.message;
           }
@@ -168,13 +181,16 @@ export function LivepeerPlayerView({
 
         if (result.success && result.src) {
           // Check if HLS renditions are now available
-          const stillProcessing = result.playbackInfo?.meta?.source?.some(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (s: any) => s.hrn === "HLS" && !s.url
-          ) ?? false;
+          const stillProcessing =
+            result.playbackInfo?.meta?.source?.some(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (s: any) => s.hrn === "HLS" && !s.url
+            ) ?? false;
 
           if (!stillProcessing) {
-            console.log("[Livepeer Player] Processing complete! Updating renditions...");
+            console.log(
+              "[Livepeer Player] Processing complete! Updating renditions..."
+            );
             setIsProcessing(false);
 
             // Update with new transcoded renditions
@@ -184,16 +200,19 @@ export function LivepeerPlayerView({
             setSrc(result.src);
 
             // Switch to HLS if now available
-            const hlsQuality = renditions.find(r => r.type === "HLS");
+            const hlsQuality = renditions.find((r) => r.type === "HLS");
             if (hlsQuality) {
               setCurrentQuality(hlsQuality.label);
             }
           } else {
-            setProcessingCheckCount(prev => prev + 1);
+            setProcessingCheckCount((prev) => prev + 1);
           }
         }
       } catch (err) {
-        console.error("[Livepeer Player] Error checking processing status:", err);
+        console.error(
+          "[Livepeer Player] Error checking processing status:",
+          err
+        );
       }
     }, 6000); // Check every 6 seconds
 
@@ -213,6 +232,14 @@ export function LivepeerPlayerView({
       const currentTime = Math.floor(video.currentTime);
       setTime(currentTime);
       onProgressUpdate(currentTime);
+
+      // Trigger completion callback at 95% progress
+      if (onComplete && video.duration > 0) {
+        const progressPercent = (currentTime / video.duration) * 100;
+        if (progressPercent >= 95) {
+          onComplete();
+        }
+      }
     };
 
     const handlePlay = () => setPlaying(true);
@@ -236,13 +263,15 @@ export function LivepeerPlayerView({
       video.removeEventListener("pause", handlePause);
       video.removeEventListener("volumechange", handleVolumeChange);
     };
-  }, [onProgressUpdate]);
+  }, [onProgressUpdate, onComplete]);
 
   // Format time as MM:SS for display
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
   };
 
   // Progress bar percentage for custom displays
@@ -320,7 +349,8 @@ export function LivepeerPlayerView({
     };
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
   // Auto-hide controls when playing
@@ -341,7 +371,9 @@ export function LivepeerPlayerView({
         <div className="flex flex-col items-center text-white">
           <Loader2 className="h-12 w-12 animate-spin mb-4 text-red-500" />
           <p className="text-base font-medium">Loading video...</p>
-          <p className="text-xs text-gray-400 mt-2">Fetching playback information</p>
+          <p className="text-xs text-gray-400 mt-2">
+            Fetching playback information
+          </p>
         </div>
         {/* Skeleton pulse effect */}
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-pulse"></div>
@@ -372,10 +404,7 @@ export function LivepeerPlayerView({
               <RefreshCw className="h-4 w-4 mr-2" />
               Retry
             </Button>
-            <Button
-              onClick={() => window.history.back()}
-              variant="secondary"
-            >
+            <Button onClick={() => window.history.back()} variant="secondary">
               Go Back
             </Button>
           </div>
@@ -390,8 +419,9 @@ export function LivepeerPlayerView({
       ref={wrapRef}
       onMouseMove={() => setShowControls(true)}
       onMouseLeave={() => playing && setShowControls(false)}
-      className={`relative bg-black rounded-lg overflow-hidden shadow-lg ${fullscreen ? "fixed inset-0 z-50 rounded-none" : ""
-        }`}
+      className={`relative bg-black rounded-lg overflow-hidden shadow-lg ${
+        fullscreen ? "fixed inset-0 z-50 rounded-none" : ""
+      }`}
     >
       <div className={`relative ${fullscreen ? "h-full" : "aspect-video"}`}>
         <Player.Root src={src} autoPlay={false}>
@@ -416,8 +446,12 @@ export function LivepeerPlayerView({
             >
               <div className="flex flex-col gap-3 items-center">
                 <AlertCircle className="h-12 w-12 text-red-500" />
-                <div className="text-lg font-bold text-white">Failed to load video</div>
-                <div className="text-sm text-gray-300">Please try refreshing the page</div>
+                <div className="text-lg font-bold text-white">
+                  Failed to load video
+                </div>
+                <div className="text-sm text-gray-300">
+                  Please try refreshing the page
+                </div>
               </div>
             </Player.ErrorIndicator>
 
@@ -426,9 +460,12 @@ export function LivepeerPlayerView({
               <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-yellow-600/95 text-white px-6 py-3 rounded-lg shadow-xl flex items-center gap-3 z-10 animate-pulse">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <div className="flex flex-col">
-                  <span className="text-sm font-semibold">Video Processing</span>
+                  <span className="text-sm font-semibold">
+                    Video Processing
+                  </span>
                   <span className="text-xs text-yellow-100">
-                    Higher quality versions are being generated. Video will improve automatically.
+                    Higher quality versions are being generated. Video will
+                    improve automatically.
                   </span>
                 </div>
               </div>
@@ -439,16 +476,22 @@ export function LivepeerPlayerView({
               <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-xs space-y-1 z-10">
                 <div className="flex items-center gap-2">
                   <span className="text-gray-400">Progress:</span>
-                  <span className="font-mono">{Math.round(progressPercent)}%</span>
+                  <span className="font-mono">
+                    {Math.round(progressPercent)}%
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-gray-400">Time:</span>
-                  <span className="font-mono">{formatTime(time)} / {formatTime(duration)}</span>
+                  <span className="font-mono">
+                    {formatTime(time)} / {formatTime(duration)}
+                  </span>
                 </div>
                 {!muted && (
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">Volume:</span>
-                    <span className="font-mono">{Math.round(volume * 100)}%</span>
+                    <span className="font-mono">
+                      {Math.round(volume * 100)}%
+                    </span>
                   </div>
                 )}
                 {muted && (
@@ -463,8 +506,9 @@ export function LivepeerPlayerView({
             {/* Center Play/Pause Button - Using Livepeer Primitives */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <Player.PlayPauseTrigger
-                className={`pointer-events-auto h-20 w-20 rounded-full bg-black/30 hover:bg-black/50 text-white transition-all duration-200 flex items-center justify-center ${playing && !showControls ? "opacity-0" : "opacity-100"
-                  }`}
+                className={`pointer-events-auto h-20 w-20 rounded-full bg-black/30 hover:bg-black/50 text-white transition-all duration-200 flex items-center justify-center ${
+                  playing && !showControls ? "opacity-0" : "opacity-100"
+                }`}
               >
                 <Player.PlayingIndicator asChild matcher={false}>
                   <Play className="h-10 w-10 ml-1" />
@@ -508,7 +552,7 @@ export function LivepeerPlayerView({
                       className="absolute -top-8 bg-black/90 text-white text-xs px-2 py-1 rounded pointer-events-none"
                       style={{
                         left: `${(hoverTime / duration) * 100}%`,
-                        transform: 'translateX(-50%)'
+                        transform: "translateX(-50%)",
                       }}
                     >
                       {formatTime(hoverTime)}
@@ -593,14 +637,15 @@ export function LivepeerPlayerView({
                               Quality
                             </div>
                             <div className="py-1">
-                              {availableQualities.map((quality) => (
+                              {availableQualities.map((quality, index) => (
                                 <button
-                                  key={quality.label}
+                                  key={`${quality.type}-${quality.label}-${index}`}
                                   onClick={() => switchQuality(quality)}
-                                  className={`w-full px-4 py-2 text-sm text-left hover:bg-gray-800 transition-colors flex items-center justify-between ${currentQuality === quality.label
-                                    ? "bg-gray-800 text-white font-semibold"
-                                    : "text-gray-300"
-                                    }`}
+                                  className={`w-full px-4 py-2 text-sm text-left hover:bg-gray-800 transition-colors flex items-center justify-between ${
+                                    currentQuality === quality.label
+                                      ? "bg-gray-800 text-white font-semibold"
+                                      : "text-gray-300"
+                                  }`}
                                 >
                                   <span>{quality.label}</span>
                                   {currentQuality === quality.label && (

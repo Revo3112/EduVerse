@@ -23,43 +23,17 @@ let cachedEndpoint: string = "";
 
 function getGraphQLClient(): GraphQLClient {
   const endpoint = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
-  const isClient = typeof window !== "undefined";
 
   if (!endpoint) {
-    console.error(
-      "[Goldsky] CRITICAL: NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT is not set!"
-    );
-    console.error("[Goldsky] Runtime:", isClient ? "CLIENT" : "SERVER");
-    console.error("[Goldsky] This usually means:");
-    console.error("[Goldsky]   1. .env.local file is missing or not loaded");
-    console.error(
-      "[Goldsky]   2. Next.js dev server needs restart: rm -rf .next && npm run dev"
-    );
-    console.error(
-      "[Goldsky]   3. Browser cache needs hard refresh (Ctrl+Shift+R)"
-    );
-    console.error("[Goldsky] Visit /test-env page to diagnose the issue");
     throw new Error(
       "NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT is not configured. Visit /test-env to diagnose."
     );
   }
 
   if (!graphqlClient || cachedEndpoint !== endpoint) {
-    console.log(
-      "[Goldsky] Creating GraphQL client",
-      isClient ? "(CLIENT)" : "(SERVER)"
-    );
-    console.log("[Goldsky] Endpoint:", endpoint);
     graphqlClient = new GraphQLClient(endpoint, {
       headers: {
         "Content-Type": "application/json",
-      },
-      fetch: (input, init) => {
-        console.log("[Goldsky] Fetching:", input);
-        return fetch(input, init).catch((err) => {
-          console.error("[Goldsky] Fetch error:", err);
-          throw err;
-        });
       },
     });
     cachedEndpoint = endpoint;
@@ -145,9 +119,7 @@ async function executeWithRetry<T>(
   for (let i = 0; i < retries; i++) {
     try {
       const result = await fn();
-      if (i > 0) {
-        console.log(`[Goldsky Creator] Succeeded on attempt ${i + 1}`);
-      }
+
       return result;
     } catch (error: unknown) {
       lastError = error as Error;
@@ -155,28 +127,12 @@ async function executeWithRetry<T>(
       const errorObj = error as GraphQLErrorResponse;
       const errorStr = String(error);
 
-      console.error(
-        `[Goldsky Creator] Attempt ${i + 1}/${retries} error details:`,
-        {
-          message: errorObj?.message,
-          status: errorObj?.response?.status || errorObj?.status,
-          response: errorObj?.response,
-          stack: errorObj?.stack?.split("\n").slice(0, 3),
-        }
-      );
-
       const isActual404 =
         errorObj?.response?.status === 404 ||
         errorObj?.status === 404 ||
         errorObj?.response?.errors?.[0]?.extensions?.code === "NOT_FOUND";
 
       if (isActual404) {
-        console.warn(
-          "[Goldsky Creator] Got HTTP 404 - endpoint may not exist or subgraph not deployed"
-        );
-        console.warn(
-          "[Goldsky Creator] Run: cd goldsky-indexer/subgraph-custom && goldsky subgraph list"
-        );
         throw new GoldskyError(
           `GraphQL endpoint not found (HTTP 404)`,
           "NOT_FOUND",
@@ -191,16 +147,11 @@ async function executeWithRetry<T>(
         errorStr.includes("ENOTFOUND");
 
       if (!isNetworkError && i === 0) {
-        console.warn(
-          `[Goldsky Creator] Non-retryable error on first attempt:`,
-          error
-        );
         throw error;
       }
 
       if (i < retries - 1) {
         const delay = RETRY_DELAY * (i + 1);
-        console.log(`[Goldsky Creator] Retrying in ${delay}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
@@ -419,9 +370,6 @@ function bigIntToNumber(value: unknown): number {
       if (Number.isSafeInteger(num)) {
         return num;
       }
-      console.warn(
-        `[Goldsky] Value exceeds safe integer range: ${value}, precision may be lost`
-      );
       return Number(value);
     } catch {
       return 0;
@@ -429,11 +377,7 @@ function bigIntToNumber(value: unknown): number {
   }
   if (typeof value === "bigint") {
     const num = Number(value);
-    if (!Number.isSafeInteger(num)) {
-      console.warn(
-        `[Goldsky] BigInt value exceeds safe integer range: ${value}`
-      );
-    }
+
     return num;
   }
   return 0;
@@ -567,25 +511,14 @@ export async function getCreatorCourses(creatorAddress: string): Promise<{
   if (cached) return cached;
 
   try {
-    // Execute query
-    console.log(
-      "[Goldsky Creator] Fetching courses for creator:",
-      normalizedAddress
-    );
     const client = getGraphQLClient();
     const variables = { creatorAddress: normalizedAddress };
 
     const data = (await executeWithRetry(async () => {
-      console.log("[Goldsky Creator] Sending GraphQL request...");
       const response = await client.request(
         GET_CREATOR_COURSES_QUERY,
         variables
       );
-      console.log("[Goldsky Creator] Got response:", {
-        hasCourses: !!response?.courses,
-        coursesCount: response?.courses?.length || 0,
-        hasUserProfile: !!response?.userProfile,
-      });
       return response;
     })) as {
       courses: Record<string, unknown>[];
@@ -593,7 +526,6 @@ export async function getCreatorCourses(creatorAddress: string): Promise<{
     };
 
     if (!data || typeof data !== "object") {
-      console.error("[Goldsky Creator] Invalid response format:", data);
       throw new Error("Invalid response format from Goldsky");
     }
 
@@ -604,14 +536,8 @@ export async function getCreatorCourses(creatorAddress: string): Promise<{
 
     setCachedData(cacheKey, result);
 
-    console.log(
-      "[Goldsky Creator] Successfully fetched and cached courses:",
-      courses.length
-    );
     return result;
   } catch (error: unknown) {
-    console.error("[Goldsky Creator] Error fetching creator courses:", error);
-
     const emptyResult = {
       courses: [],
       stats: {
@@ -630,7 +556,6 @@ export async function getCreatorCourses(creatorAddress: string): Promise<{
     };
 
     if (error instanceof GoldskyError && error.code === "NOT_FOUND") {
-      console.warn("[Goldsky Creator] Returning empty result due to 404");
       return emptyResult;
     }
 
@@ -668,10 +593,7 @@ export async function getCourseDetail(
 
     return course;
   } catch (error: unknown) {
-    console.error("[Goldsky Creator] Error fetching course detail:", error);
-
     if (error instanceof GoldskyError && error.code === "NOT_FOUND") {
-      console.warn("[Goldsky Creator] Course not found (404), returning null");
       return null;
     }
 
@@ -721,11 +643,7 @@ export async function getCreatorStats(
     setCachedData(cacheKey, stats);
 
     return stats;
-  } catch (error: unknown) {
-    console.error(
-      `Error fetching creator stats for ${normalizedAddress}:`,
-      error
-    );
+  } catch {
     return emptyStats;
   }
 }

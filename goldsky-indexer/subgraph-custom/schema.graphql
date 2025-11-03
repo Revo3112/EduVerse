@@ -474,13 +474,9 @@ type PlatformStats @entity {
 type NetworkStats @entity {
   id: ID! # "network"
   totalTransactions: BigInt!
-  totalGasUsed: BigInt!
-  totalGasCost: BigDecimal! # in ETH
-  averageGasPrice: BigDecimal! # in gwei
-  averageBlockTime: BigDecimal! # in seconds
   lastBlockNumber: BigInt!
   lastBlockTimestamp: BigInt!
-
+  averageBlockTime: BigDecimal! # in seconds
   # Transaction type counts
   totalCourseCreations: BigInt!
   totalLicenseMints: BigInt!
@@ -499,11 +495,7 @@ type DailyNetworkStats @entity {
   id: ID! # YYYY-MM-DD
   date: String!
   transactionCount: BigInt!
-  gasUsed: BigInt!
-  gasCost: BigDecimal!
-  averageGasPrice: BigDecimal!
   blockCount: BigInt!
-  totalBlockTime: BigDecimal!
 
   # Daily breakdown
   courseTransactions: BigInt!
@@ -515,40 +507,7 @@ type DailyNetworkStats @entity {
   successfulTransactions: BigInt!
   failedTransactions: BigInt!
 
-  # Value metrics
-  totalValueTransferred: BigDecimal! # in ETH
-  uniqueUsers: BigInt!
-
   # References
   startBlock: BigInt!
   endBlock: BigInt!
-}
-
-# Detailed transaction records
-type TransactionRecord @entity {
-  id: ID! # txHash
-  hash: Bytes!
-  blockNumber: BigInt!
-  timestamp: BigInt!
-  gasUsed: BigInt!
-  gasPrice: BigDecimal!
-  value: BigDecimal! # ETH value
-  from: Bytes!
-  to: Bytes!
-  contractAddress: Bytes!
-  functionName: String! # derived from input
-  success: Boolean!
-
-  # Event categorization
-  eventType: String! # COURSE, LICENSE, CERTIFICATE, PROGRESS
-  eventAction: String! # CREATE, UPDATE, DELETE, etc.
-  # Related entities
-  course: Course
-  enrollment: Enrollment
-  certificate: Certificate
-  userProfile: UserProfile
-
-  # Metadata
-  inputData: String # ABI-decoded function parameters
-  errorMessage: String # If failed
 }

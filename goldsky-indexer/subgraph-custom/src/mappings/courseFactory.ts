@@ -1,4 +1,11 @@
-import { BigInt, BigDecimal, Bytes, store, log } from "@graphprotocol/graph-ts";
+import {
+  BigInt,
+  BigDecimal,
+  Bytes,
+  store,
+  log,
+  ethereum,
+} from "@graphprotocol/graph-ts";
 import {
   CourseCreated,
   CourseUpdated,
@@ -24,6 +31,11 @@ import {
   CourseFactory,
 } from "../../generated/CourseFactory/CourseFactory";
 import { Course, UserProfile, CourseSection } from "../../generated/schema";
+import {
+  updateNetworkStats,
+  incrementPlatformCounter,
+} from "./helpers/networkStatsHelper";
+import { createActivityEvent } from "./helpers/activityEventHelper";
 
 // ============================================================================
 // CONSTANTS - Match smart contract values
@@ -52,11 +64,16 @@ function weiToEth(wei: BigInt): BigDecimal {
  * Get or create UserProfile entity
  * Pattern: Lazy initialization prevents null checks everywhere
  */
-function getOrCreateUserProfile(address: Bytes): UserProfile {
-  let profile = UserProfile.load(address.toHexString());
+function getOrCreateUserProfile(
+  address: Bytes,
+  event: ethereum.Event,
+): UserProfile {
+  let id = address.toHexString().toLowerCase();
+  let profile = UserProfile.load(id);
+  let isNewUser = profile == null;
 
-  if (profile == null) {
-    profile = new UserProfile(address.toHexString());
+  if (isNewUser) {
+    profile = new UserProfile(id);
     profile.address = address;
 
     // Initialize student stats
@@ -111,9 +128,11 @@ function getOrCreateUserProfile(address: Bytes): UserProfile {
     profile.blacklistedAt = ZERO_BIGINT;
     profile.blacklistedBy = Bytes.fromHexString(ZERO_ADDRESS);
     profile.blockNumber = ZERO_BIGINT;
+
+    incrementPlatformCounter("USER", event);
   }
 
-  return profile;
+  return profile as UserProfile;
 }
 
 /**
@@ -241,7 +260,7 @@ export function handleCourseCreated(event: CourseCreated): void {
   course.save();
 
   // Update creator's UserProfile
-  let creator = getOrCreateUserProfile(event.params.creator);
+  let creator = getOrCreateUserProfile(event.params.creator, event);
   creator.coursesCreated = creator.coursesCreated.plus(ONE_BIGINT);
   creator.activeCoursesCreated = creator.activeCoursesCreated.plus(ONE_BIGINT);
 
@@ -256,6 +275,27 @@ export function handleCourseCreated(event: CourseCreated): void {
   creator.blockNumber = event.block.number;
   creator.lastActivityAt = event.block.timestamp;
   creator.save();
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_CREATED");
+  // Track platform counters
+  incrementPlatformCounter("COURSE", event);
+
+  createActivityEvent(
+    event,
+    "COURSE_CREATED",
+    course.creator,
+    "Created course: " + course.title,
+    courseId,
+    null,
+    null,
+    null,
+  );
+
+  log.info(
+    "ActivityEvent created for CourseCreated - Creator: {}, CourseId: {}, Title: {}",
+    [course.creator.toHexString(), courseId, course.title],
+  );
 }
 
 /**
@@ -271,6 +311,25 @@ export function handleCourseUpdated(event: CourseUpdated): void {
     course.isActive = event.params.isActive;
     course.updatedAt = event.block.timestamp;
     course.save();
+
+    // Track network stats
+    updateNetworkStats(event, "COURSE_UPDATED");
+
+    createActivityEvent(
+      event,
+      "COURSE_UPDATED",
+      course.creator,
+      "Updated course: " + course.title,
+      event.params.courseId.toString(),
+      null,
+      null,
+      null,
+    );
+
+    log.info(
+      "ActivityEvent created for CourseUpdated - Creator: {}, CourseId: {}",
+      [course.creator.toHexString(), event.params.courseId.toString()],
+    );
   }
 }
 
@@ -305,7 +364,7 @@ export function handleCourseDeleted(event: CourseDeleted): void {
     }
 
     // Update creator stats
-    let creator = UserProfile.load(course.creator.toHexString());
+    let creator = getOrCreateUserProfile(course.creator, event);
     if (creator != null) {
       creator.deletedCoursesCreated =
         creator.deletedCoursesCreated.plus(ONE_BIGINT);
@@ -313,6 +372,23 @@ export function handleCourseDeleted(event: CourseDeleted): void {
         creator.activeCoursesCreated.minus(ONE_BIGINT);
       creator.save();
     }
+  }
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_DELETED");
+
+  // Create activity event
+  if (course != null) {
+    createActivityEvent(
+      event,
+      "COURSE_DELETED",
+      event.params.creator,
+      "Deleted course: " + course.title,
+      courseId,
+      null,
+      null,
+      null,
+    );
   }
 }
 
@@ -326,6 +402,32 @@ export function handleCourseUnpublished(event: CourseUnpublished): void {
     course.isActive = false;
     course.updatedAt = event.block.timestamp;
     course.save();
+
+    let creator = UserProfile.load(course.creator.toHexString().toLowerCase());
+    if (creator && creator.activeCoursesCreated.gt(ZERO_BIGINT)) {
+      creator.activeCoursesCreated =
+        creator.activeCoursesCreated.minus(ONE_BIGINT);
+      creator.updatedAt = event.block.timestamp;
+      creator.lastTxHash = event.transaction.hash;
+      creator.save();
+    }
+  }
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_UNPUBLISHED");
+
+  // Create activity event
+  if (course != null) {
+    createActivityEvent(
+      event,
+      "COURSE_UNPUBLISHED",
+      course.creator,
+      "Unpublished course: " + course.title,
+      event.params.courseId.toString(),
+      null,
+      null,
+      null,
+    );
   }
 }
 
@@ -339,6 +441,32 @@ export function handleCourseRepublished(event: CourseRepublished): void {
     course.isActive = true;
     course.updatedAt = event.block.timestamp;
     course.save();
+
+    let creator = UserProfile.load(course.creator.toHexString().toLowerCase());
+    if (creator) {
+      creator.activeCoursesCreated =
+        creator.activeCoursesCreated.plus(ONE_BIGINT);
+      creator.updatedAt = event.block.timestamp;
+      creator.lastTxHash = event.transaction.hash;
+      creator.save();
+    }
+  }
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_REPUBLISHED");
+
+  // Create activity event
+  if (course != null) {
+    createActivityEvent(
+      event,
+      "COURSE_REPUBLISHED",
+      course.creator,
+      "Republished course: " + course.title,
+      event.params.courseId.toString(),
+      null,
+      null,
+      null,
+    );
   }
 }
 
@@ -384,6 +512,55 @@ export function handleSectionAdded(event: SectionAdded): void {
     course.totalDuration = course.totalDuration.plus(event.params.duration);
     course.updatedAt = event.block.timestamp;
     course.save();
+
+    // Track network stats
+    updateNetworkStats(event, "SECTION_ADDED");
+
+    // Create activity event
+    let course_ref = Course.load(courseId.toString());
+    if (course_ref != null) {
+      createActivityEvent(
+        event,
+        "SECTION_ADDED",
+        course_ref.creator,
+        "Added section: " + section.title,
+        courseId.toString(),
+        null,
+        null,
+        null,
+      );
+
+      log.info(
+        "ActivityEvent created for SectionAdded - Creator: {}, CourseId: {}, SectionId: {}",
+        [
+          course_ref.creator.toHexString(),
+          courseId.toString(),
+          sectionId.toString(),
+        ],
+      );
+    }
+  }
+
+  section.save();
+
+  // Track network stats
+  updateNetworkStats(event, "SECTION_UPDATED");
+
+  // Create activity event
+  if (section != null) {
+    let course = Course.load(event.params.courseId.toString());
+    if (course != null) {
+      createActivityEvent(
+        event,
+        "SECTION_UPDATED",
+        course.creator,
+        "Updated section: " + section.title,
+        event.params.courseId.toString(),
+        null,
+        null,
+        null,
+      );
+    }
   }
 }
 
@@ -446,6 +623,9 @@ export function handleSectionDeleted(event: SectionDeleted): void {
       course.save();
     }
   }
+
+  // Track network stats
+  updateNetworkStats(event, "SECTION_DELETED");
 }
 
 /**
@@ -462,6 +642,9 @@ export function handleSectionUpdated(event: SectionUpdated): void {
     // We just update the timestamp to track when it was modified
     section.save();
   }
+
+  // Track network stats
+  updateNetworkStats(event, "SECTION_UPDATED");
 }
 
 /**
@@ -504,6 +687,9 @@ export function handleSectionsSwapped(event: SectionsSwapped): void {
       sectionB.save();
     }
   }
+
+  // Track network stats
+  updateNetworkStats(event, "SECTIONS_SWAPPED");
 }
 
 /**
@@ -522,6 +708,9 @@ export function handleBatchSectionsAdded(event: BatchSectionsAdded): void {
     course.updatedAt = event.block.timestamp;
     course.save();
   }
+
+  // Track network stats
+  updateNetworkStats(event, "BATCH_SECTIONS_ADDED");
 }
 
 // ============================================================================
@@ -552,19 +741,46 @@ export function handleCourseRated(event: CourseRated): void {
     course.save();
 
     // Update creator's average rating
-    let creator = UserProfile.load(course.creator.toHexString());
+    let creator = getOrCreateUserProfile(course.creator, event);
     if (creator != null) {
       creator.totalRatingsReceived =
         creator.totalRatingsReceived.plus(ONE_BIGINT);
 
-      // Recalculate creator's average rating across all courses
-      // Note: This is an approximation; for exact value, need to query all creator's courses
-      let totalCourses = creator.coursesCreated;
-      if (totalCourses.gt(ZERO_BIGINT)) {
-        creator.averageRating = course.averageRating; // Simplified for now
-      }
+      // Note: Creator's averageRating cannot be accurately calculated here
+      // because we cannot efficiently query all courses by creator in AssemblyScript.
+      // This field should be calculated off-chain or via aggregation queries.
+      // We leave it unchanged to avoid incorrect values.
+
+      creator.updatedAt = event.block.timestamp;
+      creator.lastTxHash = event.transaction.hash;
       creator.save();
     }
+  }
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_RATED");
+
+  // Create activity event
+  if (course != null) {
+    createActivityEvent(
+      event,
+      "COURSE_RATED",
+      event.params.user,
+      "Rated course: " + course.title,
+      event.params.courseId.toString(),
+      null,
+      null,
+      null,
+    );
+
+    log.info(
+      "ActivityEvent created for CourseRated - User: {}, CourseId: {}, Rating: {}",
+      [
+        event.params.user.toHexString(),
+        event.params.courseId.toString(),
+        event.params.rating.toString(),
+      ],
+    );
   }
 }
 
@@ -587,6 +803,23 @@ export function handleRatingUpdated(event: RatingUpdated): void {
     course.lastRatingAt = event.block.timestamp;
     course.updatedAt = event.block.timestamp;
     course.save();
+  }
+
+  // Track network stats
+  updateNetworkStats(event, "RATING_UPDATED");
+
+  // Create activity event
+  if (course != null) {
+    createActivityEvent(
+      event,
+      "RATING_UPDATED",
+      event.params.user,
+      "Updated rating for: " + course.title,
+      event.params.courseId.toString(),
+      null,
+      null,
+      null,
+    );
   }
 }
 
@@ -613,6 +846,9 @@ export function handleRatingDeleted(event: RatingDeleted): void {
     course.updatedAt = event.block.timestamp;
     course.save();
   }
+
+  // Track network stats
+  updateNetworkStats(event, "RATING_DELETED");
 }
 
 // ============================================================================
@@ -652,6 +888,9 @@ export function handleRatingRemoved(event: RatingRemoved): void {
       event.params.admin.toHexString(),
     ]);
   }
+
+  // Track network stats
+  updateNetworkStats(event, "RATING_REMOVED");
 }
 
 /**
@@ -672,6 +911,9 @@ export function handleRatingsPaused(event: RatingsPaused): void {
       event.params.admin.toHexString(),
     ]);
   }
+
+  // Track network stats
+  updateNetworkStats(event, "RATINGS_PAUSED");
 }
 
 /**
@@ -692,6 +934,9 @@ export function handleRatingsUnpaused(event: RatingsUnpaused): void {
       event.params.admin.toHexString(),
     ]);
   }
+
+  // Track network stats
+  updateNetworkStats(event, "RATINGS_UNPAUSED");
 }
 
 // ============================================================================
@@ -704,7 +949,7 @@ export function handleRatingsUnpaused(event: RatingsUnpaused): void {
  * ✅ NEW: Required for moderation system
  */
 export function handleUserBlacklisted(event: UserBlacklisted): void {
-  let profile = getOrCreateUserProfile(event.params.user);
+  let profile = getOrCreateUserProfile(event.params.user, event);
 
   profile.isBlacklisted = true;
   profile.blacklistedAt = event.block.timestamp;
@@ -717,6 +962,9 @@ export function handleUserBlacklisted(event: UserBlacklisted): void {
     event.params.user.toHexString(),
     event.params.admin.toHexString(),
   ]);
+
+  // Track network stats
+  updateNetworkStats(event, "USER_BLACKLISTED");
 }
 
 /**
@@ -725,7 +973,7 @@ export function handleUserBlacklisted(event: UserBlacklisted): void {
  * ✅ NEW: Required for moderation system
  */
 export function handleUserUnblacklisted(event: UserUnblacklisted): void {
-  let profile = getOrCreateUserProfile(event.params.user);
+  let profile = getOrCreateUserProfile(event.params.user, event);
 
   profile.isBlacklisted = false;
   profile.blacklistedAt = ZERO_BIGINT;
@@ -738,6 +986,9 @@ export function handleUserUnblacklisted(event: UserUnblacklisted): void {
     event.params.user.toHexString(),
     event.params.admin.toHexString(),
   ]);
+
+  // Track network stats
+  updateNetworkStats(event, "USER_UNBLACKLISTED");
 }
 
 // ============================================================================
@@ -769,6 +1020,9 @@ export function handleCourseEmergencyDeactivated(
       event.params.timestamp.toString(),
     ]);
   }
+
+  // Track network stats
+  updateNetworkStats(event, "COURSE_EMERGENCY_DEACTIVATED");
 }
 
 // ============================================================================
@@ -856,6 +1110,9 @@ export function handleSectionMoved(event: SectionMoved): void {
       ]);
     }
   }
+
+  // Track network stats
+  updateNetworkStats(event, "SECTION_MOVED");
 }
 
 /**
@@ -892,4 +1149,7 @@ export function handleSectionsBatchReordered(
       courseId,
     ]);
   }
+
+  // Track network stats
+  updateNetworkStats(event, "SECTIONS_BATCH_REORDERED");
 }

@@ -9,6 +9,7 @@ interface HybridVideoPlayerProps {
   section: EnrichedCourseSection;
   progress: SectionProgress | null;
   onProgressUpdate: (time: number) => void;
+  onComplete?: () => void;
 }
 
 /**
@@ -28,6 +29,7 @@ export function HybridVideoPlayer({
   section,
   progress,
   onProgressUpdate,
+  onComplete,
 }: HybridVideoPlayerProps) {
   const isLivepeer = isLivepeerPlaybackId(section.contentCID);
 
@@ -43,6 +45,7 @@ export function HybridVideoPlayer({
       <LivepeerPlayerView
         playbackId={section.contentCID}
         onProgressUpdate={onProgressUpdate}
+        onComplete={onComplete}
         chapters={section.videoMetadata.chapters}
       />
     );

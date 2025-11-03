@@ -26,45 +26,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Import modals
 import { RatingModal } from "@/components/RatingModal";
 import { GetCertificateModal } from "@/components/GetCertificateModal";
 import RenewLicenseModal from "@/components/RenewLicenseModal";
 
-// Import integrated hooks
 import {
   useMyLearningComplete,
   type EnrollmentData,
 } from "@/hooks/useMyLearning";
 
-/**
- * ============================================================================
- * MY LEARNING PAGE - PRODUCTION READY
- * ============================================================================
- *
- * Architecture:
- * - READ: Goldsky GraphQL for fast, cached enrollment data
- * - WRITE: Thirdweb for on-chain transactions (certificate, rating, renewal)
- *
- * Features:
- * ✅ Real-time enrollment data from Goldsky
- * ✅ Certificate minting via CertificateManager contract
- * ✅ Course rating via CourseFactory contract
- * ✅ License renewal via CourseLicense contract
- * ✅ Progress tracking integration
- * ✅ Automatic data refresh after transactions
- *
- * ============================================================================
- */
 export default function LearningPage() {
   const router = useRouter();
   const account = useActiveAccount();
 
-  // Fetch all learning data with integrated actions
   const {
     enrollments,
     userStats,
-    certificates,
     isLoading,
     isError,
     error,
@@ -72,7 +49,6 @@ export default function LearningPage() {
     refetchAll,
   } = useMyLearningComplete(account?.address);
 
-  // UI state for modals
   const [activeTab, setActiveTab] = useState<"in-progress" | "history">(
     "in-progress"
   );
@@ -88,10 +64,6 @@ export default function LearningPage() {
   const [selectedEnrollmentForRenewal, setSelectedEnrollmentForRenewal] =
     useState<EnrollmentData | null>(null);
 
-  // =================================================================
-  // DATA PROCESSING
-  // =================================================================
-
   const processedData = useMemo(() => {
     if (!enrollments) return { inProgress: [], history: [] };
 
@@ -106,20 +78,14 @@ export default function LearningPage() {
     return { inProgress, history };
   }, [enrollments]);
 
-  // =================================================================
-  // HANDLERS
-  // =================================================================
-
   const handleContinueLearning = (enrollment: EnrollmentData) => {
     const now = Math.floor(Date.now() / 1000);
     const isLicenseValid =
       Number(enrollment.expiryDate) > now && enrollment.isActive;
 
     if (isLicenseValid) {
-      // License active - navigate to course details
       router.push(`/learning/course-details?id=${enrollment.courseId}`);
     } else {
-      // License expired - show renewal modal
       setSelectedEnrollmentForRenewal(enrollment);
       setIsRenewalModalOpen(true);
     }
@@ -135,7 +101,6 @@ export default function LearningPage() {
     }
   };
 
-  // Rating Modal Handlers
   const handleOpenRatingModal = (enrollment: EnrollmentData) => {
     setSelectedEnrollmentForRating(enrollment);
     setIsRatingModalOpen(true);
@@ -198,7 +163,6 @@ export default function LearningPage() {
     await refetchAll();
   };
 
-  // Certificate Modal Handlers
   const handleOpenCertificateModal = (enrollment: EnrollmentData) => {
     setSelectedEnrollmentForCertificate(enrollment);
     setIsCertificateModalOpen(true);
@@ -213,7 +177,6 @@ export default function LearningPage() {
     await refetchAll();
   };
 
-  // Renewal Modal Handlers
   const handleCloseRenewalModal = () => {
     setIsRenewalModalOpen(false);
     setSelectedEnrollmentForRenewal(null);
@@ -228,10 +191,6 @@ export default function LearningPage() {
       );
     }
   };
-
-  // =================================================================
-  // UTILITY FUNCTIONS
-  // =================================================================
 
   const formatDate = (date: Date | number | null | undefined): string => {
     if (!date) return "";
@@ -258,414 +217,246 @@ export default function LearningPage() {
     }
   };
 
-  // =================================================================
-  // LOADING STATE
-  // =================================================================
+  if (!account) {
+    return (
+      <ContentContainer>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <User className="w-16 h-16 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
+          <p className="text-muted-foreground max-w-md">
+            Please connect your wallet to view your learning progress and
+            enrolled courses.
+          </p>
+        </div>
+      </ContentContainer>
+    );
+  }
 
   if (isLoading) {
     return (
-      <ContentContainer className="space-y-6">
-        <div className="space-y-2">
-          <Skeleton className="h-9 w-64" />
-          <Skeleton className="h-5 w-96" />
+      <ContentContainer>
+        <div className="space-y-6">
+          <Skeleton className="h-12 w-64" />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-32" />
+            ))}
+          </div>
+          <Skeleton className="h-96" />
+        </div>
+      </ContentContainer>
+    );
+  }
+
+  if (isError) {
+    return (
+      <ContentContainer>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error?.message ||
+              "Failed to load learning data. Please try again."}
+          </AlertDescription>
+        </Alert>
+      </ContentContainer>
+    );
+  }
+
+  return (
+    <ContentContainer>
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold">My Learning</h1>
+            <p className="text-muted-foreground mt-2">
+              Track your progress and continue your learning journey
+            </p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <CardHeader className="pb-3">
-                <Skeleton className="h-4 w-32" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-16 mb-2" />
-                <Skeleton className="h-3 w-24" />
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Active Courses
+              </CardTitle>
+              <BookOpen className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {userStats?.activeEnrollments || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Currently enrolled
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Completed Courses
+              </CardTitle>
+              <Trophy className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {userStats?.coursesCompleted || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">Total completed</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Sections Completed
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {userStats?.totalSectionsCompleted || 0}
+              </div>
+              <p className="text-xs text-muted-foreground">Learning progress</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Certificates
+              </CardTitle>
+              <Award className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {userStats?.hasCertificate ? 1 : 0}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {userStats?.hasCertificate ? (
+                  <Button
+                    variant="link"
+                    className="p-0 h-auto text-xs"
+                    onClick={handleViewCertificate}
+                  >
+                    View Certificate
+                  </Button>
+                ) : (
+                  "No certificate yet"
+                )}
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         <Separator />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardHeader>
-                <Skeleton className="aspect-video w-full rounded-md" />
-                <Skeleton className="h-6 w-3/4 mt-4" />
-                <Skeleton className="h-4 w-1/2" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-2 w-full mb-4" />
-                <Skeleton className="h-10 w-full" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </ContentContainer>
-    );
-  }
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "in-progress" | "history")}
+        >
+          <TabsList>
+            <TabsTrigger value="in-progress">
+              In Progress ({processedData.inProgress.length})
+            </TabsTrigger>
+            <TabsTrigger value="history">
+              History ({processedData.history.length})
+            </TabsTrigger>
+          </TabsList>
 
-  // =================================================================
-  // ERROR STATE
-  // =================================================================
-
-  if (isError) {
-    return (
-      <ContentContainer className="space-y-6">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Failed to load learning data: {error?.message || "Unknown error"}
-          </AlertDescription>
-        </Alert>
-        <Button onClick={() => refetchAll()}>Retry</Button>
-      </ContentContainer>
-    );
-  }
-
-  // =================================================================
-  // WALLET CONNECTION CHECK
-  // =================================================================
-
-  if (!account?.address) {
-    return (
-      <ContentContainer className="space-y-6">
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Please connect your wallet to view your learning progress.
-          </AlertDescription>
-        </Alert>
-      </ContentContainer>
-    );
-  }
-
-  // =================================================================
-  // MAIN RENDER
-  // =================================================================
-
-  return (
-    <ContentContainer className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-foreground">My Learning</h1>
-          <p className="text-muted-foreground">
-            Track your progress and continue your Web3 education journey
-          </p>
-        </div>
-      </div>
-
-      {/* Learning Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center space-x-2">
-              <BookOpen className="w-4 h-4 text-blue-600" />
-              <span>Enrolled Courses</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {userStats?.coursesEnrolled || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">Keep going!</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center space-x-2">
-              <Trophy className="w-4 h-4 text-yellow-600" />
-              <span>Courses Completed</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {userStats?.coursesCompleted || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">Great achievement!</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center space-x-2">
-              <TrendingUp className="w-4 h-4 text-green-600" />
-              <span>Sections Done</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {userStats?.totalSectionsCompleted || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">Sections completed</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center space-x-2">
-              <Award className="w-4 h-4 text-purple-600" />
-              <span>Certificates</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {certificates?.length || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {userStats?.hasCertificate ? (
-                <button
-                  onClick={handleViewCertificate}
-                  className="text-primary hover:underline"
-                >
-                  View Certificate
-                </button>
-              ) : (
-                "Complete courses to earn"
-              )}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Separator />
-
-      {/* Course Tabs */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) =>
-          setActiveTab(value as "in-progress" | "history")
-        }
-      >
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="in-progress" className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4" />
-            In Progress ({processedData.inProgress.length})
-          </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center gap-2">
-            <Trophy className="w-4 h-4" />
-            History ({processedData.history.length})
-          </TabsTrigger>
-        </TabsList>
-
-        {/* In Progress Tab */}
-        <TabsContent value="in-progress" className="mt-6">
-          {processedData.inProgress.length === 0 ? (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                You don&apos;t have any courses in progress. Browse courses to
-                get started!
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {processedData.inProgress.map((enrollment) => (
-                <Card
-                  key={enrollment.id}
-                  className="group hover:shadow-lg transition-all duration-300 h-full flex flex-col"
-                >
-                  <CardHeader className="space-y-4">
-                    <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
-                      <ThumbnailImage
-                        cid={enrollment.course.thumbnailCID}
-                        alt={enrollment.course.title}
-                        fallback={
-                          <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                            <BookOpen className="w-12 h-12 text-white/70" />
-                          </div>
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="secondary" className="text-xs">
-                          {enrollment.course.category}
-                        </Badge>
-                        <Badge
-                          variant={getStatusBadgeVariant(enrollment.status)}
-                          className="text-xs"
-                        >
-                          {enrollment.status}
-                        </Badge>
+          <TabsContent value="in-progress" className="mt-6">
+            {processedData.inProgress.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No active courses yet. Browse courses to start learning!
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {processedData.inProgress.map((enrollment) => (
+                  <Card
+                    key={enrollment.id}
+                    className="group hover:shadow-lg transition-all duration-300 h-full flex flex-col"
+                  >
+                    <CardHeader className="space-y-4">
+                      <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+                        <ThumbnailImage
+                          cid={enrollment.course.thumbnailCID}
+                          alt={enrollment.course.title}
+                          fallback={
+                            <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                              <BookOpen className="w-12 h-12 text-white/70" />
+                            </div>
+                          }
+                        />
                       </div>
-                      <h3 className="font-semibold text-lg leading-tight">
-                        {enrollment.course.title}
-                      </h3>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <User className="w-4 h-4" />
-                        <span>{enrollment.course.creatorName}</span>
-                      </div>
-                    </div>
-                  </CardHeader>
 
-                  <CardContent className="flex-1 flex flex-col space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>
-                          Progress: {enrollment.sectionsCompleted}/
-                          {enrollment.totalSections} sections
-                        </span>
-                        <span>{enrollment.completionPercentage}%</span>
-                      </div>
-                      <Progress
-                        value={enrollment.completionPercentage}
-                        className="w-full"
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        <span>
-                          Started {formatDate(enrollment.purchasedAt)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex-1" />
-
-                    <div className="flex gap-2">
-                      <Button
-                        className="flex-1"
-                        onClick={() => handleContinueLearning(enrollment)}
-                      >
-                        <PlayCircle className="w-4 h-4 mr-2" />
-                        Continue Learning
-                      </Button>
-                    </div>
-
-                    {enrollment.isCompleted && !enrollment.hasCertificate && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenCertificateModal(enrollment)}
-                        disabled={actions.isMintingCertificate}
-                      >
-                        <Award className="w-4 h-4 mr-2" />
-                        {actions.isMintingCertificate
-                          ? "Minting..."
-                          : "Get Certificate"}
-                      </Button>
-                    )}
-
-                    {enrollment.isCompleted && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenRatingModal(enrollment)}
-                        disabled={actions.isSubmittingRating}
-                      >
-                        <Star className="w-4 h-4 mr-2" />
-                        {actions.isSubmittingRating
-                          ? "Submitting..."
-                          : "Rate Course"}
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* History Tab */}
-        <TabsContent value="history" className="mt-6">
-          {processedData.history.length === 0 ? (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                No completed or expired courses yet.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {processedData.history.map((enrollment) => (
-                <Card
-                  key={enrollment.id}
-                  className="group hover:shadow-lg transition-all duration-300 h-full flex flex-col"
-                >
-                  <CardHeader className="space-y-4">
-                    <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
-                      <ThumbnailImage
-                        cid={enrollment.course.thumbnailCID}
-                        alt={enrollment.course.title}
-                        fallback={
-                          <div className="w-full h-full bg-gradient-to-br from-gray-500 to-gray-600 flex items-center justify-center">
-                            <BookOpen className="w-12 h-12 text-white/70" />
-                          </div>
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="secondary" className="text-xs">
-                          {enrollment.course.category}
-                        </Badge>
-                        <Badge
-                          variant={getStatusBadgeVariant(enrollment.status)}
-                          className="text-xs"
-                        >
-                          {enrollment.status}
-                        </Badge>
-                      </div>
-                      <h3 className="font-semibold text-lg leading-tight">
-                        {enrollment.course.title}
-                      </h3>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <User className="w-4 h-4" />
-                        <span>{enrollment.course.creatorName}</span>
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="flex-1 flex flex-col space-y-4">
-                    {enrollment.isCompleted && (
                       <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-green-600">
-                          <Trophy className="w-4 h-4" />
+                        <h3 className="font-semibold text-lg line-clamp-2 group-hover:text-primary transition-colors">
+                          {enrollment.course.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {enrollment.course.description}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={getStatusBadgeVariant(enrollment.status)}
+                          >
+                            {enrollment.status}
+                          </Badge>
+                          <Badge variant="outline">
+                            {enrollment.course.category}
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="flex-1 flex flex-col space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>
+                            Progress: {enrollment.sectionsCompleted}/
+                            {enrollment.totalSections} sections
+                          </span>
                           <span className="font-medium">
-                            Completed on {formatDate(enrollment.completionDate)}
+                            {enrollment.completionPercentage}%
                           </span>
                         </div>
-                        {enrollment.hasCertificate && (
-                          <div className="flex items-center gap-2 text-sm text-purple-600">
-                            <Award className="w-4 h-4" />
-                            <span>Certificate Earned</span>
-                          </div>
-                        )}
+                        <Progress
+                          value={enrollment.completionPercentage}
+                          className="w-full"
+                        />
                       </div>
-                    )}
 
-                    {enrollment.status === "EXPIRED" && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-xs">
-                          License expired on {formatDate(enrollment.expiryDate)}
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          <span>
+                            Started {formatDate(enrollment.purchasedAt)}
+                          </span>
+                        </div>
+                      </div>
 
-                    <div className="flex-1" />
+                      <div className="flex-1" />
 
-                    <div className="flex flex-col gap-2">
-                      {enrollment.status === "EXPIRED" && (
+                      <div className="flex gap-2">
                         <Button
-                          variant="default"
-                          onClick={() => {
-                            setSelectedEnrollmentForRenewal(enrollment);
-                            setIsRenewalModalOpen(true);
-                          }}
+                          className="flex-1"
+                          onClick={() => handleContinueLearning(enrollment)}
                         >
-                          Renew License
+                          <PlayCircle className="w-4 h-4 mr-2" />
+                          {enrollment.completionPercentage === 0
+                            ? "Start Learning"
+                            : "Continue Learning"}
                         </Button>
-                      )}
+                      </div>
 
                       {enrollment.isCompleted && !enrollment.hasCertificate && (
                         <Button
                           variant="outline"
+                          size="sm"
                           onClick={() => handleOpenCertificateModal(enrollment)}
                           disabled={actions.isMintingCertificate}
                         >
@@ -676,25 +467,145 @@ export default function LearningPage() {
                         </Button>
                       )}
 
-                      {enrollment.hasCertificate && (
+                      {enrollment.isCompleted && (
                         <Button
                           variant="outline"
-                          onClick={handleViewCertificate}
+                          size="sm"
+                          onClick={() => handleOpenRatingModal(enrollment)}
+                          disabled={actions.isSubmittingRating}
                         >
-                          <Award className="w-4 h-4 mr-2" />
-                          View Certificate
+                          <Star className="w-4 h-4 mr-2" />
+                          {actions.isSubmittingRating
+                            ? "Submitting..."
+                            : "Rate Course"}
                         </Button>
                       )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
 
-      {/* Rating Modal */}
+          <TabsContent value="history" className="mt-6">
+            {processedData.history.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  No completed or expired courses yet.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {processedData.history.map((enrollment) => (
+                  <Card
+                    key={enrollment.id}
+                    className="group hover:shadow-lg transition-all duration-300 h-full flex flex-col"
+                  >
+                    <CardHeader className="space-y-4">
+                      <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+                        <ThumbnailImage
+                          cid={enrollment.course.thumbnailCID}
+                          alt={enrollment.course.title}
+                          fallback={
+                            <div className="w-full h-full bg-gradient-to-br from-gray-500 to-gray-600 flex items-center justify-center">
+                              <BookOpen className="w-12 h-12 text-white/70" />
+                            </div>
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <h3 className="font-semibold text-lg line-clamp-2">
+                          {enrollment.course.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {enrollment.course.description}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={getStatusBadgeVariant(enrollment.status)}
+                          >
+                            {enrollment.status}
+                          </Badge>
+                          {enrollment.hasCertificate && (
+                            <Badge variant="secondary">
+                              <Award className="w-3 h-3 mr-1" />
+                              Certified
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="flex-1 flex flex-col space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Completion</span>
+                          <span className="font-medium">
+                            {enrollment.completionPercentage}%
+                          </span>
+                        </div>
+                        <Progress
+                          value={enrollment.completionPercentage}
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          <span>
+                            Enrolled {formatDate(enrollment.purchasedAt)}
+                          </span>
+                        </div>
+                        {enrollment.completionDate && (
+                          <div className="flex items-center gap-1">
+                            <Trophy className="w-4 h-4" />
+                            <span>
+                              Completed {formatDate(enrollment.completionDate)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex-1" />
+
+                      <div className="flex flex-col gap-2">
+                        {enrollment.status === "EXPIRED" && (
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedEnrollmentForRenewal(enrollment);
+                              setIsRenewalModalOpen(true);
+                            }}
+                          >
+                            Renew License
+                          </Button>
+                        )}
+
+                        {enrollment.isCompleted && (
+                          <Button
+                            variant="outline"
+                            onClick={() =>
+                              router.push(
+                                `/learning/course-details?id=${enrollment.courseId}`
+                              )
+                            }
+                          >
+                            View Course
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+
       {selectedEnrollmentForRating && (
         <RatingModal
           isOpen={isRatingModalOpen}
@@ -707,7 +618,6 @@ export default function LearningPage() {
         />
       )}
 
-      {/* Certificate Modal */}
       {selectedEnrollmentForCertificate && (
         <GetCertificateModal
           isOpen={isCertificateModalOpen}
@@ -719,7 +629,6 @@ export default function LearningPage() {
         />
       )}
 
-      {/* Renewal Modal */}
       {selectedEnrollmentForRenewal && (
         <RenewLicenseModal
           isOpen={isRenewalModalOpen}
@@ -728,11 +637,9 @@ export default function LearningPage() {
           courseTitle={selectedEnrollmentForRenewal.course.title}
           creatorName={selectedEnrollmentForRenewal.course.creatorName}
           pricePerMonth={BigInt(
-            selectedEnrollmentForRenewal.course.pricePerMonth
+            Math.floor(selectedEnrollmentForRenewal.course.pricePerMonth * 1e18)
           )}
-          onRenew={async () => {
-            await handleRenewalSuccess();
-          }}
+          onRenew={handleRenewalSuccess}
         />
       )}
     </ContentContainer>

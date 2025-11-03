@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { AnalyticsContainer } from "@/components/PageContainer";
+import { GoldskyConfigError } from "@/components/GoldskyConfigError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -409,46 +410,38 @@ const PLATFORM_FEE_BASIS_POINTS = {
 // ==================== ANALYTICS METRICS ====================
 
 interface EduVerseAnalyticsMetrics {
-  // Network metrics
   totalTransactions: number;
-  totalGasUsed: string;
-  totalGasCost: string; // in ETH
-  averageGasPrice: string; // in gwei
-  averageBlockTime: number; // seconds
-
-  // User engagement
+  totalCourseCreations: number;
+  totalLicenseMints: number;
+  totalCertificateMints: number;
+  totalProgressUpdates: number;
+  courseFactoryInteractions: number;
+  courseLicenseInteractions: number;
+  progressTrackerInteractions: number;
+  certificateManagerInteractions: number;
+  averageBlockTime: number;
   uniqueAddresses: number;
-  activeStudents: number; // Students with recent activity
-  activeCreators: number; // Creators with recent activity
-
-  // Course ecosystem
+  activeStudents: number;
+  activeCreators: number;
   totalCourses: number;
-  activeCourses: number; // isActive = true
+  activeCourses: number;
   totalSections: number;
   coursesWithRatings: number;
-  averagePlatformRating: number; // Real average from all ratings
-
-  // Learning progress
+  averagePlatformRating: number;
   totalSectionsCompleted: number;
   totalCoursesCompleted: number;
   uniqueStudentsWithProgress: number;
-
-  // Licensing
   totalLicensesMinted: number;
   totalLicensesRenewed: number;
-  activeLicenses: number; // Not expired
-  totalLicenseRevenue: string; // in ETH
-
-  // Certificates (One Per User model)
-  totalCertificateHolders: number; // Unique users with certificates
-  totalCourseAdditions: number; // Courses added to existing certs
-  certificateUpdates: number; // Image/metadata updates
-  totalCertificateRevenue: string; // in ETH
-
-  // Platform economics
-  totalPlatformRevenue: string; // Platform fees collected
-  totalCreatorPayouts: string; // Creator earnings
-  averageCoursePrice: string; // Average course price per month
+  activeLicenses: number;
+  totalLicenseRevenue: string;
+  totalCertificateHolders: number;
+  totalCourseAdditions: number;
+  certificateUpdates: number;
+  totalCertificateRevenue: string;
+  totalPlatformRevenue: string;
+  totalCreatorPayouts: string;
+  averageCoursePrice: string;
 }
 
 // ==================== MOCK DATA GENERATION (REALISTIC) ====================
@@ -1194,23 +1187,49 @@ TransactionTypeIcon.displayName = "TransactionTypeIcon";
 
 // Helper function to get contract name from event type
 const getContractName = (eventType: string): string => {
+  const type = eventType.toUpperCase();
+
+  // Priority 1: ProgressTracker events (MUST check before CourseFactory)
   if (
-    eventType.includes("course") ||
-    eventType.includes("section") ||
-    eventType.includes("rating")
-  ) {
-    return "CourseFactory";
-  } else if (eventType.includes("license")) {
-    return "CourseLicense";
-  } else if (eventType.includes("certificate")) {
-    return "CertificateManager";
-  } else if (
-    eventType.includes("progress") ||
-    eventType.includes("completed")
+    type.includes("SECTION_STARTED") ||
+    type.includes("SECTION_COMPLETED") ||
+    type === "COURSE_COMPLETED" ||
+    type.includes("PROGRESS_RESET")
   ) {
     return "ProgressTracker";
   }
-  return "Unknown";
+
+  // Priority 2: CertificateManager events
+  if (type.includes("CERTIFICATE")) {
+    return "CertificateManager";
+  }
+
+  // Priority 3: CourseLicense events
+  if (type.includes("LICENSE") || type.includes("REVENUE")) {
+    return "CourseLicense";
+  }
+
+  // Priority 4: CourseFactory events (sections managed by CourseFactory)
+  if (
+    type.includes("COURSE_CREATED") ||
+    type.includes("COURSE_UPDATED") ||
+    type.includes("COURSE_DELETED") ||
+    type.includes("COURSE_UNPUBLISHED") ||
+    type.includes("COURSE_REPUBLISHED") ||
+    type.includes("COURSE_EMERGENCY") ||
+    type.includes("SECTION_ADDED") ||
+    type.includes("SECTION_UPDATED") ||
+    type.includes("SECTION_DELETED") ||
+    type.includes("SECTION_MOVED") ||
+    type.includes("SECTION_SWAPPED") ||
+    type.includes("BATCH_SECTIONS") ||
+    type.includes("RATING") ||
+    type.includes("BLACKLIST")
+  ) {
+    return "CourseFactory";
+  }
+
+  return "CourseFactory";
 };
 
 const TransactionRow = memo<{ transaction: BlockchainTransactionEvent }>(
@@ -1228,63 +1247,80 @@ const TransactionRow = memo<{ transaction: BlockchainTransactionEvent }>(
 
     const getTransactionDetails = useCallback(
       (tx: BlockchainTransactionEvent) => {
-        // Simplified details since TransactionRecord doesn't have eventData
-        switch (tx.eventType) {
-          case "course_created":
-            return `New course created by ${tx.from.substring(0, 8)}...`;
-          case "course_deleted":
-            return `Course deleted by ${tx.from.substring(0, 8)}...`;
-          case "course_unpublished":
-            return `Course unpublished`;
-          case "course_republished":
-            return `Course republished`;
-          case "course_emergency_deactivated":
-            return `Course emergency deactivated`;
-          case "section_added":
-            return `New section added`;
-          case "section_updated":
-            return `Section updated`;
-          case "section_started":
-            return `Student started section`;
-          case "section_completed":
-            return `Section completed`;
-          case "license_minted":
-            return `License minted - ${(Number(tx.value) / 1e18).toFixed(
-              4
-            )} MANTA`;
-          case "license_renewed":
-            return `License renewed - ${(Number(tx.value) / 1e18).toFixed(
-              4
-            )} MANTA`;
-          case "license_expired":
-            return `License expired`;
-          case "revenue_recorded":
-            return `Revenue recorded - ${(Number(tx.value) / 1e18).toFixed(
-              4
-            )} MANTA`;
-          case "certificate_minted":
-            return `Certificate minted - ${(Number(tx.value) / 1e18).toFixed(
-              4
-            )} MANTA`;
-          case "course_rated":
-            return `Course rated`;
-          case "course_added_to_certificate":
-            return `Course added to certificate - ${(
-              Number(tx.value) / 1e18
-            ).toFixed(4)} MANTA`;
-          case "section_deleted":
-            return `Section deleted`;
-          case "sections_swapped":
-            return `Sections reordered`;
-          case "sections_batch_reordered":
-            return `Batch sections reordered`;
-          case "progress_reset":
-            return `Progress reset`;
-          case "certificate_revoked":
-            return `Certificate revoked`;
-          default:
-            return "Transaction";
+        const type = tx.eventType.toUpperCase();
+
+        if (type.includes("COURSE_CREATED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" created`
+            : tx.eventData.description || "Course created";
+        } else if (type.includes("COURSE_DELETED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" deleted`
+            : tx.eventData.description || "Course deleted";
+        } else if (type.includes("COURSE_UNPUBLISHED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" unpublished`
+            : tx.eventData.description || "Course unpublished";
+        } else if (type.includes("COURSE_REPUBLISHED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" republished`
+            : tx.eventData.description || "Course republished";
+        } else if (type.includes("EMERGENCY_DEACTIVATED")) {
+          return tx.eventData.description || "Course emergency deactivated";
+        } else if (type.includes("SECTION_ADDED")) {
+          return tx.eventData.description || "New section added";
+        } else if (type.includes("SECTION_UPDATED")) {
+          return tx.eventData.description || "Section updated";
+        } else if (type.includes("SECTION_STARTED")) {
+          return tx.eventData.course?.title
+            ? `Section started in "${tx.eventData.course.title}"`
+            : tx.eventData.description || "Section started";
+        } else if (type.includes("SECTION_COMPLETED")) {
+          return tx.eventData.course?.title
+            ? `Section completed in "${tx.eventData.course.title}"`
+            : tx.eventData.description || "Section completed";
+        } else if (type.includes("LICENSE_MINTED")) {
+          return tx.eventData.course?.title
+            ? `License minted for "${tx.eventData.course.title}"`
+            : tx.eventData.description || "License minted";
+        } else if (type.includes("LICENSE_RENEWED")) {
+          return tx.eventData.course?.title
+            ? `License renewed for "${tx.eventData.course.title}"`
+            : tx.eventData.description || "License renewed";
+        } else if (type.includes("LICENSE_EXPIRED")) {
+          return tx.eventData.description || "License expired";
+        } else if (type.includes("REVENUE_RECORDED")) {
+          return tx.eventData.description || "Revenue recorded";
+        } else if (type.includes("CERTIFICATE_MINTED")) {
+          return tx.eventData.description || "Certificate minted";
+        } else if (type.includes("COURSE_RATED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" rated`
+            : tx.eventData.description || "Course rated";
+        } else if (type.includes("COURSE_ADDED_TO_CERTIFICATE")) {
+          return tx.eventData.course?.title
+            ? `"${tx.eventData.course.title}" added to certificate`
+            : tx.eventData.description || "Course added to certificate";
+        } else if (type.includes("SECTION_DELETED")) {
+          return tx.eventData.description || "Section deleted";
+        } else if (
+          type.includes("SECTIONS_SWAPPED") ||
+          type.includes("BATCH_REORDERED")
+        ) {
+          return tx.eventData.description || "Sections reordered";
+        } else if (type.includes("PROGRESS_RESET")) {
+          return tx.eventData.course?.title
+            ? `Progress reset for "${tx.eventData.course.title}"`
+            : tx.eventData.description || "Progress reset";
+        } else if (type.includes("CERTIFICATE_REVOKED")) {
+          return tx.eventData.description || "Certificate revoked";
+        } else if (type.includes("COURSE_COMPLETED")) {
+          return tx.eventData.course?.title
+            ? `Course "${tx.eventData.course.title}" completed`
+            : tx.eventData.description || "Course completed";
         }
+
+        return tx.eventData.description || "Transaction";
       },
       []
     );
@@ -1315,17 +1351,11 @@ const TransactionRow = memo<{ transaction: BlockchainTransactionEvent }>(
         </div>
 
         <div className="text-right ml-4">
-          <p className="font-mono text-sm">{transaction.value} ETH</p>
-          <p className="text-xs text-muted-foreground">
-            Gas: {parseInt(transaction.gasUsed).toLocaleString()}
+          <p className="font-mono text-sm">
+            {transaction.eventData.description}
           </p>
           <p className="text-xs text-muted-foreground">
-            Cost:{" "}
-            {(
-              (parseInt(transaction.gasUsed) * parseInt(transaction.gasPrice)) /
-              1e18
-            ).toFixed(6)}{" "}
-            ETH
+            Block: {transaction.blockNumber.toLocaleString()}
           </p>
         </div>
       </div>
@@ -1431,43 +1461,35 @@ export default function AnalyticsPage() {
   const metrics: EduVerseAnalyticsMetrics = useMemo(() => {
     return (
       goldskyMetrics || {
-        // Network
         totalTransactions: 0,
-        totalGasUsed: "0",
-        totalGasCost: "0.000000",
-        averageGasPrice: "0",
-        averageBlockTime: 2.1, // Manta Pacific average
-
-        // Users
+        totalCourseCreations: 0,
+        totalLicenseMints: 0,
+        totalCertificateMints: 0,
+        totalProgressUpdates: 0,
+        courseFactoryInteractions: 0,
+        courseLicenseInteractions: 0,
+        progressTrackerInteractions: 0,
+        certificateManagerInteractions: 0,
+        averageBlockTime: 2.1,
         uniqueAddresses: 0,
         activeStudents: 0,
         activeCreators: 0,
-
-        // Courses
         totalCourses: 0,
         activeCourses: 0,
         totalSections: 0,
         coursesWithRatings: 0,
         averagePlatformRating: 0,
-
-        // Progress
         totalSectionsCompleted: 0,
         totalCoursesCompleted: 0,
         uniqueStudentsWithProgress: 0,
-
-        // Licensing
         totalLicensesMinted: 0,
         totalLicensesRenewed: 0,
         activeLicenses: 0,
         totalLicenseRevenue: "0.000000",
-
-        // Certificates
         totalCertificateHolders: 0,
         totalCourseAdditions: 0,
         certificateUpdates: 0,
         totalCertificateRevenue: "0.000000",
-
-        // Economics
         totalPlatformRevenue: "0.000000",
         totalCreatorPayouts: "0.000000",
         averageCoursePrice: "0.000000",
@@ -1487,33 +1509,14 @@ export default function AnalyticsPage() {
   // Computed analytics
   const contractActivity = useMemo(() => {
     const activity = transactions.reduce((acc, tx) => {
-      // Map eventType to contract names
-      let contract = "Unknown";
-      if (
-        tx.eventType.includes("course") ||
-        tx.eventType.includes("section") ||
-        tx.eventType.includes("rating")
-      ) {
-        contract = "CourseFactory";
-      } else if (
-        tx.eventType.includes("license") ||
-        tx.eventType.includes("revenue")
-      ) {
-        contract = "CourseLicense";
-      } else if (
-        tx.eventType.includes("progress") ||
-        tx.eventType.includes("completed")
-      ) {
-        contract = "ProgressTracker";
-      } else if (tx.eventType.includes("certificate")) {
-        contract = "CertificateManager";
-      }
+      const contract = getContractName(tx.eventType);
       acc[contract] = (acc[contract] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     return Object.entries(activity)
       .map(([contract, count]) => ({ contract, count }))
+      .filter(({ contract }) => contract !== "Unknown")
       .sort((a, b) => b.count - a.count);
   }, [transactions]);
 
@@ -1581,30 +1584,58 @@ export default function AnalyticsPage() {
     };
   }, [transactions]);
 
-  const gasEfficiencyReport = useMemo(() => {
-    const gasData = transactions.reduce((acc, tx) => {
-      const contractName = getContractName(tx.eventType);
-      if (!acc[contractName]) {
-        acc[contractName] = { totalGas: 0, count: 0, transactions: [] };
-      }
-      acc[contractName].totalGas += parseInt(tx.gasUsed);
-      acc[contractName].count += 1;
-      acc[contractName].transactions.push(tx);
-      return acc;
-    }, {} as Record<string, { totalGas: number; count: number; transactions: BlockchainTransactionEvent[] }>);
-
-    return Object.entries(gasData).map(([contract, data]) => ({
-      contract,
-      averageGas: Math.round(data.totalGas / data.count),
-      totalTransactions: data.count,
-      efficiency:
-        data.totalGas / data.count < 150000
-          ? "Excellent"
-          : data.totalGas / data.count < 200000
-          ? "Good"
-          : "Needs Optimization",
-    }));
-  }, [transactions]);
+  const contractInteractionsReport = useMemo(() => {
+    return [
+      {
+        contract: "CourseFactory",
+        totalTransactions: metrics.courseFactoryInteractions,
+        percentage:
+          metrics.totalTransactions > 0
+            ? (
+                (metrics.courseFactoryInteractions /
+                  metrics.totalTransactions) *
+                100
+              ).toFixed(1)
+            : "0",
+      },
+      {
+        contract: "CourseLicense",
+        totalTransactions: metrics.courseLicenseInteractions,
+        percentage:
+          metrics.totalTransactions > 0
+            ? (
+                (metrics.courseLicenseInteractions /
+                  metrics.totalTransactions) *
+                100
+              ).toFixed(1)
+            : "0",
+      },
+      {
+        contract: "ProgressTracker",
+        totalTransactions: metrics.progressTrackerInteractions,
+        percentage:
+          metrics.totalTransactions > 0
+            ? (
+                (metrics.progressTrackerInteractions /
+                  metrics.totalTransactions) *
+                100
+              ).toFixed(1)
+            : "0",
+      },
+      {
+        contract: "CertificateManager",
+        totalTransactions: metrics.certificateManagerInteractions,
+        percentage:
+          metrics.totalTransactions > 0
+            ? (
+                (metrics.certificateManagerInteractions /
+                  metrics.totalTransactions) *
+                100
+              ).toFixed(1)
+            : "0",
+      },
+    ];
+  }, [metrics]);
 
   // --- Fixed scroll behavior for live feed ---
   // Keep a ref to the scroll container so we can preserve the user's
@@ -1655,6 +1686,14 @@ export default function AnalyticsPage() {
 
     prevScrollHeightRef.current = el.scrollHeight;
   }, [transactions]);
+
+  // Check if Goldsky endpoint is configured
+  const isConfigured = !!process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
+
+  // Show configuration error if endpoint not set
+  if (!isConfigured) {
+    return <GoldskyConfigError />;
+  }
 
   return (
     <AnalyticsContainer>
@@ -1726,25 +1765,25 @@ export default function AnalyticsPage() {
           <MetricCard
             title="Total Transactions"
             value={metrics.totalTransactions.toLocaleString()}
-            change="+18.5% from yesterday"
-            trend="up"
             icon={<Activity className="h-4 w-4 text-blue-500" />}
             subtitle="Across all contracts"
           />
 
           <MetricCard
-            title="Total Gas Used"
-            value={`${(parseInt(metrics.totalGasUsed) / 1000000).toFixed(1)}M`}
-            change={`${metrics.averageGasPrice} gwei avg`}
+            title="Contract Interactions"
+            value={`${(
+              metrics.courseFactoryInteractions +
+              metrics.courseLicenseInteractions +
+              metrics.progressTrackerInteractions +
+              metrics.certificateManagerInteractions
+            ).toLocaleString()}`}
             icon={<TrendingUp className="h-4 w-4 text-orange-500" />}
-            subtitle="Gas consumption"
+            subtitle={`${metrics.averageBlockTime.toFixed(1)}s avg block time`}
           />
 
           <MetricCard
             title="Platform Revenue"
             value={`${metrics.totalPlatformRevenue} ETH`}
-            change="+12.3% from yesterday"
-            trend="up"
             icon={<Wallet className="h-4 w-4 text-green-500" />}
             subtitle="10% platform fee"
           />
@@ -1752,8 +1791,6 @@ export default function AnalyticsPage() {
           <MetricCard
             title="Active Learners"
             value={metrics.activeStudents.toLocaleString()}
-            change="+25.7% from yesterday"
-            trend="up"
             icon={<Users className="h-4 w-4 text-purple-500" />}
             subtitle="Students with recent activity"
           />
@@ -1915,35 +1952,23 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Gas Efficiency Analysis</CardTitle>
+                  <CardTitle>Contract Activity Analysis</CardTitle>
                   <CardDescription>
-                    Smart contract optimization metrics
+                    Transaction distribution by contract
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {gasEfficiencyReport.map(
-                    ({
-                      contract,
-                      averageGas,
-                      totalTransactions,
-                      efficiency,
-                    }) => (
+                  {contractInteractionsReport.map(
+                    ({ contract, totalTransactions, percentage }) => (
                       <div key={contract} className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="font-medium">{contract}</span>
-                          <Badge
-                            variant={
-                              efficiency === "Excellent"
-                                ? "default"
-                                : "secondary"
-                            }
-                          >
-                            {efficiency}
+                          <Badge variant="secondary">
+                            {percentage}% of total
                           </Badge>
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          Avg: {averageGas.toLocaleString()} gas •{" "}
-                          {totalTransactions} transactions
+                          {totalTransactions.toLocaleString()} transactions
                         </div>
                       </div>
                     )
@@ -2390,7 +2415,7 @@ export default function AnalyticsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="text-center">
                       <div className="text-3xl font-bold">
-                        {metrics.averageBlockTime}s
+                        {metrics.averageBlockTime.toFixed(1)}s
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Average Block Time
@@ -2398,40 +2423,41 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="text-center">
                       <div className="text-3xl font-bold">
-                        {metrics.averageGasPrice}
+                        {metrics.totalTransactions.toLocaleString()}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Avg Gas Price (gwei)
+                        Total Transactions
                       </p>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span>Network Utilization</span>
-                      <span>
-                        {Math.min(
-                          100,
-                          (parseInt(metrics.totalGasUsed) / 30000000) * 100
-                        ).toFixed(1)}
-                        %
-                      </span>
+                      <span>Transaction Distribution</span>
+                      <span>4 Contracts</span>
                     </div>
-                    <Progress
-                      value={Math.min(
-                        100,
-                        (parseInt(metrics.totalGasUsed) / 30000000) * 100
-                      )}
-                      className="h-3"
-                    />
+                    <div className="space-y-1">
+                      {contractInteractionsReport.map((item) => (
+                        <div
+                          key={item.contract}
+                          className="flex justify-between text-xs"
+                        >
+                          <span>{item.contract}</span>
+                          <span className="font-mono">{item.percentage}%</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="pt-2 border-t text-center">
                     <div className="text-lg font-bold">
-                      {metrics.totalGasCost} ETH
+                      {metrics.totalCourseCreations +
+                        metrics.totalLicenseMints +
+                        metrics.totalCertificateMints +
+                        metrics.totalProgressUpdates}
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Total Gas Costs
+                      Key Events Tracked
                     </p>
                   </div>
                 </CardContent>
@@ -2439,9 +2465,9 @@ export default function AnalyticsPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Contract Optimization Status</CardTitle>
+                  <CardTitle>Contract Activity Breakdown</CardTitle>
                   <CardDescription>
-                    Smart contract efficiency analysis
+                    Transaction distribution by contract
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -2449,39 +2475,36 @@ export default function AnalyticsPage() {
                     {
                       contract: "CourseFactory",
                       features: [
-                        "Anti-DoS protection",
+                        "Course creation",
                         "Batch operations",
-                        "Rating cooldown",
+                        "Rating system",
                       ],
-                      status: "Optimal",
-                      gasRange: "75k-180k",
+                      status: "Active",
+                      txCount: metrics.courseFactoryInteractions,
                     },
                     {
                       contract: "CourseLicense",
                       features: [
-                        "Overflow protection",
-                        "Auto-refunds",
+                        "License minting",
+                        "Auto-renewals",
                         "ERC-1155",
                       ],
-                      status: "Optimal",
-                      gasRange: "180k-220k",
+                      status: "Active",
+                      txCount: metrics.courseLicenseInteractions,
                     },
                     {
                       contract: "ProgressTracker",
-                      features: [
-                        "Gas-optimized counters",
-                        "License validation",
-                      ],
-                      status: "Excellent",
-                      gasRange: "35k-95k",
+                      features: ["Section tracking", "Completion records"],
+                      status: "Active",
+                      txCount: metrics.progressTrackerInteractions,
                     },
                     {
                       contract: "CertificateManager",
-                      features: ["One cert per user", "Payment protection"],
-                      status: "Revolutionary",
-                      gasRange: "120k-250k",
+                      features: ["Certificate minting", "Course additions"],
+                      status: "Active",
+                      txCount: metrics.certificateManagerInteractions,
                     },
-                  ].map(({ contract, features, status, gasRange }) => (
+                  ].map(({ contract, features, status, txCount }) => (
                     <div
                       key={contract}
                       className="space-y-2 p-3 border rounded-lg"
@@ -2501,7 +2524,8 @@ export default function AnalyticsPage() {
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Gas: {gasRange} • {features.join(", ")}
+                        {txCount.toLocaleString()} transactions •{" "}
+                        {features.join(", ")}
                       </div>
                     </div>
                   ))}

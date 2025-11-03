@@ -18,10 +18,7 @@
     "goldsky:status": "goldsky subgraph status eduverse-platform/v1.0.0",
     "goldsky:logs": "goldsky subgraph logs eduverse-platform/v1.0.0",
     "goldsky:tag:prod": "goldsky subgraph tag create eduverse-platform/v1.0.0 --tag prod",
-    "goldsky:tag:staging": "goldsky subgraph tag create eduverse-platform/v1.0.0 --tag staging",
-    "diagnose:goldsky": "tsx scripts/diagnose-goldsky.ts",
-    "verify:course": "tsx scripts/verify-course-creation.ts",
-    "test:filter": "tsx scripts/test-goldsky-filter.ts"
+    "goldsky:tag:staging": "goldsky subgraph tag create eduverse-platform/v1.0.0 --tag staging"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

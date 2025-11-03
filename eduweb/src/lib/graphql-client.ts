@@ -23,9 +23,7 @@ const GOLDSKY_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT || "";
  * Validate endpoint configuration
  */
 if (!GOLDSKY_ENDPOINT && typeof window !== "undefined") {
-  console.warn(
-    "[GraphQL Client] NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT not configured"
-  );
+  throw new Error("NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT not configured");
 }
 
 // ============================================================================
@@ -80,15 +78,6 @@ export async function executeQuery<T = unknown>(
     const data = await graphqlClient.request<T>(query, variables);
     return data;
   } catch (error: unknown) {
-    // Enhanced error logging for debugging
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[GraphQL Client] Query failed:", {
-      query: query.substring(0, 100) + "...", // First 100 chars
-      variables,
-      error: errorMessage,
-    });
-
-    // Re-throw with user-friendly message
     if (error && typeof error === "object" && "response" in error) {
       const errorResponse = error.response as {
         errors?: Array<{ message: string }>;

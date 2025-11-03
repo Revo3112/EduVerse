@@ -26,8 +26,7 @@ export function getChecksumAddress(address: string): string {
   try {
     if (!address) return "";
     return getAddress(address);
-  } catch (error) {
-    console.warn("[Address Helper] Invalid address for checksum:", address);
+  } catch {
     return address.toLowerCase();
   }
 }
@@ -58,19 +57,6 @@ export function truncateAddress(
 ): string {
   if (!address || address.length < startChars + endChars) return address;
   return `${address.slice(0, startChars)}...${address.slice(-endChars)}`;
-}
-
-/**
- * Debug helper: log address in multiple formats
- */
-export function debugAddress(label: string, address: string): void {
-  console.log(`[Address Debug] ${label}:`, {
-    original: address,
-    normalized: normalizeAddress(address),
-    checksum: getChecksumAddress(address),
-    isValid: isValidAddress(address),
-    truncated: truncateAddress(address),
-  });
 }
 
 /**

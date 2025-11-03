@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Rating } from "@/components/ui/rating";
+
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -68,7 +68,7 @@ export default function MyCoursePage() {
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { ethToIDR, isLoading: priceLoading, lastUpdated } = useEthPrice();
+  const { ethToIDR, isLoading: priceLoading } = useEthPrice();
 
   const {
     courses,
@@ -77,7 +77,6 @@ export default function MyCoursePage() {
     isError,
     error,
     refetch,
-    refresh,
     isRefetching,
   } = useCreatorCourses(creatorAddress, ethToIDR, {
     enabled: !!creatorAddress,
