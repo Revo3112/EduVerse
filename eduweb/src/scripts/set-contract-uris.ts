@@ -14,8 +14,8 @@ const THIRDWEB_CLIENT_ID = process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!;
 const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY!;
 
 const CONTRACT_ADDRESSES = {
-  courseLicense: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578",
-  certificateManager: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5",
+  courseLicense: process.env.NEXT_PUBLIC_COURSE_LICENSE_ADDRESS!,
+  certificateManager: process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!,
 };
 
 // Base URIs - UPDATE THESE WITH YOUR ACTUAL METADATA HOSTING
@@ -43,7 +43,7 @@ async function setCourseLicenseURI() {
     address: CONTRACT_ADDRESSES.courseLicense,
   });
 
-  const transaction = prepareContractCall({
+  prepareContractCall({
     contract,
     method: "function setURI(string newBaseURI)",
     params: [BASE_URIS.courseLicense],
@@ -60,7 +60,7 @@ async function setCourseLicenseURI() {
   console.log("✅ Transaction prepared successfully!");
   console.log("\nTo execute, run:");
   console.log(
-    `thirdweb deploy --contract ${CONTRACT_ADDRESSES.courseLicense} --function setURI --args "${BASE_URIS.courseLicense}"`,
+    `thirdweb deploy --contract ${CONTRACT_ADDRESSES.courseLicense} --function setURI --args "${BASE_URIS.courseLicense}"`
   );
 }
 
@@ -68,11 +68,11 @@ async function setCertificateManagerURI() {
   console.log("\n📝 Setting CertificateManager token URIs...");
   console.log("⚠️  CertificateManager uses ERC1155 with custom uri() function");
   console.log(
-    "✅ You can set custom URIs per tokenId using setTokenURI(tokenId, uri)",
+    "✅ You can set custom URIs per tokenId using setTokenURI(tokenId, uri)"
   );
   console.log("\nExample for token #1:");
   console.log(
-    `thirdweb deploy --contract ${CONTRACT_ADDRESSES.certificateManager} --function setTokenURI --args "1" "${BASE_URIS.certificateManager}1.json"`,
+    `thirdweb deploy --contract ${CONTRACT_ADDRESSES.certificateManager} --function setTokenURI --args "1" "${BASE_URIS.certificateManager}1.json"`
   );
 }
 
@@ -89,7 +89,7 @@ async function main() {
   if (!DEPLOYER_PRIVATE_KEY) {
     console.error("❌ DEPLOYER_PRIVATE_KEY not set");
     console.log(
-      "\n⚠️  For security, run this script with environment variable:",
+      "\n⚠️  For security, run this script with environment variable:"
     );
     console.log("   DEPLOYER_PRIVATE_KEY=0x... npm run set-uris");
     process.exit(1);
@@ -99,13 +99,15 @@ async function main() {
   console.log(`   Chain: Manta Pacific Testnet (${mantaPacificTestnet.id})`);
   console.log(`   CourseLicense: ${CONTRACT_ADDRESSES.courseLicense}`);
   console.log(
-    `   CertificateManager: ${CONTRACT_ADDRESSES.certificateManager}`,
+    `   CertificateManager: ${CONTRACT_ADDRESSES.certificateManager}`
   );
 
   await setCourseLicenseURI();
   await setCertificateManagerURI();
 
-  console.log("\n╔════════════════════════════════════════════════════════════╗");
+  console.log(
+    "\n╔════════════════════════════════════════════════════════════╗"
+  );
   console.log("║     NEXT STEPS                                             ║");
   console.log("╚════════════════════════════════════════════════════════════╝");
   console.log("\n1️⃣  Deploy metadata API endpoints:");

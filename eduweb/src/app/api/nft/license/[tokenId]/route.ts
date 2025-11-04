@@ -7,8 +7,30 @@ const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
 });
 
-const COURSE_LICENSE_ADDRESS = "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578";
-const COURSE_FACTORY_ADDRESS = "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72";
+const COURSE_LICENSE_ADDRESS = process.env.NEXT_PUBLIC_COURSE_LICENSE_ADDRESS!;
+const COURSE_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS!;
+
+interface LicenseData {
+  courseId: bigint;
+  student: string;
+  purchaseDate: bigint;
+  expiryDate: bigint;
+  active: boolean;
+}
+
+interface CourseData {
+  id: bigint;
+  title: string;
+  description: string;
+  creator: string;
+  price: bigint;
+  isActive: boolean;
+  isDeleted: boolean;
+  duration: bigint;
+  createdAt: bigint;
+  totalStudents: bigint;
+  averageRating: number;
+}
 
 interface LicenseMetadata {
   name: string;
@@ -23,10 +45,11 @@ interface LicenseMetadata {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { tokenId: string } },
+  { params }: { params: Promise<{ tokenId: string }> }
 ) {
   try {
-    const tokenId = BigInt(params.tokenId);
+    const { tokenId: tokenIdStr } = await params;
+    const tokenId = BigInt(tokenIdStr);
 
     const courseLicenseContract = getContract({
       client,
@@ -44,19 +67,24 @@ export async function GET(
     const studentFromToken =
       tokenId & BigInt("0xffffffffffffffffffffffffffffffffffffffff");
 
-    const licenseData = await readContract({
+    // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+    const licenseData = (await readContract({
       contract: courseLicenseContract,
       method:
         "function getLicense(uint256 courseId, address student) view returns (tuple(uint256 courseId, address student, uint256 purchaseDate, uint256 expiryDate, bool active))",
-      params: [courseIdFromToken, `0x${studentFromToken.toString(16).padStart(40, "0")}`],
-    });
+      params: [
+        courseIdFromToken,
+        `0x${studentFromToken.toString(16).padStart(40, "0")}`,
+      ],
+    })) as LicenseData;
 
-    const courseData = await readContract({
+    // @ts-expect-error - thirdweb v5 type inference issue with Next.js 15
+    const courseData = (await readContract({
       contract: courseFactoryContract,
       method:
         "function getCourse(uint256 courseId) view returns (tuple(uint256 id, string title, string description, address creator, uint256 price, bool isActive, bool isDeleted, uint256 duration, uint256 createdAt, uint256 totalStudents, uint8 averageRating))",
       params: [courseIdFromToken],
-    });
+    })) as CourseData;
 
     const isActive = licenseData.active;
     const isExpired =
@@ -66,7 +94,7 @@ export async function GET(
     const metadata: LicenseMetadata = {
       name: `Course License: ${courseData.title}`,
       description: `Active license for "${courseData.title}". This NFT grants you access to all course materials and content.`,
-      image: `${process.env.NEXT_PUBLIC_APP_URL}/api/nft/license/${params.tokenId}/image`,
+      image: `${process.env.NEXT_PUBLIC_APP_URL}/api/nft/license/${tokenIdStr}/image`,
       external_url: `${process.env.NEXT_PUBLIC_APP_URL}/learning/course-details?id=${courseIdFromToken}`,
       attributes: [
         {
@@ -84,7 +112,7 @@ export async function GET(
         {
           trait_type: "Purchase Date",
           value: new Date(
-            Number(licenseData.purchaseDate) * 1000,
+            Number(licenseData.purchaseDate) * 1000
           ).toISOString(),
         },
         {
@@ -111,7 +139,7 @@ export async function GET(
     console.error("Error fetching license metadata:", error);
     return NextResponse.json(
       { error: "Failed to fetch license metadata" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

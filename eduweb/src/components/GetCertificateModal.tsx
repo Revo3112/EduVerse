@@ -40,12 +40,7 @@ export function GetCertificateModal({
   const account = useActiveAccount();
   const address = account?.address;
 
-  const {
-    mintOrUpdateCertificate,
-    checkEligibility,
-    isMinting,
-    loading: hookLoading,
-  } = useCertificate();
+  const { mintOrUpdateCertificate, isMinting } = useCertificate();
 
   const [recipientName, setRecipientName] = useState("");
   const [isLoading, setIsLoading] = useState(false);

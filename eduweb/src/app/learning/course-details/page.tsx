@@ -130,10 +130,10 @@ function CourseDetailsContent() {
   const [copiedAddress, setCopiedAddress] = useState<string>("");
 
   const contractAddresses = {
-    CourseFactory: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72",
-    CourseLicense: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578",
-    ProgressTracker: "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2",
-    CertificateManager: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5",
+    CourseFactory: process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS!,
+    CourseLicense: process.env.NEXT_PUBLIC_COURSE_LICENSE_ADDRESS!,
+    ProgressTracker: process.env.NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS!,
+    CertificateManager: process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!,
   };
 
   const copyToClipboard = async (address: string, contractName: string) => {

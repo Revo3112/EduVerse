@@ -6,8 +6,9 @@ const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
 });
 
-const COURSE_LICENSE_ADDRESS = "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578";
-const CERTIFICATE_MANAGER_ADDRESS = "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5";
+const COURSE_LICENSE_ADDRESS = process.env.NEXT_PUBLIC_COURSE_LICENSE_ADDRESS!;
+const CERTIFICATE_MANAGER_ADDRESS =
+  process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!;
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 async function testCourseLicenseMetadata() {
@@ -31,9 +32,7 @@ async function testCourseLicenseMetadata() {
 
     if (!currentURI || currentURI === "1.json" || currentURI === "") {
       console.log("❌ PROBLEM DETECTED: Base URI not set!");
-      console.log(
-        "\n💡 Solution: Call setURI() with proper base URI:",
-      );
+      console.log("\n💡 Solution: Call setURI() with proper base URI:");
       console.log(`   Expected: ${BASE_URL}/api/nft/license/`);
       console.log(`   Current:  ${currentURI}`);
     } else {
@@ -48,16 +47,12 @@ async function testCourseLicenseMetadata() {
     if (response.ok) {
       const metadata = await response.json();
       console.log("✅ Metadata endpoint working!");
+      console.log(`   Name: ${metadata.name}`);
       console.log(
-        `   Name: ${metadata.name}`,
-      );
-      console.log(
-        `   Description: ${metadata.description?.substring(0, 50)}...`,
+        `   Description: ${metadata.description?.substring(0, 50)}...`
       );
       console.log(`   Image: ${metadata.image}`);
-      console.log(
-        `   Attributes: ${metadata.attributes?.length} traits`,
-      );
+      console.log(`   Attributes: ${metadata.attributes?.length} traits`);
     } else {
       console.log("❌ Metadata endpoint failed!");
       console.log(`   Status: ${response.status}`);
@@ -72,7 +67,7 @@ async function testCourseLicenseMetadata() {
     if (imageResponse.ok) {
       console.log("✅ Image endpoint working!");
       console.log(
-        `   Content-Type: ${imageResponse.headers.get("content-type")}`,
+        `   Content-Type: ${imageResponse.headers.get("content-type")}`
       );
     } else {
       console.log("❌ Image endpoint failed!");
@@ -104,12 +99,8 @@ async function testCertificateMetadata() {
 
     if (!currentURI || currentURI === "1.json" || currentURI === "") {
       console.log("❌ PROBLEM DETECTED: Base URI not set!");
-      console.log(
-        "\n💡 Solution: Call setTokenURI() for each certificate:",
-      );
-      console.log(
-        `   Expected: ${BASE_URL}/api/nft/certificate/1.json`,
-      );
+      console.log("\n💡 Solution: Call setTokenURI() for each certificate:");
+      console.log(`   Expected: ${BASE_URL}/api/nft/certificate/1.json`);
       console.log(`   Current:  ${currentURI}`);
     } else {
       console.log("✅ Token URI is configured");
@@ -123,16 +114,12 @@ async function testCertificateMetadata() {
     if (response.ok) {
       const metadata = await response.json();
       console.log("✅ Metadata endpoint working!");
+      console.log(`   Name: ${metadata.name}`);
       console.log(
-        `   Name: ${metadata.name}`,
-      );
-      console.log(
-        `   Description: ${metadata.description?.substring(0, 50)}...`,
+        `   Description: ${metadata.description?.substring(0, 50)}...`
       );
       console.log(`   Image: ${metadata.image}`);
-      console.log(
-        `   Attributes: ${metadata.attributes?.length} traits`,
-      );
+      console.log(`   Attributes: ${metadata.attributes?.length} traits`);
     } else {
       console.log("❌ Metadata endpoint failed!");
       console.log(`   Status: ${response.status}`);
@@ -147,7 +134,7 @@ async function testCertificateMetadata() {
     if (imageResponse.ok) {
       console.log("✅ Image endpoint working!");
       console.log(
-        `   Content-Type: ${imageResponse.headers.get("content-type")}`,
+        `   Content-Type: ${imageResponse.headers.get("content-type")}`
       );
     } else {
       console.log("❌ Image endpoint failed!");
@@ -174,26 +161,20 @@ async function main() {
   await testCourseLicenseMetadata();
   await testCertificateMetadata();
 
-  console.log("\n╔════════════════════════════════════════════════════════════╗");
+  console.log(
+    "\n╔════════════════════════════════════════════════════════════╗"
+  );
   console.log("║         SUMMARY & NEXT STEPS                               ║");
   console.log("╚════════════════════════════════════════════════════════════╝");
 
   console.log("\n📋 Action Items:");
-  console.log(
-    "\n1️⃣  If base URIs are not set, run: npm run set-nft-uris",
-  );
+  console.log("\n1️⃣  If base URIs are not set, run: npm run set-nft-uris");
   console.log("2️⃣  Deploy frontend to production so endpoints are live");
-  console.log(
-    "3️⃣  Call setURI() on CourseLicense contract with:",
-  );
+  console.log("3️⃣  Call setURI() on CourseLicense contract with:");
   console.log(`    ${BASE_URL}/api/nft/license/`);
-  console.log(
-    "4️⃣  For each certificate, call setTokenURI() with:",
-  );
+  console.log("4️⃣  For each certificate, call setTokenURI() with:");
   console.log(`    ${BASE_URL}/api/nft/certificate/[tokenId].json`);
-  console.log(
-    "5️⃣  Wait 5-10 minutes for MetaMask to refresh metadata cache",
-  );
+  console.log("5️⃣  Wait 5-10 minutes for MetaMask to refresh metadata cache");
   console.log("6️⃣  Check NFT display in MetaMask wallet");
 
   console.log("\n✅ Test complete!\n");

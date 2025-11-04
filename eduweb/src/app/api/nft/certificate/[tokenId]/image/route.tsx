@@ -4,21 +4,50 @@ import { getContract, readContract } from "thirdweb";
 import { mantaPacificTestnet } from "thirdweb/chains";
 import { createThirdwebClient } from "thirdweb";
 
-export const runtime = "edge";
+const CERTIFICATE_MANAGER_ADDRESS =
+  process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!;
+const COURSE_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS!;
 
-const client = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
-});
+interface CertificateData {
+  tokenId: bigint;
+  recipientName: string;
+  institutionName: string;
+  recipient: string;
+  isValid: boolean;
+  isMinted: boolean;
+  baseRoute: string;
+  qrData: string;
+  mintedAt: bigint;
+  lastUpdated: bigint;
+  totalCourses: bigint;
+  paymentReceiptHash: string;
+}
 
-const CERTIFICATE_MANAGER_ADDRESS = "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5";
-const COURSE_FACTORY_ADDRESS = "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72";
+interface CourseData {
+  id: bigint;
+  title: string;
+  description: string;
+  creator: string;
+  price: bigint;
+  isActive: boolean;
+  isDeleted: boolean;
+  duration: bigint;
+  createdAt: bigint;
+  totalStudents: bigint;
+  averageRating: number;
+}
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { tokenId: string } },
+  { params }: { params: Promise<{ tokenId: string }> }
 ) {
   try {
-    const tokenId = BigInt(params.tokenId);
+    const { tokenId: tokenIdStr } = await params;
+    const tokenId = BigInt(tokenIdStr);
+
+    const client = createThirdwebClient({
+      clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
+    });
 
     const certificateContract = getContract({
       client,
@@ -32,37 +61,40 @@ export async function GET(
       address: COURSE_FACTORY_ADDRESS,
     });
 
-    const certificateData = await readContract({
+    // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+    const certificateData = (await readContract({
       contract: certificateContract,
       method:
         "function getCertificate(uint256 tokenId) view returns (tuple(uint256 tokenId, string recipientName, string institutionName, address recipient, bool isValid, bool isMinted, string baseRoute, string qrData, uint256 mintedAt, uint256 lastUpdated, uint256 totalCourses, bytes32 paymentReceiptHash))",
       params: [tokenId],
-    });
+    })) as CertificateData;
 
-    const completedCourses = await readContract({
+    // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+    const completedCourses = (await readContract({
       contract: certificateContract,
       method:
         "function getCertificateCompletedCourses(uint256 tokenId) view returns (uint256[])",
       params: [tokenId],
-    });
+    })) as bigint[];
 
     const courseTitles: string[] = [];
     for (const courseId of completedCourses) {
       try {
-        const courseData = await readContract({
+        // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+        const courseData = (await readContract({
           contract: courseFactoryContract,
           method:
             "function getCourse(uint256 courseId) view returns (tuple(uint256 id, string title, string description, address creator, uint256 price, bool isActive, bool isDeleted, uint256 duration, uint256 createdAt, uint256 totalStudents, uint8 averageRating))",
           params: [courseId],
-        });
+        })) as CourseData;
         courseTitles.push(courseData.title);
-      } catch (err) {
+      } catch {
         courseTitles.push(`Course #${courseId}`);
       }
     }
 
     const mintDate = new Date(
-      Number(certificateData.mintedAt) * 1000,
+      Number(certificateData.mintedAt) * 1000
     ).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
@@ -310,7 +342,7 @@ export async function GET(
       {
         width: 1200,
         height: 800,
-      },
+      }
     );
   } catch (error) {
     console.error("Error generating certificate image:", error);
@@ -340,7 +372,7 @@ export async function GET(
       {
         width: 1200,
         height: 800,
-      },
+      }
     );
   }
 }

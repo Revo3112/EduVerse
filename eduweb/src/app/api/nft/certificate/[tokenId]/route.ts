@@ -7,8 +7,38 @@ const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
 });
 
-const CERTIFICATE_MANAGER_ADDRESS = "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5";
-const COURSE_FACTORY_ADDRESS = "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72";
+const CERTIFICATE_MANAGER_ADDRESS =
+  process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!;
+const COURSE_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS!;
+
+interface CertificateData {
+  tokenId: bigint;
+  recipientName: string;
+  institutionName: string;
+  recipient: string;
+  isValid: boolean;
+  isMinted: boolean;
+  baseRoute: string;
+  qrData: string;
+  mintedAt: bigint;
+  lastUpdated: bigint;
+  totalCourses: bigint;
+  paymentReceiptHash: string;
+}
+
+interface CourseData {
+  id: bigint;
+  title: string;
+  description: string;
+  creator: string;
+  price: bigint;
+  isActive: boolean;
+  isDeleted: boolean;
+  duration: bigint;
+  createdAt: bigint;
+  totalStudents: bigint;
+  averageRating: number;
+}
 
 interface CertificateMetadata {
   name: string;
@@ -24,10 +54,11 @@ interface CertificateMetadata {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { tokenId: string } },
+  { params }: { params: Promise<{ tokenId: string }> }
 ) {
   try {
-    const tokenId = BigInt(params.tokenId);
+    const { tokenId: tokenIdStr } = await params;
+    const tokenId = BigInt(tokenIdStr);
 
     const certificateContract = getContract({
       client,
@@ -41,39 +72,48 @@ export async function GET(
       address: COURSE_FACTORY_ADDRESS,
     });
 
-    const certificateData = await readContract({
+    // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+    const certificateData = (await readContract({
       contract: certificateContract,
       method:
         "function getCertificate(uint256 tokenId) view returns (tuple(uint256 tokenId, string recipientName, string institutionName, address recipient, bool isValid, bool isMinted, string baseRoute, string qrData, uint256 mintedAt, uint256 lastUpdated, uint256 totalCourses, bytes32 paymentReceiptHash))",
       params: [tokenId],
-    });
+    })) as CertificateData;
 
-    const completedCourses = await readContract({
+    // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+    const completedCourses = (await readContract({
       contract: certificateContract,
       method:
         "function getCertificateCompletedCourses(uint256 tokenId) view returns (uint256[])",
       params: [tokenId],
-    });
+    })) as bigint[];
 
     const courseTitles: string[] = [];
     for (const courseId of completedCourses) {
       try {
-        const courseData = await readContract({
+        // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+        const courseData = (await readContract({
           contract: courseFactoryContract,
           method:
             "function getCourse(uint256 courseId) view returns (tuple(uint256 id, string title, string description, address creator, uint256 price, bool isActive, bool isDeleted, uint256 duration, uint256 createdAt, uint256 totalStudents, uint8 averageRating))",
           params: [courseId],
-        });
+        })) as CourseData;
         courseTitles.push(courseData.title);
-      } catch (err) {
+      } catch {
         courseTitles.push(`Course #${courseId}`);
       }
     }
 
     const metadata: CertificateMetadata = {
       name: `${certificateData.institutionName} Certificate - ${certificateData.recipientName}`,
-      description: `This certificate verifies that ${certificateData.recipientName} has successfully completed ${certificateData.totalCourses} course${certificateData.totalCourses > 1 ? "s" : ""} from ${certificateData.institutionName}. Courses completed: ${courseTitles.join(", ")}.`,
-      image: `${process.env.NEXT_PUBLIC_APP_URL}/api/nft/certificate/${params.tokenId}/image`,
+      description: `This certificate verifies that ${
+        certificateData.recipientName
+      } has successfully completed ${certificateData.totalCourses} course${
+        certificateData.totalCourses > 1 ? "s" : ""
+      } from ${
+        certificateData.institutionName
+      }. Courses completed: ${courseTitles.join(", ")}.`,
+      image: `${process.env.NEXT_PUBLIC_APP_URL}/api/nft/certificate/${tokenIdStr}/image`,
       external_url: `${process.env.NEXT_PUBLIC_APP_URL}/certificates?verify=${tokenId}`,
       attributes: [
         {
@@ -95,11 +135,15 @@ export async function GET(
         },
         {
           trait_type: "Minted Date",
-          value: new Date(Number(certificateData.mintedAt) * 1000).toISOString(),
+          value: new Date(
+            Number(certificateData.mintedAt) * 1000
+          ).toISOString(),
         },
         {
           trait_type: "Last Updated",
-          value: new Date(Number(certificateData.lastUpdated) * 1000).toISOString(),
+          value: new Date(
+            Number(certificateData.lastUpdated) * 1000
+          ).toISOString(),
         },
         {
           trait_type: "Status",
@@ -127,7 +171,7 @@ export async function GET(
     console.error("Error fetching certificate metadata:", error);
     return NextResponse.json(
       { error: "Failed to fetch certificate metadata" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

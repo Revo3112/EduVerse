@@ -17,7 +17,8 @@ export function GoldskyConfigError() {
         <CardContent className="space-y-4">
           <Alert className="border-red-300 bg-red-100 dark:bg-red-900/20">
             <AlertDescription className="text-red-800 dark:text-red-300">
-              <strong>Error:</strong> NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT is not configured.
+              <strong>Error:</strong> NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT is
+              not configured.
             </AlertDescription>
           </Alert>
 
@@ -47,7 +48,11 @@ export function GoldskyConfigError() {
                   </a>
                 </li>
                 <li>
-                  Create <code className="bg-red-200 dark:bg-red-900 px-1 rounded">.env.local</code> file:
+                  Create{" "}
+                  <code className="bg-red-200 dark:bg-red-900 px-1 rounded">
+                    .env.local
+                  </code>{" "}
+                  file:
                   <pre className="mt-1 p-2 bg-red-100 dark:bg-red-900/30 rounded text-xs overflow-x-auto">
                     NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT=https://api.goldsky.com/api/public/project_YOUR_PROJECT_ID/subgraphs/eduverse-subgraph/VERSION/gn
                   </pre>
@@ -61,24 +66,33 @@ export function GoldskyConfigError() {
                 Example .env.local:
               </h4>
               <pre className="p-3 bg-red-100 dark:bg-red-900/30 rounded text-xs overflow-x-auto text-red-800 dark:text-red-300">
-{`# Goldsky Subgraph Endpoint
-NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT=https://api.goldsky.com/api/public/project_clz8vzohs3w5h01wb5oblfk9i/subgraphs/eduverse-subgraph/1.5.0/gn
+                {`# Goldsky Subgraph Endpoint
+NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT=https://api.goldsky.com/api/public/project_cmezpe79yxzxt01sxhkaz5fq2/subgraphs/eduverse/2.0.0/gn
 
 # Smart Contract Addresses
 NEXT_PUBLIC_COURSE_FACTORY_ADDRESS=0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72
-NEXT_PUBLIC_COURSE_LICENSE_ADDRESS=0x2A2C04cb75b4fF8F80d6CE1dcDa5C3c59FDf8D17
-NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS=0x2BA4c0AC2C9314810c0830c8F9B4CF03Ab96eb3c
-NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS=0xA0db2F257608934b8A7806893B4a55a70d9F02f7
+NEXT_PUBLIC_COURSE_LICENSE_ADDRESS=0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578
+NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS=0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2
+NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS=0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5
+NEXT_PUBLIC_DEPLOYER_ADDRESS=0xb5075eB5734bc8A6a9bbC1Ca299Fd8C0bd4Cff58
 
 # Thirdweb Client ID
-NEXT_PUBLIC_TEMPLATE_CLIENT_ID=your_thirdweb_client_id`}
+NEXT_PUBLIC_THIRDWEB_CLIENT_ID=your_thirdweb_client_id`}
               </pre>
             </div>
 
             <div className="flex items-start gap-2 p-3 bg-yellow-100 dark:bg-yellow-900/20 rounded border border-yellow-300">
               <AlertTriangle className="h-4 w-4 text-yellow-700 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
               <p className="text-xs text-yellow-800 dark:text-yellow-300">
-                <strong>Note:</strong> You can copy <code className="bg-yellow-200 dark:bg-yellow-900 px-1 rounded">.env.example</code> to <code className="bg-yellow-200 dark:bg-yellow-900 px-1 rounded">.env.local</code> and fill in your values.
+                <strong>Note:</strong> You can copy{" "}
+                <code className="bg-yellow-200 dark:bg-yellow-900 px-1 rounded">
+                  .env.example
+                </code>{" "}
+                to{" "}
+                <code className="bg-yellow-200 dark:bg-yellow-900 px-1 rounded">
+                  .env.local
+                </code>{" "}
+                and fill in your values.
               </p>
             </div>
           </div>

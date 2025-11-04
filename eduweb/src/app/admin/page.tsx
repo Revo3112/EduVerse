@@ -40,11 +40,13 @@ const client = createThirdwebClient({
 });
 
 const CONTRACTS = {
-  certificateManager: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5",
-  courseFactory: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72",
-  courseLicense: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578",
-  progressTracker: "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2",
+  certificateManager: process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!,
+  courseFactory: process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS!,
+  courseLicense: process.env.NEXT_PUBLIC_COURSE_LICENSE_ADDRESS!,
+  progressTracker: process.env.NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS!,
 };
+
+const DEPLOYER_ADDRESS = process.env.NEXT_PUBLIC_DEPLOYER_ADDRESS!;
 
 export default function AdminPage() {
   const account = useActiveAccount();
@@ -81,21 +83,11 @@ export default function AdminPage() {
       }
 
       try {
-        const certContract = getContract({
-          client,
-          chain: mantaPacificTestnet,
-          address: CONTRACTS.certificateManager,
-        });
+        setIsOwner(
+          DEPLOYER_ADDRESS.toLowerCase() === account.address.toLowerCase()
+        );
 
-        const owner = await readContract({
-          contract: certContract,
-          method: "function owner() view returns (address)",
-          params: [],
-        });
-
-        setIsOwner(owner.toLowerCase() === account.address.toLowerCase());
-
-        if (owner.toLowerCase() === account.address.toLowerCase()) {
+        if (DEPLOYER_ADDRESS.toLowerCase() === account.address.toLowerCase()) {
           await loadContractData();
         }
       } catch (error) {
