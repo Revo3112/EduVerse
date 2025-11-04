@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "set-nft-uris": "tsx src/scripts/set-contract-uris.ts",
+    "test-nft-metadata": "tsx src/scripts/test-nft-metadata.ts"
+  }
+}
