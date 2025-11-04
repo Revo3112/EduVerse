@@ -12,6 +12,13 @@ import {
   uploadJSONToPrivateIPFS,
 } from "./pinata-upload.service";
 
+export {
+  getCertificatePrice,
+  getUserCertificateId,
+  getCertificateCompletedCourses,
+  checkEligibilityForCertificate as checkCertificateEligibility,
+} from "./certificate-blockchain.service";
+
 const TEMPLATE_URL =
   "https://copper-far-firefly-220.mypinata.cloud/ipfs/bafybeiaibxpgjjcjr3dgfyhhg365rt47xl2nwwrnesr6zshpompucxgn3q";
 
