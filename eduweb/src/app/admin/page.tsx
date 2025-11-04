@@ -1,14 +1,7 @@
 "use client";
 
 import { useActiveAccount } from "thirdweb/react";
-import {
-  getContract,
-  readContract,
-  prepareContractCall,
-  sendTransaction,
-} from "thirdweb";
-import { mantaPacificTestnet } from "thirdweb/chains";
-import { createThirdwebClient } from "thirdweb";
+import { readContract, prepareContractCall, sendTransaction } from "thirdweb";
 import { useEffect, useState } from "react";
 import {
   Card,
@@ -34,17 +27,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-
-const client = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
-});
-
-const CONTRACTS = {
-  certificateManager: process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!,
-  courseFactory: process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS!,
-  courseLicense: process.env.NEXT_PUBLIC_COURSE_LICENSE_ADDRESS!,
-  progressTracker: process.env.NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS!,
-};
+import {
+  certificateManager,
+  courseLicense,
+  courseFactory,
+  CONTRACT_ADDRESSES,
+} from "@/lib/contracts";
+import { chain } from "@/lib/chains";
 
 const DEPLOYER_ADDRESS = process.env.NEXT_PUBLIC_DEPLOYER_ADDRESS!;
 
@@ -103,18 +92,6 @@ export default function AdminPage() {
 
   async function loadContractData() {
     try {
-      const certContract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
-      const licenseContract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.courseLicense,
-      });
-
       const [
         defaultCertFee,
         defaultCourseAddFee,
@@ -124,32 +101,32 @@ export default function AdminPage() {
         platformFeePercentage,
       ] = await Promise.all([
         readContract({
-          contract: certContract,
+          contract: certificateManager,
           method: "function defaultCertificateFee() view returns (uint256)",
           params: [],
         }),
         readContract({
-          contract: certContract,
+          contract: certificateManager,
           method: "function defaultCourseAdditionFee() view returns (uint256)",
           params: [],
         }),
         readContract({
-          contract: certContract,
+          contract: certificateManager,
           method: "function defaultPlatformName() view returns (string)",
           params: [],
         }),
         readContract({
-          contract: certContract,
+          contract: certificateManager,
           method: "function defaultBaseRoute() view returns (string)",
           params: [],
         }),
         readContract({
-          contract: certContract,
+          contract: certificateManager,
           method: "function platformWallet() view returns (address)",
           params: [],
         }),
         readContract({
-          contract: licenseContract,
+          contract: courseLicense,
           method: "function platformFeePercentage() view returns (uint256)",
           params: [],
         }),
@@ -165,20 +142,15 @@ export default function AdminPage() {
       });
     } catch (error) {
       console.error("Error loading contract data:", error);
+      toast.error("Failed to load contract data");
     }
   }
 
   async function handleSetCertificateFee() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
+        contract: certificateManager,
         method: "function setDefaultCertificateFee(uint256 newFee)",
         params: [BigInt(certFee)],
       });
@@ -196,14 +168,8 @@ export default function AdminPage() {
   async function handleSetCourseAdditionFee() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
+        contract: certificateManager,
         method: "function setDefaultCourseAdditionFee(uint256 newFee)",
         params: [BigInt(courseAddFee)],
       });
@@ -221,16 +187,10 @@ export default function AdminPage() {
   async function handleSetPlatformWallet() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
+        contract: certificateManager,
         method: "function setPlatformWallet(address newWallet)",
-        params: [platformWallet as `0x${string}`],
+        params: [platformWallet],
       });
 
       await sendTransaction({ transaction: tx, account });
@@ -246,16 +206,9 @@ export default function AdminPage() {
   async function handleSetPlatformName() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
-        method:
-          "function setDefaultPlatformName(string calldata newPlatformName)",
+        contract: certificateManager,
+        method: "function setDefaultPlatformName(string newPlatformName)",
         params: [platformName],
       });
 
@@ -270,15 +223,9 @@ export default function AdminPage() {
   async function handleSetDefaultBaseRoute() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
-        method: "function updateDefaultBaseRoute(string calldata newBaseRoute)",
+        contract: certificateManager,
+        method: "function updateDefaultBaseRoute(string newBaseRoute)",
         params: [baseRoute],
       });
 
@@ -286,23 +233,18 @@ export default function AdminPage() {
       toast.success("Default base route updated successfully");
       await loadContractData();
     } catch (error) {
-      toast.error((error as Error).message || "Failed to update base route");
+      toast.error(
+        (error as Error).message || "Failed to update default base route"
+      );
     }
   }
 
   async function handleSetTokenURI() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
-        method:
-          "function setTokenURI(uint256 tokenId, string calldata tokenURI)",
+        contract: certificateManager,
+        method: "function setTokenURI(uint256 tokenId, string tokenURI)",
         params: [BigInt(tokenId), customTokenURI],
       });
 
@@ -316,16 +258,9 @@ export default function AdminPage() {
   async function handleRevokeCertificate() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
-        method:
-          "function revokeCertificate(uint256 tokenId, string calldata reason)",
+        contract: certificateManager,
+        method: "function revokeCertificate(uint256 tokenId, string reason)",
         params: [BigInt(revokeTokenId), revokeReason],
       });
 
@@ -339,14 +274,8 @@ export default function AdminPage() {
   async function handlePauseContract() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
+        contract: certificateManager,
         method: "function pause()",
         params: [],
       });
@@ -361,14 +290,8 @@ export default function AdminPage() {
   async function handleUnpauseContract() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.certificateManager,
-      });
-
       const tx = prepareContractCall({
-        contract,
+        contract: certificateManager,
         method: "function unpause()",
         params: [],
       });
@@ -383,36 +306,26 @@ export default function AdminPage() {
   async function handleSetLicenseURI() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.courseLicense,
-      });
-
       const tx = prepareContractCall({
-        contract,
-        method: "function setURI(string memory newBaseURI)",
+        contract: courseLicense,
+        method: "function setURI(string newuri)",
         params: [licenseBaseURI],
       });
 
       await sendTransaction({ transaction: tx, account });
       toast.success("License base URI updated successfully");
     } catch (error) {
-      toast.error((error as Error).message || "Failed to update license URI");
+      toast.error(
+        (error as Error).message || "Failed to update license base URI"
+      );
     }
   }
 
   async function handleSetPlatformFeePercentage() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.courseLicense,
-      });
-
       const tx = prepareContractCall({
-        contract,
+        contract: courseLicense,
         method: "function setPlatformFeePercentage(uint256 _feePercentage)",
         params: [BigInt(platformFeePercent)],
       });
@@ -430,16 +343,10 @@ export default function AdminPage() {
   async function handleBlacklistUser() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.courseFactory,
-      });
-
       const tx = prepareContractCall({
-        contract,
+        contract: courseFactory,
         method: "function blacklistUser(address user)",
-        params: [blacklistAddress as `0x${string}`],
+        params: [blacklistAddress],
       });
 
       await sendTransaction({ transaction: tx, account });
@@ -452,16 +359,10 @@ export default function AdminPage() {
   async function handleUnblacklistUser() {
     if (!account) return;
     try {
-      const contract = getContract({
-        client,
-        chain: mantaPacificTestnet,
-        address: CONTRACTS.courseFactory,
-      });
-
       const tx = prepareContractCall({
-        contract,
+        contract: courseFactory,
         method: "function unblacklistUser(address user)",
-        params: [blacklistAddress as `0x${string}`],
+        params: [blacklistAddress],
       });
 
       await sendTransaction({ transaction: tx, account });
@@ -857,31 +758,31 @@ export default function AdminPage() {
               <div className="space-y-2">
                 <p className="text-sm font-medium">Certificate Manager</p>
                 <p className="text-xs font-mono bg-muted p-2 rounded break-all">
-                  {CONTRACTS.certificateManager}
+                  {CONTRACT_ADDRESSES.CERTIFICATE_MANAGER}
                 </p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">Course Factory</p>
                 <p className="text-xs font-mono bg-muted p-2 rounded break-all">
-                  {CONTRACTS.courseFactory}
+                  {CONTRACT_ADDRESSES.COURSE_FACTORY}
                 </p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">Course License</p>
                 <p className="text-xs font-mono bg-muted p-2 rounded break-all">
-                  {CONTRACTS.courseLicense}
+                  {CONTRACT_ADDRESSES.COURSE_LICENSE}
                 </p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">Progress Tracker</p>
                 <p className="text-xs font-mono bg-muted p-2 rounded break-all">
-                  {CONTRACTS.progressTracker}
+                  {CONTRACT_ADDRESSES.PROGRESS_TRACKER}
                 </p>
               </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium">Network</p>
                 <p className="text-xs font-mono bg-muted p-2 rounded">
-                  Manta Pacific Testnet ({mantaPacificTestnet.id})
+                  Manta Pacific Testnet ({chain.id})
                 </p>
               </div>
             </div>
