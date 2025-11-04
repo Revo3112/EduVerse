@@ -9,9 +9,9 @@ dataSources:
     name: CourseFactory
     network: manta-pacific-sepolia
     source:
-      address: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72"
+      address: "0x2DE0740681f6E24b3c32757F5eEE8E4584EdE9D6"
       abi: CourseFactory
-      startBlock: 5386706
+      startBlock: 5415783
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -71,9 +71,9 @@ dataSources:
     name: CourseLicense
     network: manta-pacific-sepolia
     source:
-      address: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578"
+      address: "0xCda6D21620C76AEBb8B98613e87d0BDFD12dd3F2"
       abi: CourseLicense
-      startBlock: 5386710
+      startBlock: 5415785
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -95,13 +95,19 @@ dataSources:
           handler: handleLicenseExpired
         - event: RevenueRecorded(indexed uint256,indexed address,uint256,uint256,string)
           handler: handleRevenueRecorded
+        - event: BaseURIUpdated(string)
+          handler: handleBaseURIUpdated
+        - event: PlatformFeePercentageUpdated(uint256,uint256)
+          handler: handlePlatformFeePercentageUpdated
+        - event: PlatformWalletUpdated(indexed address,indexed address)
+          handler: handlePlatformWalletUpdatedLicense
   - kind: ethereum/contract
     name: ProgressTracker
     network: manta-pacific-sepolia
     source:
-      address: "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2"
+      address: "0xEc636535fB2631F26e20Fd07fc632d00da5bA1C4"
       abi: ProgressTracker
-      startBlock: 5386715
+      startBlock: 5415786
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -129,9 +135,9 @@ dataSources:
     name: CertificateManager
     network: manta-pacific-sepolia
     source:
-      address: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5"
+      address: "0xA7Fa9316774c1e7D30389B1ff592cBFdcD70F70c"
       abi: CertificateManager
-      startBlock: 5386719
+      startBlock: 5415791
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -171,6 +177,16 @@ dataSources:
           handler: handleCourseAdditionFeeUpdated
         - event: CourseCertificatePriceSet(indexed uint256,uint256,indexed address)
           handler: handleCourseCertificatePriceSet
+        - event: TokenURIUpdated(indexed uint256,string)
+          handler: handleTokenURIUpdated
+        - event: DefaultCertificateFeeUpdated(uint256)
+          handler: handleDefaultCertificateFeeUpdated
+        - event: PlatformWalletUpdated(indexed address,indexed address)
+          handler: handlePlatformWalletUpdatedCertMgr
+        - event: Paused(address)
+          handler: handleCertificateManagerPaused
+        - event: Unpaused(address)
+          handler: handleCertificateManagerUnpaused
 features:
   - fullTextSearch
   - grafting

@@ -210,6 +210,7 @@ type Certificate @entity(immutable: false) {
   platformName: String! # Platform name for certificate display
   baseRoute: String! # Base URL for QR code routing
   ipfsCID: String! # Current certificate image IPFS CID
+  customTokenURI: String # Custom token URI set by admin
   paymentReceiptHash: Bytes # Payment proof hash
   # Revenue Tracking
   totalRevenue: BigInt! # Sum of all payments
@@ -362,6 +363,29 @@ type ActivityEvent @entity(immutable: true) {
 }
 
 # ============================================================================
+# ENTITY: ADMINCONFIGEVENT - Admin Transaction Tracking
+# ============================================================================
+# Purpose: Track all admin configuration changes for analytics dashboard
+# Use Case: Display admin transactions in analytics page
+# Events: Fee changes, platform name updates, base route changes, etc
+# ============================================================================
+
+type AdminConfigEvent @entity(immutable: true) {
+  id: ID! # {txHash}-{logIndex}
+  admin: Bytes! # Admin wallet address who made the change
+  type: String! # "FEE_UPDATE", "PLATFORM_CONFIG", "CERTIFICATE_CONFIG", etc
+  configKey: String! # Specific config changed: "certificateFee", "platformName", etc
+  oldValue: String # Previous value (if available)
+  newValue: String! # New value set
+  affectedContract: String! # "CertificateManager", "CourseFactory", etc
+  timestamp: BigInt! # Event timestamp
+  blockNumber: BigInt! # Block number
+  transactionHash: Bytes! # Transaction hash
+  description: String! # Human-readable description
+  gasUsed: BigInt # Gas used for transaction
+}
+
+# ============================================================================
 # ENTITY: TEACHERSTUDENT - Unique Student Tracking
 # ============================================================================
 # Purpose: Track unique students per teacher to prevent duplicate counting
@@ -502,6 +526,7 @@ type DailyNetworkStats @entity(immutable: false) {
   licenseTransactions: BigInt!
   certificateTransactions: BigInt!
   progressTransactions: BigInt!
+  adminTransactions: BigInt!
 
   # Success rates
   successfulTransactions: BigInt!
@@ -510,4 +535,40 @@ type DailyNetworkStats @entity(immutable: false) {
   # References
   startBlock: BigInt!
   endBlock: BigInt!
+}
+
+# ============================================================================
+# ENTITY: CONTRACTCONFIGSTATE - Current Contract Configuration
+# ============================================================================
+# Purpose: Store current state of contract configurations
+# Use Case: Quick lookup of current values without scanning events
+# Updated: On every admin config change
+# ============================================================================
+
+type ContractConfigState @entity(immutable: false) {
+  id: ID! # Contract address as string
+  contractAddress: Bytes!
+  contractType: String! # "CertificateManager", "CourseLicense", etc
+  contractName: String! # "CertificateManager", "CourseLicense", etc
+  # CertificateManager configs
+  defaultCertificateFee: BigInt
+  defaultCertificateFeeEth: BigDecimal
+  defaultCourseAdditionFee: BigInt
+  defaultCourseAdditionFeeEth: BigDecimal
+  platformWallet: Bytes
+  defaultPlatformName: String
+  defaultBaseRoute: String
+
+  # CourseLicense configs
+  platformFeePercentage: BigInt
+  licenseURI: String
+  licenseBaseURI: String
+
+  # Contract state
+  isPaused: Boolean!
+
+  # Timestamps
+  lastUpdated: BigInt!
+  lastUpdateBlock: BigInt!
+  lastUpdateTxHash: Bytes!
 }

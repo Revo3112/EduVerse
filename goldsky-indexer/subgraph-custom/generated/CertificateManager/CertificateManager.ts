@@ -278,6 +278,24 @@ export class DefaultBaseRouteUpdated__Params {
   }
 }
 
+export class DefaultCertificateFeeUpdated extends ethereum.Event {
+  get params(): DefaultCertificateFeeUpdated__Params {
+    return new DefaultCertificateFeeUpdated__Params(this);
+  }
+}
+
+export class DefaultCertificateFeeUpdated__Params {
+  _event: DefaultCertificateFeeUpdated;
+
+  constructor(event: DefaultCertificateFeeUpdated) {
+    this._event = event;
+  }
+
+  get newFee(): BigInt {
+    return this._event.parameters[0].value.toBigInt();
+  }
+}
+
 export class OwnershipTransferred extends ethereum.Event {
   get params(): OwnershipTransferred__Params {
     return new OwnershipTransferred__Params(this);
@@ -333,6 +351,50 @@ export class PlatformNameUpdated__Params {
 
   get newPlatformName(): string {
     return this._event.parameters[0].value.toString();
+  }
+}
+
+export class PlatformWalletUpdated extends ethereum.Event {
+  get params(): PlatformWalletUpdated__Params {
+    return new PlatformWalletUpdated__Params(this);
+  }
+}
+
+export class PlatformWalletUpdated__Params {
+  _event: PlatformWalletUpdated;
+
+  constructor(event: PlatformWalletUpdated) {
+    this._event = event;
+  }
+
+  get oldWallet(): Address {
+    return this._event.parameters[0].value.toAddress();
+  }
+
+  get newWallet(): Address {
+    return this._event.parameters[1].value.toAddress();
+  }
+}
+
+export class TokenURIUpdated extends ethereum.Event {
+  get params(): TokenURIUpdated__Params {
+    return new TokenURIUpdated__Params(this);
+  }
+}
+
+export class TokenURIUpdated__Params {
+  _event: TokenURIUpdated;
+
+  constructor(event: TokenURIUpdated) {
+    this._event = event;
+  }
+
+  get tokenId(): BigInt {
+    return this._event.parameters[0].value.toBigInt();
+  }
+
+  get newURI(): string {
+    return this._event.parameters[1].value.toString();
   }
 }
 

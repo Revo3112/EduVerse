@@ -10,6 +10,9 @@ import {
   LicenseRenewed,
   LicenseExpired,
   RevenueRecorded,
+  BaseURIUpdated,
+  PlatformFeePercentageUpdated,
+  PlatformWalletUpdated,
 } from "../../generated/CourseLicense/CourseLicense";
 import {
   Enrollment,
@@ -17,9 +20,10 @@ import {
   UserProfile,
   StudentCourseEnrollment,
   TeacherStudent,
+  ContractConfigState,
+  AdminConfigEvent,
 } from "../../generated/schema";
 
-import { Address } from "@graphprotocol/graph-ts";
 import {
   updateNetworkStats,
   incrementPlatformCounter,
@@ -38,6 +42,8 @@ const ZERO_BD = BigDecimal.fromString("0");
 const WEI_TO_ETH = BigDecimal.fromString("1000000000000000000");
 const PLATFORM_FEE_PERCENTAGE = BigInt.fromI32(10);
 const BASIS_POINTS = BigInt.fromI32(100);
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const COURSE_LICENSE_NAME = "CourseLicense";
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -49,6 +55,61 @@ const BASIS_POINTS = BigInt.fromI32(100);
 function weiToEth(wei: BigInt): BigDecimal {
   return wei.toBigDecimal().div(WEI_TO_ETH);
 }
+
+function getOrCreateContractConfig(
+  contractAddress: Address,
+): ContractConfigState {
+  let id = contractAddress.toHexString().toLowerCase();
+  let config = ContractConfigState.load(id);
+
+  if (!config) {
+    config = new ContractConfigState(id);
+    config.contractAddress = Bytes.fromHexString(contractAddress.toHexString());
+    config.contractType = COURSE_LICENSE_NAME;
+    config.contractName = COURSE_LICENSE_NAME;
+    config.platformFeePercentage = ZERO_BI;
+    config.platformWallet = Bytes.fromHexString(ZERO_ADDRESS);
+    config.licenseURI = "";
+    config.licenseBaseURI = "";
+    config.isPaused = false;
+    config.lastUpdated = ZERO_BI;
+    config.lastUpdateBlock = ZERO_BI;
+    config.lastUpdateTxHash = Bytes.fromHexString(ZERO_ADDRESS);
+  }
+
+  return config;
+}
+
+function createAdminConfigEvent(
+  eventId: string,
+  adminAddress: Bytes,
+  eventType: string,
+  configKey: string,
+  oldValue: string,
+  newValue: string,
+  contractName: string,
+  description: string,
+  timestamp: BigInt,
+  blockNumber: BigInt,
+  txHash: Bytes,
+): void {
+  let adminEvent = new AdminConfigEvent(eventId);
+
+  adminEvent.admin = adminAddress;
+  adminEvent.type = eventType;
+  adminEvent.configKey = configKey;
+  adminEvent.oldValue = oldValue;
+  adminEvent.newValue = newValue;
+  adminEvent.affectedContract = contractName;
+  adminEvent.description = description;
+  adminEvent.timestamp = timestamp;
+  adminEvent.blockNumber = blockNumber;
+  adminEvent.transactionHash = txHash;
+
+  adminEvent.save();
+}
+
+// ============================================================================
 
 /**
  * Calculate platform fee (2% of price)
@@ -625,6 +686,135 @@ export function handleRevenueRecorded(event: RevenueRecorded): void {
       ],
     );
   }
+}
+
+// ============================================================================
+// ADMIN CONFIGURATION EVENT HANDLERS
+// ============================================================================
+
+export function handleBaseURIUpdated(event: BaseURIUpdated): void {
+  let config = getOrCreateContractConfig(event.address);
+  let oldURI = "";
+  if (config.licenseBaseURI) {
+    oldURI = config.licenseBaseURI as string;
+  }
+
+  config.licenseBaseURI = event.params.newBaseURI;
+  config.lastUpdated = event.block.timestamp;
+  config.lastUpdateBlock = event.block.number;
+  config.lastUpdateTxHash = event.transaction.hash;
+  config.save();
+
+  let description = "Updated license base URI";
+
+  let eventId =
+    event.transaction.hash.toHexString() + "-" + event.logIndex.toString();
+  createAdminConfigEvent(
+    eventId,
+    event.transaction.from,
+    "URI_UPDATE",
+    "licenseBaseURI",
+    oldURI,
+    event.params.newBaseURI,
+    COURSE_LICENSE_NAME,
+    description,
+    event.block.timestamp,
+    event.block.number,
+    event.transaction.hash,
+  );
+
+  updateNetworkStats(event, "CONFIG_UPDATE");
+
+  log.info("License base URI updated: {}", [event.params.newBaseURI]);
+}
+
+export function handlePlatformFeePercentageUpdated(
+  event: PlatformFeePercentageUpdated,
+): void {
+  let config = getOrCreateContractConfig(event.address);
+  let oldPercentageValue = ZERO_BI;
+
+  if (config.platformFeePercentage) {
+    oldPercentageValue = config.platformFeePercentage as BigInt;
+  }
+
+  config.platformFeePercentage = event.params.newPercentage;
+  config.lastUpdated = event.block.timestamp;
+  config.lastUpdateBlock = event.block.number;
+  config.lastUpdateTxHash = event.transaction.hash;
+  config.save();
+
+  let description =
+    "Updated platform fee percentage from " +
+    oldPercentageValue.toString() +
+    " to " +
+    event.params.newPercentage.toString();
+
+  let eventId =
+    event.transaction.hash.toHexString() + "-" + event.logIndex.toString();
+  createAdminConfigEvent(
+    eventId,
+    event.transaction.from,
+    "FEE_UPDATE",
+    "platformFeePercentage",
+    oldPercentageValue.toString(),
+    event.params.newPercentage.toString(),
+    COURSE_LICENSE_NAME,
+    description,
+    event.block.timestamp,
+    event.block.number,
+    event.transaction.hash,
+  );
+
+  updateNetworkStats(event, "CONFIG_UPDATE");
+
+  log.info("Platform fee percentage updated: {}", [
+    event.params.newPercentage.toString(),
+  ]);
+}
+
+export function handlePlatformWalletUpdatedLicense(
+  event: PlatformWalletUpdated,
+): void {
+  let config = getOrCreateContractConfig(event.address);
+  let oldWalletValue = ZERO_ADDRESS;
+  if (config.platformWallet) {
+    oldWalletValue = (config.platformWallet as Bytes).toHexString();
+  }
+
+  config.platformWallet = event.params.newWallet;
+  config.lastUpdated = event.block.timestamp;
+  config.lastUpdateBlock = event.block.number;
+  config.lastUpdateTxHash = event.transaction.hash;
+  config.save();
+
+  let description =
+    "Updated platform wallet from " +
+    oldWalletValue +
+    " to " +
+    event.params.newWallet.toHexString();
+
+  let eventId =
+    event.transaction.hash.toHexString() + "-" + event.logIndex.toString();
+  createAdminConfigEvent(
+    eventId,
+    event.transaction.from,
+    "WALLET_UPDATE",
+    "platformWallet",
+    oldWalletValue,
+    event.params.newWallet.toHexString(),
+    COURSE_LICENSE_NAME,
+    description,
+    event.block.timestamp,
+    event.block.number,
+    event.transaction.hash,
+  );
+
+  updateNetworkStats(event, "CONFIG_UPDATE");
+
+  log.info("Platform wallet updated to: {}", [
+    event.params.newWallet.toHexString(),
+  ]);
 }
 
 // ============================================================================

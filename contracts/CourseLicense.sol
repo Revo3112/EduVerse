@@ -34,8 +34,8 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     mapping(uint256 => string) public courseMetadataURI; // New: Course-specific metadata URIs
 
     // Track relationships between tokens and courses
-    mapping(uint256 => uint256) public tokenIdToCourseId;    // tokenId => courseId
-    mapping(uint256 => address) public tokenIdToStudent;     // tokenId => student address
+    mapping(uint256 => uint256) public tokenIdToCourseId; // tokenId => courseId
+    mapping(uint256 => address) public tokenIdToStudent; // tokenId => student address
     uint256 public nextTokenId = 1;
 
     uint256 private _tokenIds;
@@ -60,7 +60,7 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         uint256 tokenId,
         uint256 durationMonths,
         uint256 expiryTimestamp,
-        uint256 pricePaid  // ✅ GOLDSKY: Added for revenue analytics
+        uint256 pricePaid // ✅ GOLDSKY: Added for revenue analytics
     );
 
     event LicenseRenewed(
@@ -69,7 +69,7 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         uint256 tokenId,
         uint256 durationMonths,
         uint256 expiryTimestamp,
-        uint256 pricePaid  // ✅ GOLDSKY: Added for revenue analytics
+        uint256 pricePaid // ✅ GOLDSKY: Added for revenue analytics
     );
 
     // ✅ GOLDSKY: New event for analytics - track license expiry
@@ -86,15 +86,30 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         address indexed creator,
         uint256 amount,
         uint256 timestamp,
-        string revenueType  // "LICENSE_MINT" or "LICENSE_RENEWAL"
+        string revenueType // "LICENSE_MINT" or "LICENSE_RENEWAL"
     );
 
-    constructor(address _courseFactory, address _platformWallet)
-        ERC1155("")
-        Ownable(msg.sender)
-    {
+    event PlatformFeePercentageUpdated(
+        uint256 oldPercentage,
+        uint256 newPercentage
+    );
+    event PlatformWalletUpdated(
+        address indexed oldWallet,
+        address indexed newWallet
+    );
+    event BaseURIUpdated(string newBaseURI);
+    event CourseMetadataURIUpdated(
+        uint256 indexed courseId,
+        string metadataURI
+    );
+
+    constructor(
+        address _courseFactory,
+        address _platformWallet
+    ) ERC1155("") Ownable(msg.sender) {
         if (_courseFactory == address(0)) revert InvalidAddress(_courseFactory);
-        if (_platformWallet == address(0)) revert InvalidAddress(_platformWallet);
+        if (_platformWallet == address(0))
+            revert InvalidAddress(_platformWallet);
 
         courseFactory = CourseFactory(_courseFactory);
         platformWallet = _platformWallet;
@@ -105,7 +120,10 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
      * @param courseId ID of the course
      * @param durationMonths Duration of the license in months
      */
-    function mintLicense(uint256 courseId, uint256 durationMonths) external payable nonReentrant {
+    function mintLicense(
+        uint256 courseId,
+        uint256 durationMonths
+    ) external payable nonReentrant {
         if (durationMonths == 0 || durationMonths > MAX_DURATION_MONTHS) {
             revert InvalidDuration(durationMonths, MAX_DURATION_MONTHS);
         }
@@ -115,7 +133,10 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
 
         // Safe multiplication check
         uint256 totalPrice;
-        if (durationMonths > 0 && course.pricePerMonth > type(uint256).max / durationMonths) {
+        if (
+            durationMonths > 0 &&
+            course.pricePerMonth > type(uint256).max / durationMonths
+        ) {
             revert ArithmeticOverflow();
         }
         totalPrice = course.pricePerMonth * durationMonths;
@@ -179,8 +200,21 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         // ✅ NEW: Record purchase for student history tracking
         courseFactory.recordCoursePurchase(msg.sender, courseId);
 
-        emit LicenseMinted(courseId, msg.sender, tokenId, durationMonths, expiryTimestamp, totalPrice);  // ✅ Added totalPrice
-        emit RevenueRecorded(courseId, course.creator, totalPrice, block.timestamp, "LICENSE_MINT");  // ✅ GOLDSKY Analytics
+        emit LicenseMinted(
+            courseId,
+            msg.sender,
+            tokenId,
+            durationMonths,
+            expiryTimestamp,
+            totalPrice
+        ); // ✅ Added totalPrice
+        emit RevenueRecorded(
+            courseId,
+            course.creator,
+            totalPrice,
+            block.timestamp,
+            "LICENSE_MINT"
+        ); // ✅ GOLDSKY Analytics
     }
 
     /**
@@ -188,7 +222,10 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
      * @param courseId ID of the course
      * @param durationMonths Additional duration in months
      */
-    function renewLicense(uint256 courseId, uint256 durationMonths) external payable nonReentrant {
+    function renewLicense(
+        uint256 courseId,
+        uint256 durationMonths
+    ) external payable nonReentrant {
         if (durationMonths == 0 || durationMonths > MAX_DURATION_MONTHS) {
             revert InvalidDuration(durationMonths, MAX_DURATION_MONTHS);
         }
@@ -201,7 +238,10 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
 
         // Safe price calculation
         uint256 totalPrice;
-        if (durationMonths > 0 && course.pricePerMonth > type(uint256).max / durationMonths) {
+        if (
+            durationMonths > 0 &&
+            course.pricePerMonth > type(uint256).max / durationMonths
+        ) {
             revert ArithmeticOverflow();
         }
         totalPrice = course.pricePerMonth * durationMonths;
@@ -222,7 +262,9 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         uint256 newExpiryTimeStamp;
         if (license.expiryTimestamp > block.timestamp) {
             // License still active - extend from current expiry
-            if (license.expiryTimestamp > type(uint256).max - durationInSeconds) {
+            if (
+                license.expiryTimestamp > type(uint256).max - durationInSeconds
+            ) {
                 revert ArithmeticOverflow();
             }
             newExpiryTimeStamp = license.expiryTimestamp + durationInSeconds;
@@ -245,19 +287,35 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         // - This allows long-term students to maintain access without artificial limits
 
         license.expiryTimestamp = newExpiryTimeStamp;
-        license.durationLicense += durationMonths;  // Track total for analytics only
+        license.durationLicense += durationMonths; // Track total for analytics only
         license.isActive = true;
 
         _processPayment(course.creator, totalPrice);
 
-        emit LicenseRenewed(courseId, msg.sender, tokenId, durationMonths, newExpiryTimeStamp, totalPrice);  // ✅ Added totalPrice
-        emit RevenueRecorded(courseId, course.creator, totalPrice, block.timestamp, "LICENSE_RENEWAL");  // ✅ GOLDSKY Analytics
+        emit LicenseRenewed(
+            courseId,
+            msg.sender,
+            tokenId,
+            durationMonths,
+            newExpiryTimeStamp,
+            totalPrice
+        ); // ✅ Added totalPrice
+        emit RevenueRecorded(
+            courseId,
+            course.creator,
+            totalPrice,
+            block.timestamp,
+            "LICENSE_RENEWAL"
+        ); // ✅ GOLDSKY Analytics
     }
 
     /**
      * @dev Checks if a student has a valid license for a course
      */
-    function hasValidLicense(address student, uint256 courseId) external view returns (bool) {
+    function hasValidLicense(
+        address student,
+        uint256 courseId
+    ) external view returns (bool) {
         License memory license = licenses[courseId][student];
         return license.isActive && license.expiryTimestamp > block.timestamp;
     }
@@ -272,34 +330,47 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
         License storage license = licenses[courseId][student];
 
         // Only process if license exists, is active, and has expired
-        if (license.courseId != 0 && license.isActive && license.expiryTimestamp <= block.timestamp) {
+        if (
+            license.courseId != 0 &&
+            license.isActive &&
+            license.expiryTimestamp <= block.timestamp
+        ) {
             license.isActive = false;
             uint256 tokenId = studentTokenIds[student][courseId];
-            emit LicenseExpired(courseId, student, tokenId, license.expiryTimestamp);
+            emit LicenseExpired(
+                courseId,
+                student,
+                tokenId,
+                license.expiryTimestamp
+            );
         }
     }
 
     /**
      * @dev Gets license details for a student and course
      */
-    function getLicense(address student, uint256 courseId) external view returns (License memory) {
+    function getLicense(
+        address student,
+        uint256 courseId
+    ) external view returns (License memory) {
         return licenses[courseId][student];
     }
 
     /**
      * @dev Gets all courses a student has purchased (batch operation)
      */
-    function getStudentCourses(address student, uint256[] calldata courseIds)
-        external
-        view
-        returns (bool[] memory)
-    {
+    function getStudentCourses(
+        address student,
+        uint256[] calldata courseIds
+    ) external view returns (bool[] memory) {
         bool[] memory results = new bool[](courseIds.length);
 
-        for (uint256 i = 0; i < courseIds.length;) {
+        for (uint256 i = 0; i < courseIds.length; ) {
             uint256 courseId = courseIds[i];
             License memory license = licenses[courseId][student];
-            results[i] = license.isActive && license.expiryTimestamp > block.timestamp;
+            results[i] =
+                license.isActive &&
+                license.expiryTimestamp > block.timestamp;
 
             unchecked {
                 ++i;
@@ -314,14 +385,20 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
      */
     function uri(uint256 tokenId) public view override returns (string memory) {
         // First check if there's a specific metadata URI for this course
-        License memory license = licenses[_getCourseIdFromTokenId(tokenId)][_getStudentFromTokenId(tokenId)];
-        if (license.courseId != 0 && bytes(courseMetadataURI[license.courseId]).length > 0) {
+        License memory license = licenses[_getCourseIdFromTokenId(tokenId)][
+            _getStudentFromTokenId(tokenId)
+        ];
+        if (
+            license.courseId != 0 &&
+            bytes(courseMetadataURI[license.courseId]).length > 0
+        ) {
             return courseMetadataURI[license.courseId];
         }
 
         // Fallback to base URI + tokenId pattern
         if (bytes(_baseURI).length > 0) {
-            return string(abi.encodePacked(_baseURI, tokenId.toString(), ".json"));
+            return
+                string(abi.encodePacked(_baseURI, tokenId.toString(), ".json"));
         }
 
         // Final fallback - empty string (indicates no metadata set)
@@ -335,6 +412,7 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     function setURI(string memory newBaseURI) external onlyOwner {
         _baseURI = newBaseURI;
         _setURI(newBaseURI);
+        emit BaseURIUpdated(newBaseURI);
     }
 
     /**
@@ -342,45 +420,63 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
      * @param courseId The course ID
      * @param metadataURI Complete IPFS URI for this course's metadata
      */
-    function setCourseMetadataURI(uint256 courseId, string memory metadataURI) external onlyOwner {
+    function setCourseMetadataURI(
+        uint256 courseId,
+        string memory metadataURI
+    ) external onlyOwner {
         courseMetadataURI[courseId] = metadataURI;
+        emit CourseMetadataURIUpdated(courseId, metadataURI);
     }
 
     /**
      * @dev Internal function to extract courseId from tokenId
      */
-    function _getCourseIdFromTokenId(uint256 tokenId) internal view returns (uint256) {
+    function _getCourseIdFromTokenId(
+        uint256 tokenId
+    ) internal view returns (uint256) {
         return tokenIdToCourseId[tokenId];
     }
 
     /**
      * @dev Internal function to extract student address from tokenId
      */
-    function _getStudentFromTokenId(uint256 tokenId) internal view returns (address) {
+    function _getStudentFromTokenId(
+        uint256 tokenId
+    ) internal view returns (address) {
         return tokenIdToStudent[tokenId];
     }
 
     /**
      * @dev Gets the token ID for a student's license to a course
      */
-    function getTokenId(address student, uint256 courseId) external view returns (uint256) {
+    function getTokenId(
+        address student,
+        uint256 courseId
+    ) external view returns (uint256) {
         return studentTokenIds[student][courseId];
     }
 
     /**
      * @dev Updates platform fee percentage (only owner)
      */
-    function setPlatformFeePercentage(uint256 _feePercentage) external onlyOwner {
+    function setPlatformFeePercentage(
+        uint256 _feePercentage
+    ) external onlyOwner {
         require(_feePercentage <= 5000, "Fee too high"); // Max 50%
+        uint256 oldPercentage = platformFeePercentage;
         platformFeePercentage = _feePercentage;
+        emit PlatformFeePercentageUpdated(oldPercentage, _feePercentage);
     }
 
     /**
      * @dev Updates platform wallet address (only owner)
      */
     function setPlatformWallet(address _platformWallet) external onlyOwner {
-        if (_platformWallet == address(0)) revert InvalidAddress(_platformWallet);
+        if (_platformWallet == address(0))
+            revert InvalidAddress(_platformWallet);
+        address oldWallet = platformWallet;
         platformWallet = _platformWallet;
+        emit PlatformWalletUpdated(oldWallet, _platformWallet);
     }
 
     /**
@@ -405,7 +501,9 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
 
         // Send platform fee
         if (platformFee > 0 && platformWallet != address(0)) {
-            (bool platformSuccess, ) = platformWallet.call{value: platformFee}("");
+            (bool platformSuccess, ) = platformWallet.call{value: platformFee}(
+                ""
+            );
             if (!platformSuccess) revert PaymentFailed("platform");
         }
 
@@ -426,10 +524,10 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
     /**
      * @dev Emergency function to deactivate license (owner only)
      */
-    function emergencyDeactivateLicense(address student, uint256 courseId)
-        external
-        onlyOwner
-    {
+    function emergencyDeactivateLicense(
+        address student,
+        uint256 courseId
+    ) external onlyOwner {
         License storage license = licenses[courseId][student];
         if (!license.isActive) revert LicenseNotFound(courseId, student);
 
@@ -440,13 +538,18 @@ contract CourseLicense is ERC1155, Ownable, ReentrancyGuard {
      * @dev Override _update to prevent license transfers (soulbound behavior)
      * @dev Course licenses should be personal and non-transferable for business logic compliance
      */
-    function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
-        internal
-        override
-    {
+    function _update(
+        address from,
+        address to,
+        uint256[] memory ids,
+        uint256[] memory values
+    ) internal override {
         // Allow minting (from = address(0)) and burning (to = address(0))
         // Prevent all other transfers to maintain license integrity
-        require(from == address(0) || to == address(0), "License transfers not allowed");
+        require(
+            from == address(0) || to == address(0),
+            "License transfers not allowed"
+        );
         super._update(from, to, ids, values);
     }
 }

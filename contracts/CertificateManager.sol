@@ -126,10 +126,16 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     );
 
     event CertificateRevoked(uint256 indexed tokenId, string reason);
+    event TokenURIUpdated(uint256 indexed tokenId, string newURI);
     event BaseRouteUpdated(uint256 indexed tokenId, string newBaseRoute);
     event DefaultBaseRouteUpdated(string newBaseRoute); // ✅ NEW: Event for global base route update
     event PlatformNameUpdated(string newPlatformName);
     event CourseAdditionFeeUpdated(uint256 newFee);
+    event DefaultCertificateFeeUpdated(uint256 newFee);
+    event PlatformWalletUpdated(
+        address indexed oldWallet,
+        address indexed newWallet
+    );
     event CourseCertificatePriceSet(
         uint256 indexed courseId,
         uint256 price,
@@ -755,6 +761,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
         if (newFee == 0) revert ZeroAmount();
         if (newFee > MAX_CERTIFICATE_PRICE) revert ExceedsMaxPrice();
         defaultCertificateFee = newFee;
+        emit DefaultCertificateFeeUpdated(newFee);
     }
 
     /**
@@ -774,7 +781,9 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      */
     function setPlatformWallet(address newWallet) external onlyOwner {
         if (newWallet == address(0)) revert InvalidAddress(newWallet);
+        address oldWallet = platformWallet;
         platformWallet = newWallet;
+        emit PlatformWalletUpdated(oldWallet, newWallet);
     }
 
     /**
@@ -857,6 +866,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     ) external onlyOwner {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
         _tokenURIs[tokenId] = tokenURI;
+        emit TokenURIUpdated(tokenId, tokenURI);
     }
 
     /**

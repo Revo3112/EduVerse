@@ -41,6 +41,7 @@ export default function AdminPage() {
   const account = useActiveAccount();
   const [isOwner, setIsOwner] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
   const [contractData, setContractData] = useState<{
     defaultCertFee?: string;
     defaultCourseAddFee?: string;
@@ -91,6 +92,7 @@ export default function AdminPage() {
   }, [account?.address]);
 
   async function loadContractData() {
+    setLoadingData(true);
     try {
       const [
         defaultCertFee,
@@ -140,9 +142,12 @@ export default function AdminPage() {
         platformWallet: platformWalletAddr,
         platformFeePercentage: platformFeePercentage.toString(),
       });
+      toast.success("Contract data loaded successfully");
     } catch (error) {
       console.error("Error loading contract data:", error);
       toast.error("Failed to load contract data");
+    } finally {
+      setLoadingData(false);
     }
   }
 
@@ -475,21 +480,83 @@ export default function AdminPage() {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              <CardTitle>Certificate Manager Settings</CardTitle>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  <CardTitle>Certificate Manager Settings</CardTitle>
+                </div>
+                <CardDescription>
+                  Configure certificate fees and platform settings
+                </CardDescription>
+              </div>
+              <Button
+                onClick={loadContractData}
+                disabled={loadingData}
+                variant="outline"
+                size="sm"
+              >
+                {loadingData ? "Loading..." : "Refresh Values"}
+              </Button>
             </div>
-            <CardDescription>
-              Configure certificate fees and platform settings
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="bg-muted/50 p-4 rounded-lg space-y-2 mb-6">
+              <h3 className="font-semibold text-sm">Current Contract Values</h3>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground">
+                    Certificate Fee:
+                  </span>
+                  <p className="font-mono">
+                    {contractData.defaultCertFee
+                      ? `${contractData.defaultCertFee} wei`
+                      : "Not loaded"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">
+                    Course Addition Fee:
+                  </span>
+                  <p className="font-mono">
+                    {contractData.defaultCourseAddFee
+                      ? `${contractData.defaultCourseAddFee} wei`
+                      : "Not loaded"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Platform Name:</span>
+                  <p className="font-mono">
+                    {contractData.defaultPlatformName || "Not loaded"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Base Route:</span>
+                  <p className="font-mono break-all">
+                    {contractData.defaultBaseRoute || "Not loaded"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">
+                    Platform Wallet:
+                  </span>
+                  <p className="font-mono text-xs break-all">
+                    {contractData.platformWallet || "Not loaded"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Platform Fee %:</span>
+                  <p className="font-mono">
+                    {contractData.platformFeePercentage
+                      ? `${contractData.platformFeePercentage}%`
+                      : "Not loaded"}
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Default Certificate Fee (wei)</Label>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Current: {contractData.defaultCertFee || "Loading..."}
-                </div>
                 <div className="flex gap-2">
                   <Input
                     type="text"
@@ -502,10 +569,7 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Course Addition Fee (wei)</Label>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Current: {contractData.defaultCourseAddFee || "Loading..."}
-                </div>
+                <Label>Default Course Addition Fee (wei)</Label>
                 <div className="flex gap-2">
                   <Input
                     type="text"
@@ -519,9 +583,6 @@ export default function AdminPage() {
 
               <div className="space-y-2">
                 <Label>Platform Wallet Address</Label>
-                <div className="text-xs text-muted-foreground mb-2 break-all">
-                  Current: {contractData.platformWallet || "Loading..."}
-                </div>
                 <div className="flex gap-2">
                   <Input
                     type="text"
@@ -535,9 +596,6 @@ export default function AdminPage() {
 
               <div className="space-y-2">
                 <Label>Platform Name</Label>
-                <div className="text-xs text-muted-foreground mb-2">
-                  Current: {contractData.defaultPlatformName || "Loading..."}
-                </div>
                 <div className="flex gap-2">
                   <Input
                     type="text"
@@ -565,9 +623,6 @@ export default function AdminPage() {
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label>Default Base Route</Label>
-              <div className="text-xs text-muted-foreground mb-2">
-                Current: {contractData.defaultBaseRoute || "Loading..."}
-              </div>
               <div className="flex gap-2">
                 <Input
                   type="text"
