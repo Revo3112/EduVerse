@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  // External packages for server components (sharp, canvas for certificate generation)
+  serverExternalPackages: ["sharp", "canvas"],
+
   // Bundle optimization
   webpack: (config, { isServer }) => {
     // Konfigurasi fallback untuk Node.js modules di browser
@@ -20,6 +23,7 @@ const nextConfig: NextConfig = {
       net: false,
       tls: false,
       crypto: false,
+      child_process: false,
     };
 
     // Optimasi untuk client-side bundles

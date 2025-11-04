@@ -19,9 +19,8 @@ import {
   getCertificatePrice,
   getUserCertificateId,
   getCertificateCompletedCourses,
-  checkCertificateEligibility,
-} from "@/services/certificate.service";
-import { keccak256, encodePacked, stringToHex } from "viem";
+  checkEligibilityForCertificate as checkCertificateEligibility,
+} from "@/services/certificate-blockchain.service";
 
 interface GetCertificateModalProps {
   isOpen: boolean;
@@ -87,7 +86,7 @@ export function GetCertificateModal({
 
         const eligibilityResult = await checkCertificateEligibility(
           address,
-          courseId.toString()
+          courseId
         );
         setEligible(eligibilityResult.eligible);
         setEligibilityReason(eligibilityResult.reason || null);
@@ -104,9 +103,11 @@ export function GetCertificateModal({
         const hasExistingCert = tokenId > BigInt(0);
         setIsFirstCertificate(!hasExistingCert);
 
+        let completedCoursesArray: bigint[] = [];
         if (hasExistingCert) {
           const courses = await getCertificateCompletedCourses(tokenId);
           setExistingCourses(courses);
+          completedCoursesArray = courses;
 
           const alreadyAdded = courses.some(
             (c) => c.toString() === courseId.toString()
@@ -126,12 +127,16 @@ export function GetCertificateModal({
           hasExistingCert,
           isFirstMint: !hasExistingCert,
           courseAlreadyAdded: hasExistingCert
-            ? existingCourses.some((c) => c.toString() === courseId.toString())
+            ? completedCoursesArray.some(
+                (c) => c.toString() === courseId.toString()
+              )
             : false,
           priceWei: price.toString(),
           priceEth: Number(price) / 1e18,
           existingTokenId: tokenId.toString(),
-          existingCoursesCount: hasExistingCert ? courses.length : 0,
+          existingCoursesCount: hasExistingCert
+            ? completedCoursesArray.length
+            : 0,
         });
       } catch (error) {
         console.error(
@@ -153,20 +158,6 @@ export function GetCertificateModal({
   const formatPrice = (priceWei: bigint): string => {
     const priceEth = Number(priceWei) / 1e18;
     return `${priceEth.toFixed(5)} MANTA`;
-  };
-
-  const generatePaymentHash = (
-    userAddress: string,
-    courseId: bigint,
-    timestamp: number,
-    nonce: string
-  ): string => {
-    const nonceHash = keccak256(stringToHex(nonce));
-    const packed = encodePacked(
-      ["address", "uint256", "uint256", "bytes32"],
-      [userAddress as `0x${string}`, courseId, BigInt(timestamp), nonceHash]
-    );
-    return keccak256(packed);
   };
 
   const handleGenerateCertificate = async () => {

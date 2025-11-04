@@ -28,7 +28,7 @@ import {
 // Re-export EnrollmentData for use in components
 export type { EnrollmentData };
 import { useActiveAccount } from "thirdweb/react";
-import { useCertificate } from "./useCertificateBlockchain";
+import { useCertificate } from "./useCertificate";
 import { useSubmitRating } from "./useRating";
 import { useLicense } from "./useLicense";
 import toast from "react-hot-toast";

@@ -655,7 +655,6 @@ export default function LearningPage() {
           onClose={handleCloseCertificateModal}
           courseId={BigInt(selectedEnrollmentForCertificate.courseId)}
           courseTitle={selectedEnrollmentForCertificate.course.title}
-          certificatePrice={BigInt(0)}
           onSuccess={handleCertificateSuccess}
         />
       )}
