@@ -190,7 +190,7 @@ export async function prepareMintOrUpdateCertificateTransaction(
   return prepareContractCall({
     contract: certificateManager,
     method:
-      "function mintOrUpdateCertificate(uint256 courseId, string recipientName, string ipfsCID, bytes32 paymentHash, string baseRoute) payable",
+      "function mintOrUpdateCertificate(uint256 courseId, string recipientName, string ipfsCID, bytes32 paymentReceiptHash, string baseRoute) payable",
     params: [
       courseId,
       recipientName,
@@ -236,7 +236,7 @@ export async function prepareUpdateCertificateTransaction(
   return prepareContractCall({
     contract: certificateManager,
     method:
-      "function updateCertificate(uint256 tokenId, string newIpfsCID, bytes32 paymentHash) payable",
+      "function updateCertificate(uint256 tokenId, string newIpfsCID, bytes32 paymentReceiptHash) payable",
     params: [tokenId, newIpfsCID, paymentHash as `0x${string}`],
     value: updatePrice,
   });
@@ -278,7 +278,7 @@ export async function prepareAddMultipleCoursesTransaction(
   return prepareContractCall({
     contract: certificateManager,
     method:
-      "function addMultipleCoursesToCertificate(uint256[] courseIds, string ipfsCID, bytes32 paymentHash) payable",
+      "function addMultipleCoursesToCertificate(uint256[] courseIds, string ipfsCID, bytes32 paymentReceiptHash) payable",
     params: [courseIds, ipfsCID, paymentHash as `0x${string}`],
     value: totalPrice,
   });
@@ -712,16 +712,16 @@ export async function checkEligibilityForCertificate(
       };
     }
 
-    // Check 2: License ownership (getLicense returns struct, check licenseId field)
+    // Check 2: License ownership (getLicense returns struct with 5 fields)
     const license = await readContract({
       contract: courseLicense,
       method:
-        "function getLicense(address student, uint256 courseId) view returns ((uint256 licenseId, uint256 courseId, address student, uint256 durationLicense, uint256 expiryTimestamp, bool isActive))",
+        "function getLicense(address student, uint256 courseId) view returns ((uint256 courseId, address student, uint256 durationLicense, uint256 expiryTimestamp, bool isActive))",
       params: [userAddress, courseId],
     });
 
-    // License must have been owned (licenseId > 0), active status doesn't matter
-    if (license.licenseId === BigInt(0)) {
+    // License must have been owned (courseId > 0), active status doesn't matter
+    if (license.courseId === BigInt(0)) {
       return {
         eligible: false,
         isFirstCertificate: false,

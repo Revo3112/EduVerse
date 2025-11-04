@@ -532,7 +532,7 @@ function transformCertificate(
     courses: certificate.completedCourses.map((cc) => ({
       courseId: cc.course.id,
       title: cc.course.title,
-      thumbnailCID: cc.course.thumbnailCID,
+      thumbnailCID: cc.course.thumbnailCID || "",
       addedAt: formatTimestamp(cc.addedAt),
       isCompleted: cc.enrollment.isCompleted,
       completionPercentage: bigIntToNumber(cc.enrollment.completionPercentage),
@@ -915,7 +915,6 @@ export async function checkCertificateEligibility(
       return await client.request<{
         studentCourseEnrollments: Array<{
           enrollment: GoldskyEnrollment;
-          course: GoldskyCourse;
         }>;
       }>(CHECK_ENROLLMENT_STATUS_QUERY, variables);
     });
@@ -932,9 +931,15 @@ export async function checkCertificateEligibility(
     }
 
     const enrollmentRaw = data.studentCourseEnrollments[0].enrollment;
-    const courseRaw = data.studentCourseEnrollments[0].course;
 
-    if (courseRaw.isDeleted || !courseRaw.isActive) {
+    if (!enrollmentRaw.course) {
+      return {
+        eligible: false,
+        reason: "Course data not found in enrollment.",
+      };
+    }
+
+    if (enrollmentRaw.course.isDeleted || !enrollmentRaw.course.isActive) {
       return {
         eligible: false,
         reason: "This course is no longer available.",

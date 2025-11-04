@@ -66,8 +66,8 @@ export interface GoldskyCourse {
 
   // Metadata
   title: string;
-  description: string;
-  thumbnailCID: string;
+  description?: string;
+  thumbnailCID?: string;
   category: string;
   difficulty: string;
 
@@ -529,30 +529,28 @@ export const CHECK_ENROLLMENT_STATUS_QUERY = gql`
         purchasedAt
         lastActivityAt
         completionDate
-      }
 
-      course {
-        id
-        creator
-        creatorName
-        title
-        description
-        thumbnailCID
-        category
-        difficulty
-        priceInEth
-        isActive
-        isDeleted
-        totalEnrollments
-        activeEnrollments
-        completedStudents
-        totalRevenueEth
-        averageRating
-        totalRatings
-        sectionsCount
-        totalDuration
-        createdAt
-        updatedAt
+        course {
+          id
+          creator
+          creatorName
+          title
+          category
+          difficulty
+          priceInEth
+          isActive
+          isDeleted
+          totalEnrollments
+          activeEnrollments
+          completedStudents
+          totalRevenueEth
+          averageRating
+          totalRatings
+          sectionsCount
+          totalDuration
+          createdAt
+          updatedAt
+        }
       }
     }
   }
