@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
-import { AnimatePresence, motion } from "framer-motion"
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Award,
   BarChart3,
@@ -17,24 +17,28 @@ import {
   Home,
   PanelLeft,
   PlusCircle,
+  Settings,
   User,
-} from "lucide-react"
-import Image from "next/image"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import * as React from "react"
-import { useSidebarMode } from "./SidebarProvider"
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import * as React from "react";
+import { useActiveAccount } from "thirdweb/react";
+import { useSidebarMode } from "./SidebarProvider";
+
+const DEPLOYER_ADDRESS = process.env.NEXT_PUBLIC_DEPLOYER_ADDRESS!;
 
 interface NavigationItem {
-  title: string
-  url: string
-  icon: React.ComponentType<{ className?: string }>
-  description: string
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+  description: string;
 }
 
 interface NavigationGroup {
-  groupTitle: string
-  items: NavigationItem[]
+  groupTitle: string;
+  items: NavigationItem[];
 }
 
 const navigationGroups: NavigationGroup[] = [
@@ -46,21 +50,21 @@ const navigationGroups: NavigationGroup[] = [
         title: "Dashboard",
         url: "/dashboard",
         icon: Home,
-        description: "Your learning & teaching hub"
+        description: "Your learning & teaching hub",
       },
       {
         title: "Browse Courses",
         url: "/courses",
         icon: BookOpen,
-        description: "Discover new knowledge"
+        description: "Discover new knowledge",
       },
       {
         title: "Analytics",
         url: "/analytics",
         icon: BarChart3,
-        description: "Real-time platform analytics"
-      }
-    ]
+        description: "Real-time platform analytics",
+      },
+    ],
   },
   // Student - For learners
   {
@@ -70,15 +74,15 @@ const navigationGroups: NavigationGroup[] = [
         title: "My Learning",
         url: "/learning",
         icon: GraduationCap,
-        description: "Track progress & achievements"
+        description: "Track progress & achievements",
       },
       {
         title: "Certificates",
         url: "/certificates",
         icon: Award,
-        description: "Your earned credentials"
-      }
-    ]
+        description: "Your earned credentials",
+      },
+    ],
   },
   // Instructor - For course creators
   {
@@ -88,15 +92,15 @@ const navigationGroups: NavigationGroup[] = [
         title: "Create Course",
         url: "/create",
         icon: PlusCircle,
-        description: "Share your expertise"
+        description: "Share your expertise",
       },
       {
         title: "My Courses",
         url: "/myCourse",
         icon: BookOpen,
-        description: "Manage your content"
-      }
-    ]
+        description: "Manage your content",
+      },
+    ],
   },
   // Account - Personal settings
   {
@@ -106,64 +110,93 @@ const navigationGroups: NavigationGroup[] = [
         title: "Profile",
         url: "/profile",
         icon: User,
-        description: "Manage your account"
-      }
-    ]
-  }
-]
+        description: "Manage your account",
+      },
+    ],
+  },
+];
 
-const SIDEBAR_WIDTH = 280
+const getAdminNavigationGroup = (
+  isDeployer: boolean
+): NavigationGroup | null => {
+  if (!isDeployer) return null;
+
+  return {
+    groupTitle: "Admin",
+    items: [
+      {
+        title: "Admin Panel",
+        url: "/admin",
+        icon: Settings,
+        description: "Platform administration",
+      },
+    ],
+  };
+};
+
+const SIDEBAR_WIDTH = 280;
 
 interface IntegratedSidebarProps {
-  className?: string
+  className?: string;
 }
 
 export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
-  const { mode, toggleMode, isHoverOpen, setIsHoverOpen } = useSidebarMode()
+  const { mode, toggleMode, isHoverOpen, setIsHoverOpen } = useSidebarMode();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [isHoverVisible, setIsHoverVisible] = React.useState(false)
-  const pathname = usePathname()
-  const hideTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  const [isHoverVisible, setIsHoverVisible] = React.useState(false);
+  const pathname = usePathname();
+  const hideTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const account = useActiveAccount();
+
+  const isDeployer = React.useMemo(() => {
+    if (!account?.address || !DEPLOYER_ADDRESS) return false;
+    return account.address.toLowerCase() === DEPLOYER_ADDRESS.toLowerCase();
+  }, [account?.address]);
+
+  const allNavigationGroups = React.useMemo(() => {
+    const adminGroup = getAdminNavigationGroup(isDeployer);
+    return adminGroup ? [...navigationGroups, adminGroup] : navigationGroups;
+  }, [isDeployer]);
 
   // Cleanup timeout on unmount
   React.useEffect(() => {
     return () => {
       if (hideTimeoutRef.current) {
-        clearTimeout(hideTimeoutRef.current)
+        clearTimeout(hideTimeoutRef.current);
       }
-    }
-  }, [])
+    };
+  }, []);
 
   // Hover functions for hover mode
   const showHoverSidebar = () => {
-    if (mode !== "hover") return
+    if (mode !== "hover") return;
 
     if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current)
+      clearTimeout(hideTimeoutRef.current);
     }
-    setIsHoverOpen(true)
-  }
+    setIsHoverOpen(true);
+  };
 
   const hideHoverSidebar = () => {
-    if (mode !== "hover") return
+    if (mode !== "hover") return;
 
     hideTimeoutRef.current = setTimeout(() => {
-      setIsHoverOpen(false)
-    }, 300)
-  }
+      setIsHoverOpen(false);
+    }, 300);
+  };
 
   const keepHoverSidebarVisible = () => {
     if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current)
+      clearTimeout(hideTimeoutRef.current);
     }
-  }
+  };
 
   const closeHoverSidebar = () => {
     if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current)
+      clearTimeout(hideTimeoutRef.current);
     }
-    setIsHoverOpen(false)
-  }
+    setIsHoverOpen(false);
+  };
 
   // Render drawer mode sidebar
   if (mode === "drawer") {
@@ -176,7 +209,7 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
         )}
         style={{
           width: SIDEBAR_WIDTH,
-          transition: "width 300ms ease-in-out"
+          transition: "width 300ms ease-in-out",
         }}
       >
         <TooltipProvider>
@@ -225,7 +258,7 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
             {/* Navigation */}
             <div className="flex-1 overflow-hidden p-2">
               <div className="h-full overflow-y-auto space-y-4">
-                {navigationGroups.map((group) => (
+                {allNavigationGroups.map((group) => (
                   <div key={group.groupTitle} className="space-y-1">
                     {/* Group Title */}
                     <div className="px-3 py-1.5">
@@ -236,8 +269,8 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
 
                     {/* Group Items */}
                     {group.items.map((item) => {
-                      const isActive = pathname === item.url
-                      const Icon = item.icon
+                      const isActive = pathname === item.url;
+                      const Icon = item.icon;
 
                       return (
                         <Tooltip key={item.title}>
@@ -264,10 +297,12 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
                           </TooltipTrigger>
                           <TooltipContent side="right" className="font-medium">
                             <p>{item.title}</p>
-                            <p className="text-xs text-muted-foreground">{item.description}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.description}
+                            </p>
                           </TooltipContent>
                         </Tooltip>
-                      )
+                      );
                     })}
                   </div>
                 ))}
@@ -276,7 +311,7 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
           </div>
         </TooltipProvider>
       </aside>
-    )
+    );
   }
 
   // Render hover mode
@@ -312,7 +347,7 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
                 type: "spring",
                 stiffness: 400,
                 damping: 35,
-                opacity: { duration: 0.15 }
+                opacity: { duration: 0.15 },
               }}
               className="fixed left-4 top-4 bottom-4 z-50 w-72 bg-sidebar/95 backdrop-blur-xl border rounded-2xl shadow-xl overflow-hidden"
               onMouseEnter={keepHoverSidebarVisible}
@@ -368,7 +403,7 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
                   {/* Navigation */}
                   <div className="flex-1 p-4 overflow-hidden">
                     <div className="h-full overflow-y-auto space-y-4">
-                      {navigationGroups.map((group) => (
+                      {allNavigationGroups.map((group) => (
                         <div key={group.groupTitle} className="space-y-1">
                           {/* Group Title */}
                           <div className="px-3 py-1.5">
@@ -379,8 +414,8 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
 
                           {/* Group Items */}
                           {group.items.map((item) => {
-                            const isActive = pathname === item.url
-                            const Icon = item.icon
+                            const isActive = pathname === item.url;
+                            const Icon = item.icon;
 
                             return (
                               <Tooltip key={item.title}>
@@ -406,12 +441,17 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
                                     )}
                                   </Link>
                                 </TooltipTrigger>
-                                <TooltipContent side="right" className="font-medium">
+                                <TooltipContent
+                                  side="right"
+                                  className="font-medium"
+                                >
                                   <p>{item.title}</p>
-                                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.description}
+                                  </p>
                                 </TooltipContent>
                               </Tooltip>
-                            )
+                            );
                           })}
                         </div>
                       ))}
@@ -424,5 +464,5 @@ export function IntegratedSidebar({ className }: IntegratedSidebarProps) {
         )}
       </AnimatePresence>
     </div>
-  )
+  );
 }
