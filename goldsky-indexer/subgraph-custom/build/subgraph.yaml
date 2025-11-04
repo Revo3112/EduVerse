@@ -23,7 +23,7 @@ dataSources:
         - UserProfile
       abis:
         - name: CourseFactory
-          file: CourseFactory/abis/coursefactory.json
+          file: CourseFactory/coursefactory.json
       eventHandlers:
         - event: CourseCreated(indexed uint256,indexed address,string,string,uint8,uint8)
           handler: handleCourseCreated
@@ -85,7 +85,7 @@ dataSources:
         - UserProfile
       abis:
         - name: CourseLicense
-          file: CourseLicense/abis/courselicense.json
+          file: CourseLicense/courselicense.json
       eventHandlers:
         - event: LicenseMinted(indexed uint256,indexed address,uint256,uint256,uint256,uint256)
           handler: handleLicenseMinted
@@ -113,9 +113,9 @@ dataSources:
         - UserProfile
       abis:
         - name: ProgressTracker
-          file: ProgressTracker/abis/progresstracker.json
+          file: ProgressTracker/progresstracker.json
         - name: CourseFactory
-          file: ProgressTracker/abis/coursefactory.json
+          file: ProgressTracker/coursefactory.json
       eventHandlers:
         - event: SectionStarted(indexed address,indexed uint256,indexed uint256,uint256)
           handler: handleSectionStarted
@@ -148,7 +148,7 @@ dataSources:
         - PlatformStats
       abis:
         - name: CertificateManager
-          file: CertificateManager/abis/certificatemanager.json
+          file: CertificateManager/certificatemanager.json
       eventHandlers:
         - event: CertificateMinted(indexed address,indexed uint256,string,string,bytes32,uint256)
           handler: handleCertificateMinted

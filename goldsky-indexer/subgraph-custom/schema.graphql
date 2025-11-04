@@ -52,7 +52,7 @@ enum EnrollmentStatus {
 # ENTITY 1: COURSE (UPDATED - Added sections relationship)
 # ============================================================================
 
-type Course @entity {
+type Course @entity(immutable: false) {
   # ===== Core Identity =====
   id: ID!
   creator: Bytes!
@@ -117,7 +117,7 @@ type Course @entity {
 # Reference: https://thegraph.com/docs/en/subgraphs/best-practices/derivedfrom/
 # ============================================================================
 
-type CourseSection @entity {
+type CourseSection @entity(immutable: false) {
   id: ID! # courseId-sectionId (e.g., "1-0", "1-1")
   course: Course! # Relationship to parent course
   sectionId: BigInt! # Original section ID from smart contract
@@ -140,7 +140,7 @@ type CourseSection @entity {
 # ENTITY 3: ENROLLMENT (UNCHANGED - Working perfectly)
 # ============================================================================
 
-type Enrollment @entity {
+type Enrollment @entity(immutable: false) {
   id: ID!
   student: Bytes!
   course: Course!
@@ -197,7 +197,7 @@ type Enrollment @entity {
 # Use Case: "Show all courses in my certificate" page
 # ============================================================================
 
-type Certificate @entity {
+type Certificate @entity(immutable: false) {
   id: ID! # tokenId as string
   tokenId: BigInt!
   owner: UserProfile!
@@ -233,7 +233,7 @@ type Certificate @entity {
 # Tracks individual courses added to certificates
 # ============================================================================
 
-type CertificateCourse @entity {
+type CertificateCourse @entity(immutable: false) {
   id: ID! # certificateId-courseId
   certificate: Certificate!
   course: Course!
@@ -254,7 +254,7 @@ type CertificateCourse @entity {
 # Use Case: Display certificate course addition history
 # ============================================================================
 
-type CourseAddedToCertificateEvent @entity {
+type CourseAddedToCertificateEvent @entity(immutable: true) {
   id: ID! # {txHash}-{logIndex}
   tokenId: BigInt! # Certificate token ID
   certificate: Certificate! # Link to certificate
@@ -273,7 +273,7 @@ type CourseAddedToCertificateEvent @entity {
 # ENTITY 6: USERPROFILE (UNCHANGED - Working perfectly)
 # ============================================================================
 
-type UserProfile @entity {
+type UserProfile @entity(immutable: false) {
   id: ID!
   address: Bytes!
 
@@ -345,7 +345,7 @@ type UserProfile @entity {
 # ============================================================================
 
 # Activity timeline entity for user/course events
-type ActivityEvent @entity {
+type ActivityEvent @entity(immutable: true) {
   id: ID! # {txHash}-{logIndex}
   user: UserProfile! # User who performed action
   type: String! # "COURSE_CREATED", "ENROLLED", "COMPLETED", etc
@@ -370,7 +370,7 @@ type ActivityEvent @entity {
 # Reference: https://thegraph.com/docs/en/developing/creating-a-subgraph/#relationships
 # ============================================================================
 
-type TeacherStudent @entity {
+type TeacherStudent @entity(immutable: false) {
   id: ID! # {teacherAddr}-{studentAddr}
   teacher: Bytes! # Teacher's address
   teacherProfile: UserProfile! # Link to teacher profile
@@ -392,7 +392,7 @@ type TeacherStudent @entity {
 }
 
 # Monthly statistics for growth tracking
-type MonthlyUserStats @entity {
+type MonthlyUserStats @entity(immutable: false) {
   id: ID! # {userAddr}-{YYYY-MM}
   user: UserProfile! # User profile
   yearMonth: String! # "2025-01" format
@@ -427,7 +427,7 @@ type MonthlyUserStats @entity {
 # Reference: https://thegraph.com/docs/en/developing/creating-a-subgraph/#debugging
 # ============================================================================
 
-type StudentCourseEnrollment @entity {
+type StudentCourseEnrollment @entity(immutable: false) {
   id: ID! # {studentAddr}-{courseId}
   student: Bytes! # Student's address
   studentProfile: UserProfile! # Link to student profile
@@ -442,7 +442,7 @@ type StudentCourseEnrollment @entity {
 }
 
 # Platform-wide statistics
-type PlatformStats @entity {
+type PlatformStats @entity(immutable: false) {
   id: ID! # "platform"
   totalUsers: BigInt!
   totalCourses: BigInt!
@@ -471,7 +471,7 @@ type PlatformStats @entity {
 }
 
 # Network-wide statistics
-type NetworkStats @entity {
+type NetworkStats @entity(immutable: false) {
   id: ID! # "network"
   totalTransactions: BigInt!
   lastBlockNumber: BigInt!
@@ -491,7 +491,7 @@ type NetworkStats @entity {
 }
 
 # Daily network metrics
-type DailyNetworkStats @entity {
+type DailyNetworkStats @entity(immutable: false) {
   id: ID! # YYYY-MM-DD
   date: String!
   transactionCount: BigInt!

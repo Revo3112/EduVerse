@@ -16,6 +16,7 @@ import {
   CourseCertificatePriceSet,
   DefaultBaseRouteUpdated,
   PlatformNameUpdated,
+  CertificateManager,
 } from "../../generated/CertificateManager/CertificateManager";
 import {
   Certificate,
@@ -142,11 +143,21 @@ export function handleCertificateMinted(event: CertificateMinted): void {
   certificate.totalRevenue = ZERO_BIGINT; // Initialize revenue tracking
   certificate.totalRevenueEth = ZERO_BIGDECIMAL; // Initialize ETH value
 
-  // Initialize new fields for QR code routing
-  certificate.platformName = "EduVerse"; // Default platform name
-  // NOTE: baseRoute should be set by frontend when calling mintOrUpdateCertificate
-  // If not provided in event, will be empty and can be updated later via updateBaseRoute
-  certificate.baseRoute = ""; // Will be set from contract's defaultBaseRoute or frontend call
+  // ✅ FIX: Read platformName and baseRoute from contract storage
+  let contractAddress = event.address;
+  let certificateManagerContract = CertificateManager.bind(contractAddress);
+
+  // Try to get certificate data from contract
+  let getCertResult = certificateManagerContract.try_getCertificate(tokenId);
+  if (!getCertResult.reverted) {
+    certificate.platformName = getCertResult.value.platformName;
+    certificate.baseRoute = getCertResult.value.baseRoute;
+  } else {
+    // Fallback to defaults if contract call fails
+    certificate.platformName = "EduVerse Academy";
+    certificate.baseRoute = "";
+  }
+
   certificate.ipfsCID = event.params.ipfsCID;
   certificate.paymentReceiptHash = event.params.paymentReceiptHash;
 
@@ -276,9 +287,20 @@ export function handleCourseAddedToCertificate(
     certificate.totalCourses = ZERO_BIGINT;
     certificate.totalRevenue = ZERO_BIGINT;
     certificate.totalRevenueEth = ZERO_BIGDECIMAL;
-    certificate.platformName = "EduVerse";
-    // NOTE: baseRoute inherited from existing certificate or set by contract
-    certificate.baseRoute = ""; // Will be set from contract's defaultBaseRoute
+
+    // ✅ FIX: Read platformName and baseRoute from contract storage
+    let contractAddress = event.address;
+    let certificateManagerContract = CertificateManager.bind(contractAddress);
+
+    let getCertResult = certificateManagerContract.try_getCertificate(tokenId);
+    if (!getCertResult.reverted) {
+      certificate.platformName = getCertResult.value.platformName;
+      certificate.baseRoute = getCertResult.value.baseRoute;
+    } else {
+      certificate.platformName = "EduVerse Academy";
+      certificate.baseRoute = "";
+    }
+
     certificate.ipfsCID = event.params.newIpfsCID;
     certificate.paymentReceiptHash = event.params.paymentReceiptHash;
     certificate.createdAt = event.block.timestamp;
@@ -478,6 +500,17 @@ export function handleCertificateUpdated(event: CertificateUpdated): void {
   let certificate = Certificate.load(certificateId);
 
   if (certificate != null) {
+    // ✅ FIX: Read updated platformName and baseRoute from contract
+    let contractAddress = event.address;
+    let certificateManagerContract = CertificateManager.bind(contractAddress);
+    let tokenId = event.params.tokenId;
+
+    let getCertResult = certificateManagerContract.try_getCertificate(tokenId);
+    if (!getCertResult.reverted) {
+      certificate.platformName = getCertResult.value.platformName;
+      certificate.baseRoute = getCertResult.value.baseRoute;
+    }
+
     certificate.ipfsCID = event.params.newIpfsCID;
     certificate.paymentReceiptHash = event.params.paymentReceiptHash;
     certificate.lastUpdated = event.block.timestamp;
