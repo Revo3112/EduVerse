@@ -2911,7 +2911,8 @@ export default function CreateCoursePage() {
                                       Elapsed:{" "}
                                       {Math.floor(
                                         (Date.now() -
-                                          detailedProgress.startTime) /
+                                          (detailedProgress.startTime ||
+                                            Date.now())) /
                                           1000
                                       )}
                                       s
@@ -2993,9 +2994,13 @@ export default function CreateCoursePage() {
                               </div>
                               {blockchainProgress.txHash && (
                                 <div className="text-xs text-muted-foreground mt-1 font-mono truncate">
-                                  TX: {blockchainProgress.txHash.slice(0, 10)}
+                                  TX:{" "}
+                                  {(blockchainProgress.txHash || "").slice(
+                                    0,
+                                    10
+                                  )}
                                   ...
-                                  {blockchainProgress.txHash.slice(-8)}
+                                  {(blockchainProgress.txHash || "").slice(-8)}
                                 </div>
                               )}
                             </div>
