@@ -2,13 +2,13 @@
   "network": "mantaPacificTestnet",
   "chainId": 3441006,
   "deployer": "0xb5075eB5734bc8A6a9bbC1Ca299Fd8C0bd4Cff58",
-  "courseFactory": "0x2DE0740681f6E24b3c32757F5eEE8E4584EdE9D6",
-  "courseLicense": "0xCda6D21620C76AEBb8B98613e87d0BDFD12dd3F2",
-  "progressTracker": "0xEc636535fB2631F26e20Fd07fc632d00da5bA1C4",
-  "certificateManager": "0xA7Fa9316774c1e7D30389B1ff592cBFdcD70F70c",
-  "courseFactoryBlock": 5415783,
-  "courseLicenseBlock": 5415785,
-  "progressTrackerBlock": 5415786,
-  "certificateManagerBlock": 5415791,
-  "deployDate": "2025-11-04T21:30:26.515Z"
+  "courseFactory": "0xDb76942D6BeC2d59929Fd730c3Aad419E5Cc1598",
+  "courseLicense": "0xC6566FC4c4d28Ad923ca5f311F4bf972a07A143a",
+  "progressTracker": "0x6eA7FeEc013ce86B397edB36B382AB11b64a6778",
+  "certificateManager": "0x335BD88512Ce9Eff0009f05261ec47679427805d",
+  "courseFactoryBlock": 5418109,
+  "courseLicenseBlock": 5418111,
+  "progressTrackerBlock": 5418113,
+  "certificateManagerBlock": 5418114,
+  "deployDate": "2025-11-05T03:57:06.802Z"
 }

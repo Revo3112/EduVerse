@@ -60,6 +60,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     address public platformWallet;
     string public defaultPlatformName; // Configurable platform name
     string public defaultBaseRoute; // ✅ NEW: Global default base route (updatable by admin)
+    string public defaultMetadataBaseURI; // Base URI for NFT metadata (e.g., "https://domain.com/api/nft/certificate")
 
     // ==================== STRUCTS ====================
     /**
@@ -129,6 +130,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     event TokenURIUpdated(uint256 indexed tokenId, string newURI);
     event BaseRouteUpdated(uint256 indexed tokenId, string newBaseRoute);
     event DefaultBaseRouteUpdated(string newBaseRoute); // ✅ NEW: Event for global base route update
+    event DefaultMetadataBaseURIUpdated(string newBaseURI); // Event for metadata base URI update
     event PlatformNameUpdated(string newPlatformName);
     event CourseAdditionFeeUpdated(uint256 newFee);
     event DefaultCertificateFeeUpdated(uint256 newFee);
@@ -186,9 +188,10 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @notice REVOLUTIONARY LOGIC: First course completion = MINT, subsequent = UPDATE
      * @param courseId Course ID that was completed
      * @param recipientName Name to appear on certificate (only used for new certificates)
-     * @param ipfsCID IPFS CID of the certificate image
+     * @param ipfsCID IPFS CID for certificate (stored for reference, not used as token URI)
      * @param paymentReceiptHash Hash of payment receipt for verification
      * @param baseRoute Base route for QR code (can be empty)
+     * @notice Token URI resolved via defaultMetadataBaseURI pointing to API endpoint
      */
     function mintOrUpdateCertificate(
         uint256 courseId,
@@ -259,6 +262,12 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param ipfsCID IPFS CID of certificate image
      * @param paymentReceiptHash Payment verification hash
      * @param baseRoute QR code base route
+     */
+    // ==================== INTERNAL FUNCTIONS ====================
+
+    /**
+     * @dev Internal function to mint first certificate for user
+     * @param ipfsCID IPFS CID stored in Certificate struct for reference
      */
     function _mintFirstCertificate(
         uint256 courseId,
@@ -342,6 +351,10 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param ipfsCID Updated certificate image CID
      * @param paymentReceiptHash Payment verification hash
      */
+    /**
+     * @dev Internal function to add course to existing certificate
+     * @param ipfsCID Updated IPFS CID stored in Certificate struct
+     */
     function _addCourseToExistingCertificate(
         uint256 tokenId,
         uint256 courseId,
@@ -415,7 +428,7 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
 
     /**
      * @dev Updates certificate IPFS CID after payment verification
-     * @notice This is for updating the certificate image only, not adding courses
+     * @notice This is for updating the certificate reference only, not adding courses
      * @param tokenId Certificate token ID to update
      * @param newIpfsCID New IPFS CID
      * @param paymentReceiptHash Payment verification hash
@@ -733,14 +746,35 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
      * @param tokenId Token ID
      * @return Token URI
      */
+    /**
+     * @dev Returns token URI for ERC-1155 metadata
+     * @param tokenId Certificate token ID
+     * @return URI pointing to certificate metadata (API endpoint or IPFS)
+     * @notice Priority: 1) Custom URI, 2) defaultMetadataBaseURI + tokenId, 3) ERC1155 base
+     * @notice Recommended: Set defaultMetadataBaseURI to API endpoint for dynamic metadata
+     * @notice API can serve metadata with Pinata signed URLs for private IPFS files
+     */
     function uri(uint256 tokenId) public view override returns (string memory) {
         if (!_exists(tokenId)) revert CertificateNotFound(tokenId);
 
-        // Return custom URI if set, otherwise default
+        // 1. Return custom URI if set (highest priority)
         if (bytes(_tokenURIs[tokenId]).length > 0) {
             return _tokenURIs[tokenId];
         }
 
+        // 2. Use defaultMetadataBaseURI if configured (recommended for API-based serving)
+        if (bytes(defaultMetadataBaseURI).length > 0) {
+            return
+                string(
+                    abi.encodePacked(
+                        defaultMetadataBaseURI,
+                        "/",
+                        tokenId.toString()
+                    )
+                );
+        }
+
+        // 3. Fallback to ERC1155 base URI (shouldn't reach here if properly configured)
         return
             string(
                 abi.encodePacked(
@@ -899,6 +933,25 @@ contract CertificateManager is ERC1155, Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
+     * @notice Update default metadata base URI for all certificates
+     * @dev Only owner can update. This URI is used by NFT wallets (MetaMask, OpenSea, etc.)
+     * @param newBaseURI New base URI (e.g., "https://eduverse.com/api/nft/certificate")
+     */
+    /**
+     * @dev Updates default metadata base URI for all certificates
+     * @param newBaseURI New base URI (e.g., "https://app.url/api/nft/certificate")
+     * @notice Set to API endpoint for dynamic metadata with Pinata signed URLs
+     * @notice API flow: uri(tokenId) -> API -> fetch CID from contract -> generate signed URL
+     */
+    function updateDefaultMetadataBaseURI(
+        string calldata newBaseURI
+    ) external onlyOwner {
+        defaultMetadataBaseURI = newBaseURI;
+        emit DefaultMetadataBaseURIUpdated(newBaseURI);
+    }
+
+    /**
+     * @notice Batch update base routes for multiple certificates (for migration)
      * @dev Batch updates base route for multiple certificates (admin only)
      * @notice ✅ NEW: Gas-efficient way to update many certificates when domain changes
      * @param tokenIds Array of certificate token IDs

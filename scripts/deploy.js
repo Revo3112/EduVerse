@@ -197,6 +197,21 @@ async function main() {
       await tx2.wait();
       console.log(`   ✅ ProgressTracker configured`);
 
+      // Set defaultMetadataBaseURI in CertificateManager for MetaMask display
+      const metadataBaseURI = NEXT_PUBLIC_APP_URL
+        ? `${NEXT_PUBLIC_APP_URL}/api/nft/certificate`
+        : "http://localhost:3000/api/nft/certificate";
+
+      console.log(`   Setting Metadata Base URI in CertificateManager...`);
+      console.log(`   URI: ${metadataBaseURI}`);
+      const tx3 = await certificateManager.updateDefaultMetadataBaseURI(
+        metadataBaseURI
+      );
+      await tx3.wait();
+      console.log(
+        `   ✅ Metadata Base URI configured for MetaMask/wallet display`
+      );
+
       console.log(`\n✅ Post-deployment configuration completed successfully!`);
     } catch (configError) {
       console.error(`\n❌ Post-deployment configuration failed:`, configError);
@@ -208,6 +223,13 @@ async function main() {
       );
       console.error(
         `   2. courseFactory.setProgressTracker(${progressTracker.target})`
+      );
+
+      const metadataBaseURI = NEXT_PUBLIC_APP_URL
+        ? `${NEXT_PUBLIC_APP_URL}/api/nft/certificate`
+        : "http://localhost:3000/api/nft/certificate";
+      console.error(
+        `   3. certificateManager.updateDefaultMetadataBaseURI("${metadataBaseURI}")`
       );
     }
 
@@ -259,16 +281,25 @@ async function main() {
     console.log(`  CourseLicense:      ${addresses.courseLicenseBlock}`);
     console.log(`  ProgressTracker:    ${addresses.progressTrackerBlock}`);
     console.log(`  CertificateManager: ${addresses.certificateManagerBlock}`);
+
+    const configuredMetadataURI = NEXT_PUBLIC_APP_URL
+      ? `${NEXT_PUBLIC_APP_URL}/api/nft/certificate`
+      : "http://localhost:3000/api/nft/certificate";
+    console.log(`\n⚙️  Configuration:`);
+    console.log(`  Certificate Base Route:  ${baseRoute}`);
+    console.log(`  Metadata Base URI:       ${configuredMetadataURI}`);
+    console.log(`  Platform Name:           ${PLATFORM_NAME}`);
+
     console.log("\n✅ All contracts deployed, verified, and ABIs exported!");
     console.log("✅ Environment files updated for mobile and frontend!");
+    console.log("✅ Goldsky indexer configuration auto-synced!");
+    console.log("✅ Certificate metadata routing configured for MetaMask!");
     console.log("\n📋 Next Steps:");
-    console.log("  1. Run: node scripts/update-indexer-config.js");
-    console.log(
-      "  2. Build indexer: cd goldsky-indexer/subgraph-custom && npm run codegen && npm run build"
-    );
-    console.log(
-      "  3. Deploy indexer: goldsky subgraph deploy eduverse-manta-pacific-sepolia/1.4.0 --path ."
-    );
+    console.log("  1. Build & deploy indexer: npm run goldsky:deploy");
+    console.log("  2. Or manual steps:");
+    console.log("     - Sync only: npm run goldsky:sync");
+    console.log("     - Build only: npm run goldsky:build");
+    console.log("  3. Verify indexer: goldsky subgraph list");
   } catch (error) {
     console.error("\n❌ Deployment failed:", error);
     if (error.code) console.error(`Error code: ${error.code}`);

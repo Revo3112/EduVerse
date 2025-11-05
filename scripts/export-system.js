@@ -32,6 +32,17 @@ class ExportSystem {
           abi: PATHS.frontendAbi,
           env: path.join(PROJECT_ROOT, "eduweb/.env.local"),
         },
+        goldsky: {
+          abi: path.join(PROJECT_ROOT, "goldsky-indexer/subgraph-custom/abis"),
+          subgraphYaml: path.join(
+            PROJECT_ROOT,
+            "goldsky-indexer/subgraph-custom/subgraph.yaml"
+          ),
+          config: path.join(
+            PROJECT_ROOT,
+            "goldsky-indexer/subgraph-custom/configs/eduverse-subgraph.json"
+          ),
+        },
         artifacts: PATHS.artifacts,
         deployedContracts: PATHS.deployedContracts,
       },
@@ -47,7 +58,9 @@ class ExportSystem {
 
       if (!validation.valid) {
         console.warn(`⚠️ Network validation warning: ${validation.error}`);
-        console.log(`💡 Continuing with export - deployed contracts will be used as-is`);
+        console.log(
+          `💡 Continuing with export - deployed contracts will be used as-is`
+        );
       } else {
         console.log(`✅ ${validation.message}`);
       }
@@ -79,9 +92,12 @@ class ExportSystem {
         await this.updateFrontendEnvironment();
       }
 
+      if (!skipEnv && (target === "all" || target === "goldsky")) {
+        await this.updateGoldskyIndexer();
+      }
+
       console.log("\n🎉 Export process completed successfully!");
       return true;
-
     } catch (error) {
       console.error("\n❌ Export process failed:", error.message);
       throw error;
@@ -96,7 +112,7 @@ class ExportSystem {
 
     // Ensure directories exist
     const targets = this.getTargets(target);
-    targets.forEach(targetPath => {
+    targets.forEach((targetPath) => {
       if (!fs.existsSync(targetPath)) {
         fs.mkdirSync(targetPath, { recursive: true });
         console.log(`📁 Created directory: ${targetPath}`);
@@ -119,18 +135,26 @@ class ExportSystem {
         }
 
         // Use fs.readFileSync instead of require() to avoid caching issues
-        const artifactData = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+        const artifactData = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
         const abiContent = JSON.stringify(artifactData.abi, null, 2);
 
         // Export to selected targets
-        targets.forEach(targetPath => {
+        targets.forEach((targetPath) => {
           const filePath = path.join(targetPath, `${contract}.json`);
           fs.writeFileSync(filePath, abiContent);
 
-          const targetName = targetPath.includes("EduVerseApp") ? "mobile" : "frontend";
-          console.log(`✅ Exported ${contract} ABI to ${targetName}: ${filePath}`);
+          let targetName;
+          if (targetPath.includes("EduVerseApp")) {
+            targetName = "mobile";
+          } else if (targetPath.includes("goldsky-indexer")) {
+            targetName = "goldsky";
+          } else {
+            targetName = "frontend";
+          }
+          console.log(
+            `✅ Exported ${contract} ABI to ${targetName}: ${filePath}`
+          );
         });
-
       } catch (error) {
         console.error(`❌ Failed to export ${contract}:`, error.message);
       }
@@ -151,7 +175,9 @@ class ExportSystem {
   async exportContractAddresses(targets) {
     try {
       if (!fs.existsSync(this.config.paths.deployedContracts)) {
-        console.warn("⚠️ deployed-contracts.json not found, skipping address export");
+        console.warn(
+          "⚠️ deployed-contracts.json not found, skipping address export"
+        );
         return;
       }
 
@@ -173,14 +199,22 @@ class ExportSystem {
       };
 
       // Export to all targets
-      targets.forEach(targetPath => {
+      targets.forEach((targetPath) => {
         const addressPath = path.join(targetPath, "contract-addresses.json");
         fs.writeFileSync(addressPath, JSON.stringify(contractData, null, 2));
 
-        const targetName = targetPath.includes("EduVerseApp") ? "mobile" : "frontend";
-        console.log(`✅ Exported contract addresses to ${targetName}: ${addressPath}`);
+        let targetName;
+        if (targetPath.includes("EduVerseApp")) {
+          targetName = "mobile";
+        } else if (targetPath.includes("goldsky-indexer")) {
+          targetName = "goldsky";
+        } else {
+          targetName = "frontend";
+        }
+        console.log(
+          `✅ Exported contract addresses to ${targetName}: ${addressPath}`
+        );
       });
-
     } catch (error) {
       console.error("❌ Failed to export contract addresses:", error.message);
     }
@@ -194,7 +228,10 @@ class ExportSystem {
 // Generated on: ${new Date().toISOString()}
 
 ${this.config.contracts
-  .map(contract => `export { default as ${contract}ABI } from './${contract}.json';`)
+  .map(
+    (contract) =>
+      `export { default as ${contract}ABI } from './${contract}.json';`
+  )
   .join("\n")}
 
 export { default as ContractAddresses } from './contract-addresses.json';
@@ -202,14 +239,17 @@ export { default as ContractAddresses } from './contract-addresses.json';
 // Contract names constant
 export const CONTRACT_NAMES = {
 ${this.config.contracts
-  .map(contract => `  ${contract.toUpperCase()}: '${contract}',`)
+  .map((contract) => `  ${contract.toUpperCase()}: '${contract}',`)
   .join("\n")}
 };
 
 // ABI mapping for dynamic access
 export const CONTRACT_ABIS = {
 ${this.config.contracts
-  .map(contract => `  [CONTRACT_NAMES.${contract.toUpperCase()}]: ${contract}ABI,`)
+  .map(
+    (contract) =>
+      `  [CONTRACT_NAMES.${contract.toUpperCase()}]: ${contract}ABI,`
+  )
   .join("\n")}
 };
 `;
@@ -227,7 +267,9 @@ ${this.config.contracts
 
     try {
       if (!fs.existsSync(this.config.paths.deployedContracts)) {
-        throw new Error("deployed-contracts.json not found. Please deploy contracts first.");
+        throw new Error(
+          "deployed-contracts.json not found. Please deploy contracts first."
+        );
       }
 
       const addresses = JSON.parse(
@@ -285,7 +327,6 @@ ${this.config.contracts
 
       // Create backup
       await this.createEnvBackup(envContent);
-
     } catch (error) {
       console.error("❌ Error updating mobile env:", error.message);
       throw error;
@@ -310,7 +351,9 @@ EXPO_PUBLIC_NETWORK_NAME=${addresses.network}
 `;
 
     fs.writeFileSync(this.config.paths.mobile.envContracts, envTemplate);
-    console.log(`✅ Created contract environment template: ${this.config.paths.mobile.envContracts}`);
+    console.log(
+      `✅ Created contract environment template: ${this.config.paths.mobile.envContracts}`
+    );
   }
 
   /**
@@ -354,12 +397,13 @@ EXPO_PUBLIC_NETWORK_NAME=${addresses.network}
 
       // Update or add environment variables
       const envVars = {
-        "NEXT_PUBLIC_CHAIN_ID": addresses.chainId.toString(),
-        "NEXT_PUBLIC_RPC_URL": "https://pacific-rpc.sepolia-testnet.manta.network/http",
-        "NEXT_PUBLIC_COURSE_FACTORY_ADDRESS": addresses.courseFactory,
-        "NEXT_PUBLIC_COURSE_LICENSE_ADDRESS": addresses.courseLicense,
-        "NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS": addresses.progressTracker,
-        "NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS": addresses.certificateManager,
+        NEXT_PUBLIC_CHAIN_ID: addresses.chainId.toString(),
+        NEXT_PUBLIC_RPC_URL:
+          "https://pacific-rpc.sepolia-testnet.manta.network/http",
+        NEXT_PUBLIC_COURSE_FACTORY_ADDRESS: addresses.courseFactory,
+        NEXT_PUBLIC_COURSE_LICENSE_ADDRESS: addresses.courseLicense,
+        NEXT_PUBLIC_PROGRESS_TRACKER_ADDRESS: addresses.progressTracker,
+        NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS: addresses.certificateManager,
       };
 
       // Update environment content
@@ -381,9 +425,10 @@ EXPO_PUBLIC_NETWORK_NAME=${addresses.network}
       // Write updated content
       fs.writeFileSync(this.config.paths.frontend.env, envContent.trim());
 
-      console.log(`✅ Frontend environment updated: ${this.config.paths.frontend.env}`);
+      console.log(
+        `✅ Frontend environment updated: ${this.config.paths.frontend.env}`
+      );
       console.log("📝 Updated variables:", Object.keys(envVars).join(", "));
-
     } catch (error) {
       console.error("❌ Error updating frontend env:", error.message);
       throw error;
@@ -393,6 +438,131 @@ EXPO_PUBLIC_NETWORK_NAME=${addresses.network}
   /**
    * Get target paths based on target parameter
    */
+  async updateGoldskyIndexer() {
+    console.log("\n🔗 Updating Goldsky Indexer configuration...");
+
+    try {
+      if (!fs.existsSync(this.config.paths.deployedContracts)) {
+        throw new Error(
+          "deployed-contracts.json not found. Please deploy contracts first."
+        );
+      }
+
+      const contracts = JSON.parse(
+        fs.readFileSync(this.config.paths.deployedContracts, "utf8")
+      );
+
+      await this.updateSubgraphYaml(contracts);
+      await this.updateGoldskyConfig(contracts);
+
+      console.log("✅ Goldsky indexer configuration updated successfully!");
+    } catch (error) {
+      console.error("❌ Error updating Goldsky indexer:", error.message);
+      throw error;
+    }
+  }
+
+  async updateSubgraphYaml(contracts) {
+    if (!fs.existsSync(this.config.paths.goldsky.subgraphYaml)) {
+      console.warn(
+        `⚠️ subgraph.yaml not found at ${this.config.paths.goldsky.subgraphYaml}`
+      );
+      return;
+    }
+
+    let yaml = fs.readFileSync(this.config.paths.goldsky.subgraphYaml, "utf8");
+
+    yaml = yaml.replace(
+      /(name: CourseFactory[\s\S]*?address: ")[^"]+(")/,
+      `$1${contracts.courseFactory}$2`
+    );
+    yaml = yaml.replace(
+      /(name: CourseFactory[\s\S]*?startBlock: )\d+/,
+      `$1${contracts.courseFactoryBlock || 0}`
+    );
+
+    yaml = yaml.replace(
+      /(name: CourseLicense[\s\S]*?address: ")[^"]+(")/,
+      `$1${contracts.courseLicense}$2`
+    );
+    yaml = yaml.replace(
+      /(name: CourseLicense[\s\S]*?startBlock: )\d+/,
+      `$1${contracts.courseLicenseBlock || 0}`
+    );
+
+    yaml = yaml.replace(
+      /(name: ProgressTracker[\s\S]*?address: ")[^"]+(")/,
+      `$1${contracts.progressTracker}$2`
+    );
+    yaml = yaml.replace(
+      /(name: ProgressTracker[\s\S]*?startBlock: )\d+/,
+      `$1${contracts.progressTrackerBlock || 0}`
+    );
+
+    yaml = yaml.replace(
+      /(name: CertificateManager[\s\S]*?address: ")[^"]+(")/,
+      `$1${contracts.certificateManager}$2`
+    );
+    yaml = yaml.replace(
+      /(name: CertificateManager[\s\S]*?startBlock: )\d+/,
+      `$1${contracts.certificateManagerBlock || 0}`
+    );
+
+    fs.writeFileSync(this.config.paths.goldsky.subgraphYaml, yaml);
+    console.log(`✅ Updated subgraph.yaml with new contract addresses`);
+  }
+
+  async updateGoldskyConfig(contracts) {
+    if (!fs.existsSync(this.config.paths.goldsky.config)) {
+      console.warn(
+        `⚠️ Goldsky config not found at ${this.config.paths.goldsky.config}`
+      );
+      return;
+    }
+
+    const config = JSON.parse(
+      fs.readFileSync(this.config.paths.goldsky.config, "utf8")
+    );
+
+    const instanceMap = {
+      courseFactory: {
+        address: contracts.courseFactory,
+        startBlock: contracts.courseFactoryBlock || 0,
+      },
+      courseLicense: {
+        address: contracts.courseLicense,
+        startBlock: contracts.courseLicenseBlock || 0,
+      },
+      progressTracker: {
+        address: contracts.progressTracker,
+        startBlock: contracts.progressTrackerBlock || 0,
+      },
+      certificateManager: {
+        address: contracts.certificateManager,
+        startBlock: contracts.certificateManagerBlock || 0,
+      },
+    };
+
+    config.instances = config.instances.map((instance) => {
+      const update = instanceMap[instance.abi];
+      if (update) {
+        return {
+          ...instance,
+          address: update.address,
+          startBlock: update.startBlock,
+        };
+      }
+      return instance;
+    });
+
+    fs.writeFileSync(
+      this.config.paths.goldsky.config,
+      JSON.stringify(config, null, 2),
+      "utf8"
+    );
+    console.log(`✅ Updated eduverse-subgraph.json with new configuration`);
+  }
+
   getTargets(target) {
     const targets = [];
 
@@ -404,8 +574,14 @@ EXPO_PUBLIC_NETWORK_NAME=${addresses.network}
       targets.push(this.config.paths.frontend.abi);
     }
 
+    if (target === "all" || target === "goldsky") {
+      targets.push(this.config.paths.goldsky.abi);
+    }
+
     if (targets.length === 0) {
-      throw new Error(`Invalid target: ${target}. Use 'all', 'mobile', or 'frontend'`);
+      throw new Error(
+        `Invalid target: ${target}. Use 'all', 'mobile', 'frontend', or 'goldsky'`
+      );
     }
 
     return targets;
@@ -418,14 +594,14 @@ async function main() {
   const options = {};
 
   // Parse command line arguments
-  args.forEach(arg => {
-    if (arg.startsWith('--target=')) {
-      options.target = arg.split('=')[1];
-    } else if (arg === '--env-only') {
+  args.forEach((arg) => {
+    if (arg.startsWith("--target=")) {
+      options.target = arg.split("=")[1];
+    } else if (arg === "--env-only") {
       options.envOnly = true;
-    } else if (arg === '--skip-env') {
+    } else if (arg === "--skip-env") {
       options.skipEnv = true;
-    } else if (arg === '--help' || arg === '-h') {
+    } else if (arg === "--help" || arg === "-h") {
       console.log(`
 🚀 EduVerse Unified Export System
 
@@ -436,7 +612,7 @@ Usage:
   node export-system.js [options]
 
 Options:
-  --target=<target>     Target to export to (all|mobile|frontend) [default: all]
+  --target=<target>     Target to export to (all|mobile|frontend|goldsky) [default: all]
   --env-only           Only update environment variables
   --skip-env           Skip environment variable updates
   --help, -h           Show this help message

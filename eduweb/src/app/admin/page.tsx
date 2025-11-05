@@ -63,6 +63,8 @@ export default function AdminPage() {
   const [customTokenURI, setCustomTokenURI] = useState("");
   const [revokeTokenId, setRevokeTokenId] = useState("");
   const [revokeReason, setRevokeReason] = useState("");
+  const [fixingUris, setFixingUris] = useState(false);
+  const [metadataBaseURI, setMetadataBaseURI] = useState("");
 
   useEffect(() => {
     async function checkOwnership() {
@@ -244,6 +246,25 @@ export default function AdminPage() {
     }
   }
 
+  async function handleSetMetadataBaseURI() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: certificateManager,
+        method: "function updateDefaultMetadataBaseURI(string newBaseURI)",
+        params: [metadataBaseURI],
+      });
+
+      await sendTransaction({ transaction: tx, account });
+      toast.success("Metadata base URI updated successfully");
+      await loadContractData();
+    } catch (error) {
+      toast.error(
+        (error as Error).message || "Failed to update metadata base URI"
+      );
+    }
+  }
+
   async function handleSetTokenURI() {
     if (!account) return;
     try {
@@ -374,6 +395,76 @@ export default function AdminPage() {
       toast.success("User unblacklisted successfully");
     } catch (error) {
       toast.error((error as Error).message || "Failed to unblacklist user");
+    }
+  }
+
+  async function handleBatchFixCertificateUris() {
+    if (!account) return;
+    setFixingUris(true);
+    try {
+      const APP_URL = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const GRAPHQL_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
+
+      if (!GRAPHQL_ENDPOINT) {
+        toast.error("GraphQL endpoint not configured");
+        return;
+      }
+
+      const query = `
+        query GetAllCertificates {
+          certificates(first: 1000, where: { isValid: true }) {
+            tokenId
+            customTokenURI
+          }
+        }
+      `;
+
+      const response = await fetch(GRAPHQL_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+
+      const { data } = await response.json();
+      const certificates = data?.certificates || [];
+
+      if (certificates.length === 0) {
+        toast.info("No certificates found");
+        return;
+      }
+
+      const certificatesToFix = certificates.filter((cert: any) => {
+        const correctUri = `${APP_URL}/api/nft/certificate/${cert.tokenId}`;
+        return !cert.customTokenURI || cert.customTokenURI !== correctUri;
+      });
+
+      if (certificatesToFix.length === 0) {
+        toast.success("All certificate URIs are already correct!");
+        return;
+      }
+
+      toast.info(`Fixing ${certificatesToFix.length} certificate(s)...`);
+
+      for (const cert of certificatesToFix) {
+        const correctUri = `${APP_URL}/api/nft/certificate/${cert.tokenId}`;
+
+        const tx = prepareContractCall({
+          contract: certificateManager,
+          method: "function setTokenURI(uint256 tokenId, string tokenURI)",
+          params: [BigInt(cert.tokenId), correctUri],
+        });
+
+        await sendTransaction({ transaction: tx, account });
+        toast.success(`Fixed Token #${cert.tokenId}`);
+      }
+
+      toast.success(
+        `Successfully fixed ${certificatesToFix.length} certificate(s)!`
+      );
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to fix certificate URIs");
+    } finally {
+      setFixingUris(false);
     }
   }
 
@@ -635,14 +726,29 @@ export default function AdminPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Set Custom Token URI</Label>
+              <Label>Metadata Base URI (for MetaMask/Wallets)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="https://yourdomain.com/api/nft/certificate"
+                  value={metadataBaseURI}
+                  onChange={(e) => setMetadataBaseURI(e.target.value)}
+                />
+                <Button onClick={handleSetMetadataBaseURI}>Update</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Set once and all certificates will automatically use correct
+                metadata URI. Format: BASE_URI/tokenId
+              </p>
+            </div>
+
+            <div className="space-y-4">
               <div className="flex gap-2">
                 <Input
                   type="text"
                   placeholder="Token ID"
                   value={tokenId}
                   onChange={(e) => setTokenId(e.target.value)}
-                  className="w-32"
                 />
                 <Input
                   type="text"
@@ -651,6 +757,30 @@ export default function AdminPage() {
                   onChange={(e) => setCustomTokenURI(e.target.value)}
                 />
                 <Button onClick={handleSetTokenURI}>Set URI</Button>
+              </div>
+              <div className="pt-4 border-t">
+                <Button
+                  onClick={handleBatchFixCertificateUris}
+                  disabled={fixingUris}
+                  className="w-full"
+                  variant="outline"
+                >
+                  {fixingUris ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                      Fixing URIs...
+                    </>
+                  ) : (
+                    <>
+                      <Link className="h-4 w-4 mr-2" />
+                      Fix All Certificate URIs
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Automatically fixes all certificate NFT metadata URIs to point
+                  to correct API endpoint
+                </p>
               </div>
             </div>
           </CardContent>

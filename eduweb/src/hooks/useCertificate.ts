@@ -32,31 +32,28 @@
 "use client";
 
 import {
-    calculateBatchPrice,
-    checkEligibilityForCertificate,
-    generatePaymentHash,
-    generateQRDataFromContract,
-    getCertificateCompletedCourses,
-    getCertificateDetails,
-    getCertificatePrice,
-    getLearningJourneySummary,
-    getUserCertificateId,
-    getUserCertificateStats,
-    prepareAddMultipleCoursesTransaction,
-    prepareMintOrUpdateCertificateTransaction,
-    prepareUpdateCertificateTransaction,
-    verifyCertificate,
-    type Certificate,
-    type CertificateEligibility,
-    type CertificateStats,
-    type LearningJourney
+  calculateBatchPrice,
+  checkEligibilityForCertificate,
+  generatePaymentHash,
+  generateQRDataFromContract,
+  getCertificateCompletedCourses,
+  getCertificateDetails,
+  getCertificatePrice,
+  getLearningJourneySummary,
+  getUserCertificateId,
+  getUserCertificateStats,
+  prepareAddMultipleCoursesTransaction,
+  prepareMintOrUpdateCertificateTransaction,
+  prepareUpdateCertificateTransaction,
+  verifyCertificate,
+  type Certificate,
+  type CertificateEligibility,
+  type CertificateStats,
+  type LearningJourney,
 } from "@/services/certificate-blockchain.service";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import {
-    useActiveAccount,
-    useSendTransaction,
-} from "thirdweb/react";
+import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 
 // ============================================================================
 // HOOK RETURN TYPE
@@ -236,7 +233,7 @@ export function useCertificate(
         {
           duration: 6000,
           style: {
-            maxWidth: '500px',
+            maxWidth: "500px",
           },
         }
       );
@@ -278,13 +275,14 @@ export function useCertificate(
   /**
    * Get learning journey summary
    */
-  const getLearningJourney = useCallback(async (): Promise<LearningJourney | null> => {
-    if (!tokenId || tokenId === BigInt(0)) {
-      return null;
-    }
+  const getLearningJourney =
+    useCallback(async (): Promise<LearningJourney | null> => {
+      if (!tokenId || tokenId === BigInt(0)) {
+        return null;
+      }
 
-    return await getLearningJourneySummary(tokenId);
-  }, [tokenId]);
+      return await getLearningJourneySummary(tokenId);
+    }, [tokenId]);
 
   /**
    * Mint first certificate OR add course to existing certificate
@@ -304,7 +302,9 @@ export function useCertificate(
       setIsMinting(true);
       setError(null);
 
-      const loadingToast = toast.loading("Processing certificate transaction...");
+      const loadingToast = toast.loading(
+        "Processing certificate transaction..."
+      );
 
       try {
         // 1. Check eligibility

@@ -172,6 +172,9 @@ export async function generateAndUploadCertificate(
     console.log("[Certificate Service] Starting certificate generation...");
     console.log("[Certificate Service] Student:", data.studentName);
     console.log("[Certificate Service] Course:", data.courseName);
+    console.log(
+      "[Certificate Service] Note: Using Pinata signed URLs for private IPFS"
+    );
 
     const canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
     const ctx = canvas.getContext("2d");
@@ -274,7 +277,7 @@ export async function generateAndUploadCertificate(
       } on EduVerse. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${
         data.completedCourses?.length || 1
       } verified course${(data.completedCourses?.length || 1) > 1 ? "s" : ""}.`,
-      image: `ipfs://${imageUploadResult.data.cid}`,
+      image: imageUploadResult.data.signedUrl,
       decimals: 0, // Non-fungible (ERC-1155 with amount=1)
 
       // Blockchain-compatible attributes matching Certificate struct fields
