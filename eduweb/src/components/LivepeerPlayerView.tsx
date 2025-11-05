@@ -471,38 +471,6 @@ export function LivepeerPlayerView({
               </div>
             )}
 
-            {/* Video Info Overlay - Shows playback info and stats */}
-            {showControls && playbackInfo && (
-              <div className="absolute top-4 right-4 bg-black/70 backdrop-blur-sm text-white px-3 py-2 rounded-lg text-xs space-y-1 z-10">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400">Progress:</span>
-                  <span className="font-mono">
-                    {Math.round(progressPercent)}%
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400">Time:</span>
-                  <span className="font-mono">
-                    {formatTime(time)} / {formatTime(duration)}
-                  </span>
-                </div>
-                {!muted && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">Volume:</span>
-                    <span className="font-mono">
-                      {Math.round(volume * 100)}%
-                    </span>
-                  </div>
-                )}
-                {muted && (
-                  <div className="flex items-center gap-2 text-yellow-400">
-                    <VolumeX className="h-3 w-3" />
-                    <span>Muted</span>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Center Play/Pause Button - Using Livepeer Primitives */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <Player.PlayPauseTrigger

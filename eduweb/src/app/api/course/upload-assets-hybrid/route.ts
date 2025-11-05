@@ -222,6 +222,36 @@ export async function POST(request: NextRequest) {
             storage: {
               ipfs: true,
             },
+            profiles: [
+              {
+                name: "360p",
+                bitrate: 1000000,
+                fps: 30,
+                width: 640,
+                height: 360,
+              },
+              {
+                name: "480p",
+                bitrate: 1500000,
+                fps: 30,
+                width: 854,
+                height: 480,
+              },
+              {
+                name: "720p",
+                bitrate: 3000000,
+                fps: 30,
+                width: 1280,
+                height: 720,
+              },
+              {
+                name: "1080p",
+                bitrate: 6000000,
+                fps: 30,
+                width: 1920,
+                height: 1080,
+              },
+            ],
           });
 
           const createData =

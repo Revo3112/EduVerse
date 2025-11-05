@@ -364,10 +364,11 @@ function SectionLearningContent() {
                   <Button
                     onClick={handleCompleteSection}
                     disabled={isSending}
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transition-all font-semibold px-8"
                   >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    {isSending ? "Processing..." : "Finish Section"}
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    {isSending ? "Processing..." : "Mark as Complete"}
                   </Button>
                 )}
               </div>
@@ -455,8 +456,8 @@ function SectionLearningContent() {
                     <Button
                       onClick={handleCompleteSection}
                       disabled={isSending}
-                      className="w-full mt-4 bg-green-600 hover:bg-green-700"
-                      size="sm"
+                      className="w-full mt-4 bg-green-600 hover:bg-green-700 shadow-md hover:shadow-lg transition-all font-semibold"
+                      size="default"
                     >
                       <CheckCircle className="h-4 w-4 mr-2" />
                       Finish Section

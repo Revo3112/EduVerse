@@ -15,7 +15,9 @@ import { formatRatingDisplay } from "@/lib/rating-utils";
 import { BookOpen, Clock, ImageIcon, Loader2, Star } from "lucide-react";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { memo, useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import type { CourseBrowseData } from "@/services/goldsky-courses.service";
 import { useThumbnailUrl } from "@/hooks/useThumbnailUrl";
 import { useLicense } from "@/hooks/useLicense";
@@ -164,6 +166,7 @@ const getCategoryColor = (categoryName: string): string => {
 };
 
 export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Normalize course data
@@ -216,8 +219,12 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
   );
 
   const handleEnrollClick = useCallback(() => {
-    setIsModalOpen(true);
-  }, []);
+    if (isValid) {
+      router.push(`/learning/course-details?id=${normalizedCourse.id}`);
+    } else {
+      setIsModalOpen(true);
+    }
+  }, [isValid, router, normalizedCourse.id]);
 
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
@@ -225,13 +232,26 @@ export const CourseCard = memo<CourseCardProps>(({ course, onEnroll }) => {
 
   const handleModalEnroll = useCallback(
     async (courseId: bigint, duration: number) => {
-      await purchaseLicense(duration);
-      setIsModalOpen(false);
-      if (onEnroll) {
-        onEnroll(courseId, duration);
+      try {
+        await purchaseLicense(duration);
+        toast.success("Enrollment successful!", {
+          description: "You now have access to this course. Refreshing page...",
+        });
+        setIsModalOpen(false);
+        if (onEnroll) {
+          onEnroll(courseId, duration);
+        }
+        setTimeout(() => {
+          router.refresh();
+        }, 1000);
+      } catch (error) {
+        console.error("[CourseCard] Enrollment failed:", error);
+        toast.error("Enrollment failed", {
+          description: "Please try again or check your wallet connection.",
+        });
       }
     },
-    [purchaseLicense, onEnroll]
+    [purchaseLicense, onEnroll, router]
   );
 
   return (

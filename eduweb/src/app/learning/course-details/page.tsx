@@ -298,16 +298,21 @@ function CourseDetailsContent() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <ContentContainer>
+          <div className="mb-6">
+            <Button
+              variant="outline"
+              onClick={() => router.push("/learning")}
+              className="gap-2 min-h-[44px]"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Back to Courses
+            </Button>
+          </div>
           <Alert variant="destructive" className="max-w-2xl mx-auto">
             <AlertCircle className="h-5 w-5" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error || "Course not found"}</AlertDescription>
           </Alert>
-          <div className="text-center mt-6">
-            <Button variant="outline" onClick={() => router.push("/learning")}>
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Courses
-            </Button>
-          </div>
         </ContentContainer>
       </div>
     );
@@ -320,16 +325,15 @@ function CourseDetailsContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <ContentContainer>
-        <div className="max-w-5xl mx-auto space-y-6 py-6">
-          <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b">
+        <ContentContainer>
+          <div className="flex items-center justify-between py-4">
             <Button
-              variant="ghost"
-              size="sm"
+              variant="outline"
               onClick={() => router.push("/learning")}
-              className="gap-2"
+              className="gap-2 min-h-[44px] shadow-sm"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-5 w-5" />
               Back to Courses
             </Button>
             <Badge variant="outline" className="gap-2">
@@ -337,7 +341,10 @@ function CourseDetailsContent() {
               Course #{courseId.toString()}
             </Badge>
           </div>
-
+        </ContentContainer>
+      </div>
+      <ContentContainer>
+        <div className="max-w-5xl mx-auto space-y-6 py-6">
           {!address && (
             <Alert>
               <Wallet className="h-4 w-4" />
