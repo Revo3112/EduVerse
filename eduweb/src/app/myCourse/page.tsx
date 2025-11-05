@@ -435,7 +435,10 @@ export default function MyCoursePage() {
                             View
                           </Button>
                         </Link>
-                        <Link href={`/edit/${course.id}`} className="flex-1">
+                        <Link
+                          href={`/edit?courseId=${course.id}`}
+                          className="flex-1"
+                        >
                           <Button
                             variant="outline"
                             className="w-full"
