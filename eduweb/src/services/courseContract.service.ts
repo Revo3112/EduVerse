@@ -883,3 +883,107 @@ export function formatDuration(seconds: number): string {
 export function calculateTotalDuration(sections: SectionData[]): number {
   return sections.reduce((total, section) => total + section.duration, 0);
 }
+
+/**
+ * Prepare transaction for updating a course section
+ */
+export function prepareUpdateSectionTransaction(params: {
+  courseId: bigint;
+  sectionId: bigint;
+  title: string;
+  contentCID: string;
+  duration: number;
+}) {
+  const { courseId, sectionId, title, contentCID, duration } = params;
+
+  const cidCheck = validateCID(contentCID);
+  if (!cidCheck.valid) {
+    throw new Error(cidCheck.error);
+  }
+
+  const durationCheck = validateDuration(duration);
+  if (!durationCheck.valid) {
+    throw new Error(durationCheck.error);
+  }
+
+  if (!title || title.trim().length === 0) {
+    throw new Error("Section title is required");
+  }
+
+  if (title.length > 200) {
+    throw new Error("Section title exceeds maximum length of 200 characters");
+  }
+
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method:
+      "function updateCourseSection(uint256 courseId, uint256 sectionId, string memory title, string memory contentCID, uint256 duration)",
+    params: [
+      courseId,
+      sectionId,
+      title.trim(),
+      contentCID.trim(),
+      BigInt(duration),
+    ],
+  });
+
+  return transaction;
+}
+
+/**
+ * Prepare transaction for deleting a course section
+ */
+export function prepareDeleteSectionTransaction(params: {
+  courseId: bigint;
+  sectionId: bigint;
+}) {
+  const { courseId, sectionId } = params;
+
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method: "function deleteCourseSection(uint256 courseId, uint256 sectionId)",
+    params: [courseId, sectionId],
+  });
+
+  return transaction;
+}
+
+/**
+ * Prepare transaction for moving/reordering a course section
+ */
+export function prepareMoveSectionTransaction(params: {
+  courseId: bigint;
+  fromIndex: bigint;
+  toIndex: bigint;
+}) {
+  const { courseId, fromIndex, toIndex } = params;
+
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method:
+      "function moveCourseSection(uint256 courseId, uint256 fromIndex, uint256 toIndex)",
+    params: [courseId, fromIndex, toIndex],
+  });
+
+  return transaction;
+}
+
+/**
+ * Prepare transaction for swapping two course sections
+ */
+export function prepareSwapSectionsTransaction(params: {
+  courseId: bigint;
+  indexA: bigint;
+  indexB: bigint;
+}) {
+  const { courseId, indexA, indexB } = params;
+
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method:
+      "function swapCourseSections(uint256 courseId, uint256 indexA, uint256 indexB)",
+    params: [courseId, indexA, indexB],
+  });
+
+  return transaction;
+}
