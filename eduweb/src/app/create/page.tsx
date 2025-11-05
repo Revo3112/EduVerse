@@ -1237,8 +1237,19 @@ export default function CreateCoursePage() {
     console.log("[Create Course] Modal should now be visible");
 
     try {
+      console.log("[Create Course] Starting validation checks...");
+      console.log("[Create Course] Form data:", {
+        title: formData.title,
+        description: formData.description?.substring(0, 50),
+        thumbnailFile: !!formData.thumbnailFile,
+        creatorName: formData.creatorName,
+        pricePerMonth: formData.pricePerMonth,
+        sectionsCount: sections.length,
+      });
+
       // Validate required fields matching smart contract
       if (!formData.title || formData.title.trim().length === 0) {
+        console.log("[Create Course] ❌ Validation failed: Missing title");
         toast.error("Missing course title", {
           description: "Please provide a course title",
         });
@@ -1246,7 +1257,10 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Title validation passed");
+
       if (formData.title.length > 200) {
+        console.log("[Create Course] ❌ Validation failed: Title too long");
         toast.error("Title too long", {
           description: "Course title must be 200 characters or less",
         });
@@ -1254,7 +1268,12 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Title length validation passed");
+
       if (!formData.description || formData.description.trim().length === 0) {
+        console.log(
+          "[Create Course] ❌ Validation failed: Missing description"
+        );
         toast.error("Missing course description", {
           description: "Please provide a course description",
         });
@@ -1262,7 +1281,12 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Description validation passed");
+
       if (formData.description.length > 2000) {
+        console.log(
+          "[Create Course] ❌ Validation failed: Description too long"
+        );
         toast.error("Description too long", {
           description: "Course description must be 2000 characters or less",
         });
@@ -1270,7 +1294,10 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Description length validation passed");
+
       if (!formData.thumbnailFile) {
+        console.log("[Create Course] ❌ Validation failed: Missing thumbnail");
         toast.error("Missing thumbnail", {
           description: "Please upload a course thumbnail",
         });
@@ -1278,7 +1305,12 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Thumbnail validation passed");
+
       if (!formData.creatorName || formData.creatorName.trim().length === 0) {
+        console.log(
+          "[Create Course] ❌ Validation failed: Missing creator name"
+        );
         toast.error("Missing creator name", {
           description: "Please provide your name or brand",
         });
@@ -1286,7 +1318,12 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Creator name validation passed");
+
       if (formData.creatorName.length > 100) {
+        console.log(
+          "[Create Course] ❌ Validation failed: Creator name too long"
+        );
         toast.error("Creator name too long", {
           description: "Creator name must be 100 characters or less",
         });
@@ -1294,8 +1331,12 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Creator name length validation passed");
+
       const price = parseFloat(formData.pricePerMonth);
+      console.log("[Create Course] Price parsed:", price);
       if (isNaN(price) || price <= 0) {
+        console.log("[Create Course] ❌ Validation failed: Invalid price");
         toast.error("Invalid price", {
           description: "Price must be greater than 0 ETH",
         });
@@ -1303,7 +1344,10 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Price validation passed");
+
       if (price < 0.001) {
+        console.log("[Create Course] ❌ Validation failed: Price too low");
         toast.error("Price too low", {
           description: "Minimum price is 0.001 ETH",
         });
@@ -1311,7 +1355,10 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Price minimum validation passed");
+
       if (price > 1) {
+        console.log("[Create Course] ❌ Validation failed: Price too high");
         toast.error("Price too high", {
           description: "Maximum price is 1 ETH per month",
         });
@@ -1319,7 +1366,10 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Price maximum validation passed");
+
       if (sections.length === 0) {
+        console.log("[Create Course] ❌ Validation failed: No sections");
         toast.error("No content sections", {
           description: "Please add at least one content section",
         });
@@ -1327,7 +1377,13 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log(
+        "[Create Course] ✅ Sections count validation passed:",
+        sections.length
+      );
+
       if (sections.length > 1000) {
+        console.log("[Create Course] ❌ Validation failed: Too many sections");
         toast.error("Too many sections", {
           description: "Maximum 1000 sections per course",
         });
@@ -1335,11 +1391,29 @@ export default function CreateCoursePage() {
         return;
       }
 
+      console.log("[Create Course] ✅ Sections count limit validation passed");
+      console.log("[Create Course] Starting individual section validation...");
+
       // Validate each section
       for (let i = 0; i < sections.length; i++) {
         const section = sections[i];
+        console.log(
+          `[Create Course] Validating section ${i + 1}/${sections.length}:`,
+          {
+            title: section.title,
+            duration: section.duration,
+            hasFile: !!section.file,
+            fileType: section.file?.type,
+            fileSize: section.file?.size,
+          }
+        );
 
         if (!section.title || section.title.trim().length === 0) {
+          console.log(
+            `[Create Course] ❌ Section ${
+              i + 1
+            } validation failed: Missing title`
+          );
           toast.error(`Section ${i + 1}: Missing title`, {
             description: "All sections must have a title",
           });
@@ -1348,6 +1422,11 @@ export default function CreateCoursePage() {
         }
 
         if (section.title.length > 200) {
+          console.log(
+            `[Create Course] ❌ Section ${
+              i + 1
+            } validation failed: Title too long`
+          );
           toast.error(`Section ${i + 1}: Title too long`, {
             description: "Section title must be 200 characters or less",
           });
@@ -1356,6 +1435,11 @@ export default function CreateCoursePage() {
         }
 
         if (section.duration < 60) {
+          console.log(
+            `[Create Course] ❌ Section ${
+              i + 1
+            } validation failed: Duration too short (${section.duration}s)`
+          );
           toast.error(`Section ${i + 1}: Duration too short`, {
             description:
               "Section duration must be at least 60 seconds (1 minute)",
@@ -1365,6 +1449,11 @@ export default function CreateCoursePage() {
         }
 
         if (section.duration > 10800) {
+          console.log(
+            `[Create Course] ❌ Section ${
+              i + 1
+            } validation failed: Duration too long (${section.duration}s)`
+          );
           toast.error(`Section ${i + 1}: Duration too long`, {
             description:
               "Section duration must not exceed 10800 seconds (3 hours)",
@@ -1374,20 +1463,33 @@ export default function CreateCoursePage() {
         }
 
         if (!section.file) {
+          console.log(
+            `[Create Course] ❌ Section ${
+              i + 1
+            } validation failed: Missing video file`
+          );
           toast.error(`Section ${i + 1}: Missing video file`, {
             description: `"${section.title}" does not have a video file`,
           });
           setIsPublishing(false);
           return;
         }
+        console.log(`[Create Course] ✅ Section ${i + 1} validation passed`);
       }
+
+      console.log("[Create Course] ✅ All validations passed!");
+      console.log("[Create Course] About to call uploadCourseAssetsToIPFS()");
 
       // Upload assets to IPFS
       toast.info("Uploading course assets...", {
         description: "Please wait while we upload your course to IPFS",
       });
 
+      console.log("[Create Course] Calling uploadCourseAssetsToIPFS() now...");
       const { thumbnailCID, videoCIDs } = await uploadCourseAssetsToIPFS();
+      console.log(
+        "[Create Course] uploadCourseAssetsToIPFS() returned successfully"
+      );
 
       // Mark upload as complete - but keep modal open for blockchain publishing
       console.log("✅ Course assets uploaded successfully!");
@@ -2769,8 +2871,8 @@ export default function CreateCoursePage() {
                       </div>
                     )}
 
-                  {/* Enhanced Publishing Status */}
-                  {uploadStage !== UploadStage.IDLE && (
+                  {/* Enhanced Publishing Status - Hidden when using modal */}
+                  {false && uploadStage !== UploadStage.IDLE && (
                     <div className="mt-4 space-y-3">
                       {/* Progress Overview */}
                       <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-xl border-2 border-blue-200 dark:border-blue-800">
