@@ -221,6 +221,20 @@ const DIFFICULTY_LEVELS = [
   },
 ];
 
+// Smart Contract Validation Constants - MUST match CourseFactory.sol
+const CONTRACT_LIMITS = {
+  TITLE_MAX_LENGTH: 200,
+  DESCRIPTION_MAX_LENGTH_CREATE: 2000,
+  DESCRIPTION_MAX_LENGTH_UPDATE: 1000,
+  CREATOR_NAME_MAX_LENGTH: 100,
+  SECTION_TITLE_MAX_LENGTH: 200,
+  MAX_SECTIONS_PER_COURSE: 1000,
+  MIN_SECTION_DURATION: 60,
+  MAX_SECTION_DURATION: 10800,
+  MAX_PRICE_ETH: 1,
+  MIN_PRICE_ETH: 0,
+} as const;
+
 // File type configurations
 // ✅ Only video type supported - matches smart contract requirements
 // Smart contract stores Livepeer playback IDs as section.contentCID
@@ -1259,10 +1273,10 @@ export default function CreateCoursePage() {
 
       console.log("[Create Course] ✅ Title validation passed");
 
-      if (formData.title.length > 200) {
+      if (formData.title.length > CONTRACT_LIMITS.TITLE_MAX_LENGTH) {
         console.log("[Create Course] ❌ Validation failed: Title too long");
         toast.error("Title too long", {
-          description: "Course title must be 200 characters or less",
+          description: `Course title must be ${CONTRACT_LIMITS.TITLE_MAX_LENGTH} characters or less`,
         });
         setIsPublishing(false);
         return;
@@ -1283,12 +1297,15 @@ export default function CreateCoursePage() {
 
       console.log("[Create Course] ✅ Description validation passed");
 
-      if (formData.description.length > 2000) {
+      if (
+        formData.description.length >
+        CONTRACT_LIMITS.DESCRIPTION_MAX_LENGTH_CREATE
+      ) {
         console.log(
           "[Create Course] ❌ Validation failed: Description too long"
         );
         toast.error("Description too long", {
-          description: "Course description must be 2000 characters or less",
+          description: `Course description must be ${CONTRACT_LIMITS.DESCRIPTION_MAX_LENGTH_CREATE} characters or less`,
         });
         setIsPublishing(false);
         return;
@@ -1320,12 +1337,14 @@ export default function CreateCoursePage() {
 
       console.log("[Create Course] ✅ Creator name validation passed");
 
-      if (formData.creatorName.length > 100) {
+      if (
+        formData.creatorName.length > CONTRACT_LIMITS.CREATOR_NAME_MAX_LENGTH
+      ) {
         console.log(
           "[Create Course] ❌ Validation failed: Creator name too long"
         );
         toast.error("Creator name too long", {
-          description: "Creator name must be 100 characters or less",
+          description: `Creator name must be ${CONTRACT_LIMITS.CREATOR_NAME_MAX_LENGTH} characters or less`,
         });
         setIsPublishing(false);
         return;
@@ -1335,7 +1354,7 @@ export default function CreateCoursePage() {
 
       const price = parseFloat(formData.pricePerMonth);
       console.log("[Create Course] Price parsed:", price);
-      if (isNaN(price) || price <= 0) {
+      if (isNaN(price) || price <= CONTRACT_LIMITS.MIN_PRICE_ETH) {
         console.log("[Create Course] ❌ Validation failed: Invalid price");
         toast.error("Invalid price", {
           description: "Price must be greater than 0 ETH",
@@ -1345,22 +1364,12 @@ export default function CreateCoursePage() {
       }
 
       console.log("[Create Course] ✅ Price validation passed");
-
-      if (price < 0.001) {
-        console.log("[Create Course] ❌ Validation failed: Price too low");
-        toast.error("Price too low", {
-          description: "Minimum price is 0.001 ETH",
-        });
-        setIsPublishing(false);
-        return;
-      }
-
       console.log("[Create Course] ✅ Price minimum validation passed");
 
-      if (price > 1) {
+      if (price > CONTRACT_LIMITS.MAX_PRICE_ETH) {
         console.log("[Create Course] ❌ Validation failed: Price too high");
         toast.error("Price too high", {
-          description: "Maximum price is 1 ETH per month",
+          description: `Maximum price is ${CONTRACT_LIMITS.MAX_PRICE_ETH} ETH per month`,
         });
         setIsPublishing(false);
         return;
@@ -1382,10 +1391,10 @@ export default function CreateCoursePage() {
         sections.length
       );
 
-      if (sections.length > 1000) {
+      if (sections.length > CONTRACT_LIMITS.MAX_SECTIONS_PER_COURSE) {
         console.log("[Create Course] ❌ Validation failed: Too many sections");
         toast.error("Too many sections", {
-          description: "Maximum 1000 sections per course",
+          description: `Maximum ${CONTRACT_LIMITS.MAX_SECTIONS_PER_COURSE} sections per course`,
         });
         setIsPublishing(false);
         return;
@@ -1421,42 +1430,40 @@ export default function CreateCoursePage() {
           return;
         }
 
-        if (section.title.length > 200) {
+        if (section.title.length > CONTRACT_LIMITS.SECTION_TITLE_MAX_LENGTH) {
           console.log(
             `[Create Course] ❌ Section ${
               i + 1
             } validation failed: Title too long`
           );
           toast.error(`Section ${i + 1}: Title too long`, {
-            description: "Section title must be 200 characters or less",
+            description: `Section title must be ${CONTRACT_LIMITS.SECTION_TITLE_MAX_LENGTH} characters or less`,
           });
           setIsPublishing(false);
           return;
         }
 
-        if (section.duration < 60) {
+        if (section.duration < CONTRACT_LIMITS.MIN_SECTION_DURATION) {
           console.log(
             `[Create Course] ❌ Section ${
               i + 1
             } validation failed: Duration too short (${section.duration}s)`
           );
           toast.error(`Section ${i + 1}: Duration too short`, {
-            description:
-              "Section duration must be at least 60 seconds (1 minute)",
+            description: `Section duration must be at least ${CONTRACT_LIMITS.MIN_SECTION_DURATION} seconds (1 minute)`,
           });
           setIsPublishing(false);
           return;
         }
 
-        if (section.duration > 10800) {
+        if (section.duration > CONTRACT_LIMITS.MAX_SECTION_DURATION) {
           console.log(
             `[Create Course] ❌ Section ${
               i + 1
             } validation failed: Duration too long (${section.duration}s)`
           );
           toast.error(`Section ${i + 1}: Duration too long`, {
-            description:
-              "Section duration must not exceed 10800 seconds (3 hours)",
+            description: `Section duration must not exceed ${CONTRACT_LIMITS.MAX_SECTION_DURATION} seconds (3 hours)`,
           });
           setIsPublishing(false);
           return;
