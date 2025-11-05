@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 import Image from "next/image";
@@ -192,6 +192,7 @@ function EditCourseContent() {
   const [uploadingAssets, setUploadingAssets] = useState<
     Map<string, AssetInfo>
   >(new Map());
+  const draftSectionsRef = useRef<DraftSection[]>([]);
 
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -231,100 +232,6 @@ function EditCourseContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, activeAccount?.address]);
 
-  useEffect(() => {
-    const processingAssets = Array.from(uploadingAssets.values()).filter(
-      (asset) => asset.status === "processing"
-    );
-
-    if (processingAssets.length === 0) return;
-
-    const pollInterval = setInterval(async () => {
-      for (const asset of processingAssets) {
-        try {
-          const response = await fetch(`/api/livepeer/asset/${asset.assetId}`);
-          if (response.ok) {
-            const data = await response.json();
-
-            if (data.storage?.ipfs?.cid) {
-              setUploadingAssets((prev) => {
-                const updated = new Map(prev);
-                updated.set(asset.sectionId, {
-                  ...asset,
-                  status: "ready",
-                  cid: data.storage.ipfs.cid,
-                });
-                return updated;
-              });
-              toast.success(`Video ready for section`);
-            } else if (data.status?.phase === "failed") {
-              setUploadingAssets((prev) => {
-                const updated = new Map(prev);
-                updated.set(asset.sectionId, {
-                  ...asset,
-                  status: "failed",
-                  error: "Processing failed",
-                });
-                return updated;
-              });
-              toast.error("Video processing failed");
-            }
-          }
-        } catch (error) {
-          console.error("Poll asset error:", error);
-        }
-      }
-    }, 5000);
-
-    return () => clearInterval(pollInterval);
-  }, [uploadingAssets]);
-
-  useEffect(() => {
-    const processingAssets = Array.from(uploadingAssets.values()).filter(
-      (asset) => asset.status === "processing"
-    );
-
-    if (processingAssets.length === 0) return;
-
-    const pollInterval = setInterval(async () => {
-      for (const asset of processingAssets) {
-        try {
-          const response = await fetch(`/api/livepeer/asset/${asset.assetId}`);
-          if (response.ok) {
-            const data = await response.json();
-
-            if (data.storage?.ipfs?.cid) {
-              setUploadingAssets((prev) => {
-                const updated = new Map(prev);
-                updated.set(asset.sectionId, {
-                  ...asset,
-                  status: "ready",
-                  cid: data.storage.ipfs.cid,
-                });
-                return updated;
-              });
-              toast.success(`Video ready for section`);
-            } else if (data.status?.phase === "failed") {
-              setUploadingAssets((prev) => {
-                const updated = new Map(prev);
-                updated.set(asset.sectionId, {
-                  ...asset,
-                  status: "failed",
-                  error: "Processing failed",
-                });
-                return updated;
-              });
-              toast.error("Video processing failed");
-            }
-          }
-        } catch (error) {
-          console.error("Poll asset error:", error);
-        }
-      }
-    }, 5000);
-
-    return () => clearInterval(pollInterval);
-  }, [uploadingAssets]);
-
   async function loadCourseData() {
     if (!courseId) {
       toast.error("Missing course ID");
@@ -363,7 +270,9 @@ function EditCourseContent() {
       setIsAuthorized(true);
       setCourseData(course);
       setSections(course.sections || []);
-      setDraftSections(course.sections || []);
+      const initialDrafts = course.sections || [];
+      setDraftSections(initialDrafts);
+      draftSectionsRef.current = initialDrafts;
       setPendingChanges({
         sectionsToAdd: [],
         sectionsToUpdate: new Map(),
@@ -867,8 +776,8 @@ function EditCourseContent() {
           (s) => s.id === editingSectionId
         );
         if (draftSection) {
-          setDraftSections((prev) =>
-            prev.map((s) =>
+          setDraftSections((prev) => {
+            const updated = prev.map((s) =>
               s.id === editingSectionId
                 ? {
                     ...s,
@@ -878,13 +787,15 @@ function EditCourseContent() {
                     isModified: !s.isNew,
                   }
                 : s
-            )
-          );
+            );
+            draftSectionsRef.current = updated;
+            return updated;
+          });
 
           if (!draftSection.isNew) {
             setPendingChanges((prev) => {
               const updated = new Map(prev.sectionsToUpdate);
-              updated.set(editingSectionId, {
+              updated.set(draftSection.sectionId, {
                 title: sectionFormData.title.trim(),
                 contentCID: contentCID || sectionFormData.contentCID,
                 duration: sectionFormData.duration,
@@ -893,19 +804,22 @@ function EditCourseContent() {
             });
           } else {
             setPendingChanges((prev) => {
-              const updatedToAdd = prev.sectionsToAdd.map((s, idx) => {
-                if (
-                  draftSections.filter((d) => d.isNew).indexOf(draftSection) ===
-                  idx
-                ) {
-                  return {
-                    title: sectionFormData.title.trim(),
-                    contentCID: contentCID || sectionFormData.contentCID,
-                    duration: sectionFormData.duration,
-                  };
-                }
-                return s;
-              });
+              const newSections = draftSectionsRef.current.filter(
+                (s) => s.isNew
+              );
+              const newSectionIndex = newSections.findIndex(
+                (s) => s.id === editingSectionId
+              );
+
+              if (newSectionIndex === -1) return prev;
+
+              const updatedToAdd = [...prev.sectionsToAdd];
+              updatedToAdd[newSectionIndex] = {
+                title: sectionFormData.title.trim(),
+                contentCID: contentCID || sectionFormData.contentCID || "",
+                duration: sectionFormData.duration,
+              };
+
               return { ...prev, sectionsToAdd: updatedToAdd };
             });
           }
@@ -934,7 +848,11 @@ function EditCourseContent() {
           isDraft: true,
         };
 
-        setDraftSections((prev) => [...prev, newDraftSection]);
+        setDraftSections((prev) => {
+          const updated = [...prev, newDraftSection];
+          draftSectionsRef.current = updated;
+          return updated;
+        });
 
         setPendingChanges((prev) => ({
           ...prev,
@@ -966,21 +884,35 @@ function EditCourseContent() {
     }
 
     if (section.isNew) {
-      setDraftSections((prev) => prev.filter((s) => s.id !== section.id));
-      setPendingChanges((prev) => ({
-        ...prev,
-        sectionsToAdd: prev.sectionsToAdd.filter(
-          (_, idx) =>
-            idx !==
-            draftSections
-              .filter((s) => s.isNew)
-              .findIndex((s) => s.id === section.id)
-        ),
-      }));
-    } else {
-      setDraftSections((prev) =>
-        prev.map((s) => (s.id === section.id ? { ...s, isDeleted: true } : s))
+      const newSectionsBefore = draftSectionsRef.current.filter((s) => s.isNew);
+      const indexToRemove = newSectionsBefore.findIndex(
+        (s) => s.id === section.id
       );
+
+      setDraftSections((prev) => {
+        const updated = prev.filter((s) => s.id !== section.id);
+        draftSectionsRef.current = updated;
+        return updated;
+      });
+
+      setPendingChanges((prev) => {
+        if (indexToRemove === -1) return prev;
+
+        return {
+          ...prev,
+          sectionsToAdd: prev.sectionsToAdd.filter(
+            (_, idx) => idx !== indexToRemove
+          ),
+        };
+      });
+    } else {
+      setDraftSections((prev) => {
+        const updated = prev.map((s) =>
+          s.id === section.id ? { ...s, isDeleted: true } : s
+        );
+        draftSectionsRef.current = updated;
+        return updated;
+      });
       setPendingChanges((prev) => {
         const updated = new Set(prev.sectionsToDelete);
         updated.add(section.sectionId);
@@ -1006,7 +938,9 @@ function EditCourseContent() {
         ...s,
         orderId: idx,
       }));
-      return [...reorderedWithOrderId, ...deleted];
+      const updated = [...reorderedWithOrderId, ...deleted];
+      draftSectionsRef.current = updated;
+      return updated;
     });
 
     setPendingChanges((prev) => ({
