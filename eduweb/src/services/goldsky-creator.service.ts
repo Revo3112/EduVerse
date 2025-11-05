@@ -176,8 +176,8 @@ export interface CreatorCourseData {
   description: string;
   thumbnailCID: string;
   creator: string;
-  category: number;
-  difficulty: number;
+  category: string;
+  difficulty: string;
   price: string;
   priceInEth: string;
 
@@ -409,8 +409,8 @@ function transformCourse(raw: Record<string, unknown>): CreatorCourseData {
     description: (raw.description as string) || "",
     thumbnailCID: (raw.thumbnailCID as string) || "",
     creator: (raw.creator as string) || "",
-    category: bigIntToNumber(raw.category),
-    difficulty: bigIntToNumber(raw.difficulty),
+    category: (raw.category as string) || "Other",
+    difficulty: (raw.difficulty as string) || "Beginner",
     price: (raw.price as string) || "0",
     priceInEth: (raw.priceInEth as string) || "0",
 
@@ -693,28 +693,66 @@ export function getLivepeerUrl(cid: string): string {
 /**
  * Get category name from ID
  */
-export function getCategoryName(categoryId: number): string {
-  const categories = [
-    "Programming",
-    "Design",
-    "Business",
-    "Marketing",
-    "Personal Development",
-    "Photography",
-    "Music",
-    "Health & Fitness",
-    "Language",
-    "Other",
-  ];
-  return categories[categoryId] || "Unknown";
+export function getCategoryName(category: string | number): string {
+  if (typeof category === "number") {
+    const categories = [
+      "Programming",
+      "Design",
+      "Business",
+      "Marketing",
+      "Personal Development",
+      "Photography",
+      "Music",
+      "Health & Fitness",
+      "Language",
+      "Other",
+    ];
+    return categories[category] || "Unknown";
+  }
+
+  const categoryMap: Record<string, string> = {
+    Programming: "Programming",
+    Design: "Design",
+    Business: "Business",
+    Marketing: "Marketing",
+    DataScience: "Data Science",
+    Finance: "Finance",
+    Healthcare: "Healthcare",
+    Language: "Language",
+    Arts: "Arts",
+    Mathematics: "Mathematics",
+    Science: "Science",
+    Engineering: "Engineering",
+    Technology: "Technology",
+    Education: "Education",
+    Psychology: "Psychology",
+    Culinary: "Culinary",
+    PersonalDevelopment: "Personal Development",
+    Legal: "Legal",
+    Sports: "Sports",
+    Photography: "Photography",
+    Music: "Music",
+    Health: "Health & Fitness",
+    Lifestyle: "Lifestyle",
+    Other: "Other",
+  };
+
+  return categoryMap[category] || category;
 }
 
-/**
- * Get difficulty name from ID
- */
-export function getDifficultyName(difficultyId: number): string {
-  const difficulties = ["Beginner", "Intermediate", "Advanced"];
-  return difficulties[difficultyId] || "Unknown";
+export function getDifficultyName(difficulty: string | number): string {
+  if (typeof difficulty === "number") {
+    const difficulties = ["Beginner", "Intermediate", "Advanced"];
+    return difficulties[difficulty] || "Unknown";
+  }
+
+  const difficultyMap: Record<string, string> = {
+    Beginner: "Beginner",
+    Intermediate: "Intermediate",
+    Advanced: "Advanced",
+  };
+
+  return difficultyMap[difficulty] || difficulty;
 }
 
 /**
