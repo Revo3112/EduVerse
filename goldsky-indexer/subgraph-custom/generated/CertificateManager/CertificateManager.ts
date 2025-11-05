@@ -296,6 +296,24 @@ export class DefaultCertificateFeeUpdated__Params {
   }
 }
 
+export class DefaultMetadataBaseURIUpdated extends ethereum.Event {
+  get params(): DefaultMetadataBaseURIUpdated__Params {
+    return new DefaultMetadataBaseURIUpdated__Params(this);
+  }
+}
+
+export class DefaultMetadataBaseURIUpdated__Params {
+  _event: DefaultMetadataBaseURIUpdated;
+
+  constructor(event: DefaultMetadataBaseURIUpdated) {
+    this._event = event;
+  }
+
+  get newBaseURI(): string {
+    return this._event.parameters[0].value.toString();
+  }
+}
+
 export class OwnershipTransferred extends ethereum.Event {
   get params(): OwnershipTransferred__Params {
     return new OwnershipTransferred__Params(this);
@@ -1101,6 +1119,29 @@ export class CertificateManager extends ethereum.SmartContract {
     }
     let value = result.value;
     return ethereum.CallResult.fromValue(value[0].toBigInt());
+  }
+
+  defaultMetadataBaseURI(): string {
+    let result = super.call(
+      "defaultMetadataBaseURI",
+      "defaultMetadataBaseURI():(string)",
+      [],
+    );
+
+    return result[0].toString();
+  }
+
+  try_defaultMetadataBaseURI(): ethereum.CallResult<string> {
+    let result = super.tryCall(
+      "defaultMetadataBaseURI",
+      "defaultMetadataBaseURI():(string)",
+      [],
+    );
+    if (result.reverted) {
+      return new ethereum.CallResult();
+    }
+    let value = result.value;
+    return ethereum.CallResult.fromValue(value[0].toString());
   }
 
   defaultPlatformName(): string {
@@ -2337,6 +2378,36 @@ export class UpdateDefaultBaseRouteCall__Outputs {
   _call: UpdateDefaultBaseRouteCall;
 
   constructor(call: UpdateDefaultBaseRouteCall) {
+    this._call = call;
+  }
+}
+
+export class UpdateDefaultMetadataBaseURICall extends ethereum.Call {
+  get inputs(): UpdateDefaultMetadataBaseURICall__Inputs {
+    return new UpdateDefaultMetadataBaseURICall__Inputs(this);
+  }
+
+  get outputs(): UpdateDefaultMetadataBaseURICall__Outputs {
+    return new UpdateDefaultMetadataBaseURICall__Outputs(this);
+  }
+}
+
+export class UpdateDefaultMetadataBaseURICall__Inputs {
+  _call: UpdateDefaultMetadataBaseURICall;
+
+  constructor(call: UpdateDefaultMetadataBaseURICall) {
+    this._call = call;
+  }
+
+  get newBaseURI(): string {
+    return this._call.inputValues[0].value.toString();
+  }
+}
+
+export class UpdateDefaultMetadataBaseURICall__Outputs {
+  _call: UpdateDefaultMetadataBaseURICall;
+
+  constructor(call: UpdateDefaultMetadataBaseURICall) {
     this._call = call;
   }
 }

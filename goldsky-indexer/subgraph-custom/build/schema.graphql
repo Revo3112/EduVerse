@@ -558,6 +558,7 @@ type ContractConfigState @entity(immutable: false) {
   platformWallet: Bytes
   defaultPlatformName: String
   defaultBaseRoute: String
+  defaultMetadataBaseURI: String
 
   # CourseLicense configs
   platformFeePercentage: BigInt

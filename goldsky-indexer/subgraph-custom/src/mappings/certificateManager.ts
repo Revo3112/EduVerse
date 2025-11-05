@@ -15,6 +15,7 @@ import {
   CourseAdditionFeeUpdated,
   CourseCertificatePriceSet,
   DefaultBaseRouteUpdated,
+  DefaultMetadataBaseURIUpdated,
   DefaultCertificateFeeUpdated,
   PlatformNameUpdated,
   PlatformWalletUpdated,
@@ -72,6 +73,7 @@ function getOrCreateContractConfig(
     config.platformWallet = Bytes.fromHexString(ZERO_ADDRESS);
     config.defaultPlatformName = "";
     config.defaultBaseRoute = "";
+    config.defaultMetadataBaseURI = "";
     config.platformFeePercentage = ZERO_BIGINT;
     config.licenseURI = "";
     config.licenseBaseURI = "";
@@ -591,6 +593,39 @@ export function handleDefaultBaseRouteUpdated(
   );
 
   log.info("Default base route updated: {}", [event.params.newBaseRoute]);
+}
+
+export function handleDefaultMetadataBaseURIUpdated(
+  event: DefaultMetadataBaseURIUpdated,
+): void {
+  let config = getOrCreateContractConfig(event.address);
+  let oldURI = config.defaultMetadataBaseURI;
+
+  config.defaultMetadataBaseURI = event.params.newBaseURI;
+  config.lastUpdated = event.block.timestamp;
+  config.lastUpdateBlock = event.block.number;
+  config.lastUpdateTxHash = event.transaction.hash;
+  config.save();
+
+  let description = "Updated metadata base URI to: " + event.params.newBaseURI;
+
+  let eventId =
+    event.transaction.hash.toHexString() + "-" + event.logIndex.toString();
+  createAdminConfigEvent(
+    eventId,
+    event.transaction.from,
+    "METADATA_URI_UPDATE",
+    "defaultMetadataBaseURI",
+    oldURI,
+    event.params.newBaseURI,
+    CERTIFICATE_MANAGER_NAME,
+    description,
+    event.block.timestamp,
+    event.block.number,
+    event.transaction.hash,
+  );
+
+  log.info("Metadata base URI updated: {}", [event.params.newBaseURI]);
 }
 
 export function handlePlatformNameUpdated(event: PlatformNameUpdated): void {

@@ -4225,6 +4225,23 @@ export class ContractConfigState extends Entity {
     }
   }
 
+  get defaultMetadataBaseURI(): string | null {
+    let value = this.get("defaultMetadataBaseURI");
+    if (!value || value.kind == ValueKind.NULL) {
+      return null;
+    } else {
+      return value.toString();
+    }
+  }
+
+  set defaultMetadataBaseURI(value: string | null) {
+    if (!value) {
+      this.unset("defaultMetadataBaseURI");
+    } else {
+      this.set("defaultMetadataBaseURI", Value.fromString(<string>value));
+    }
+  }
+
   get platformFeePercentage(): BigInt | null {
     let value = this.get("platformFeePercentage");
     if (!value || value.kind == ValueKind.NULL) {

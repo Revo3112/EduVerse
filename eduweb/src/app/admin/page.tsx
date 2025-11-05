@@ -47,6 +47,7 @@ export default function AdminPage() {
     defaultCourseAddFee?: string;
     defaultPlatformName?: string;
     defaultBaseRoute?: string;
+    defaultMetadataBaseURI?: string;
     platformWallet?: string;
     platformFeePercentage?: string;
   }>({});
@@ -101,6 +102,7 @@ export default function AdminPage() {
         defaultCourseAddFee,
         defaultPlatformName,
         defaultBaseRoute,
+        defaultMetadataBaseURI,
         platformWalletAddr,
         platformFeePercentage,
       ] = await Promise.all([
@@ -126,6 +128,11 @@ export default function AdminPage() {
         }),
         readContract({
           contract: certificateManager,
+          method: "function defaultMetadataBaseURI() view returns (string)",
+          params: [],
+        }),
+        readContract({
+          contract: certificateManager,
           method: "function platformWallet() view returns (address)",
           params: [],
         }),
@@ -141,6 +148,7 @@ export default function AdminPage() {
         defaultCourseAddFee: defaultCourseAddFee.toString(),
         defaultPlatformName,
         defaultBaseRoute,
+        defaultMetadataBaseURI,
         platformWallet: platformWalletAddr,
         platformFeePercentage: platformFeePercentage.toString(),
       });
@@ -625,6 +633,14 @@ export default function AdminPage() {
                   <span className="text-muted-foreground">Base Route:</span>
                   <p className="font-mono break-all">
                     {contractData.defaultBaseRoute || "Not loaded"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">
+                    Metadata Base URI:
+                  </span>
+                  <p className="font-mono break-all">
+                    {contractData.defaultMetadataBaseURI || "Not loaded"}
                   </p>
                 </div>
                 <div>

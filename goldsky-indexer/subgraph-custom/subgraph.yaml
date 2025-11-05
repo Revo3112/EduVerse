@@ -234,6 +234,8 @@ dataSources:
           handler: handleBaseRouteUpdated
         - event: DefaultBaseRouteUpdated(string)
           handler: handleDefaultBaseRouteUpdated
+        - event: DefaultMetadataBaseURIUpdated(string)
+          handler: handleDefaultMetadataBaseURIUpdated
         - event: PlatformNameUpdated(string)
           handler: handlePlatformNameUpdated
         - event: CourseAdditionFeeUpdated(uint256)
