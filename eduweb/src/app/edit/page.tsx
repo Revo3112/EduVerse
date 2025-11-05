@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 import Image from "next/image";
+import { useThumbnailUrl } from "@/hooks/useThumbnailUrl";
 import {
   Card,
   CardContent,
@@ -54,7 +55,6 @@ import {
   prepareAddSectionTransaction,
   prepareUpdateSectionTransaction,
   prepareDeleteSectionTransaction,
-  prepareMoveSectionTransaction,
 } from "@/services/courseContract.service";
 import * as tus from "tus-js-client";
 
@@ -100,8 +100,30 @@ interface FormData {
 interface SectionFormData {
   title: string;
   duration: number;
-  assetId?: string;
   contentCID?: string;
+}
+
+interface DraftSection extends CourseSection {
+  isDraft?: boolean;
+  isNew?: boolean;
+  isModified?: boolean;
+  isDeleted?: boolean;
+  originalOrderId?: number;
+}
+
+interface PendingChanges {
+  sectionsToAdd: SectionFormData[];
+  sectionsToUpdate: Map<string, SectionFormData>;
+  sectionsToDelete: Set<string>;
+  reorderNeeded: boolean;
+}
+
+interface AssetInfo {
+  assetId: string;
+  status: "uploading" | "processing" | "ready" | "failed";
+  sectionId: string;
+  cid?: string;
+  error?: string;
 }
 
 const COURSE_CATEGORIES = [
@@ -138,7 +160,7 @@ const MIN_PRICE_ETH = 0.000001;
 
 const CONTRACT_LIMITS = {
   TITLE_MAX: 200,
-  DESCRIPTION_MAX: 2000,
+  DESCRIPTION_MAX: 1000,
   CREATOR_NAME_MAX: 100,
   SECTION_TITLE_MAX: 200,
   SECTION_DURATION_MIN: 60,
@@ -158,7 +180,18 @@ function EditCourseContent() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [courseData, setCourseData] = useState<CourseData | null>(null);
   const [sections, setSections] = useState<CourseSection[]>([]);
+  const [draftSections, setDraftSections] = useState<DraftSection[]>([]);
+  const [pendingChanges, setPendingChanges] = useState<PendingChanges>({
+    sectionsToAdd: [],
+    sectionsToUpdate: new Map(),
+    sectionsToDelete: new Set(),
+    reorderNeeded: false,
+  });
   const [hasChanges, setHasChanges] = useState(false);
+  const [hasSectionChanges, setHasSectionChanges] = useState(false);
+  const [uploadingAssets, setUploadingAssets] = useState<
+    Map<string, AssetInfo>
+  >(new Map());
 
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -178,6 +211,9 @@ function EditCourseContent() {
   const [thumbnailPreview, setThumbnailPreview] = useState<string>("");
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
+  const { thumbnailUrl: originalThumbnailUrl, loading: thumbnailUrlLoading } =
+    useThumbnailUrl(formData.thumbnailCID || undefined, 3600);
+
   const [sectionDialogOpen, setSectionDialogOpen] = useState(false);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [sectionFormData, setSectionFormData] = useState<SectionFormData>({
@@ -187,7 +223,6 @@ function EditCourseContent() {
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [processingAsset, setProcessingAsset] = useState(false);
 
   useEffect(() => {
     if (activeAccount?.address) {
@@ -195,6 +230,100 @@ function EditCourseContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, activeAccount?.address]);
+
+  useEffect(() => {
+    const processingAssets = Array.from(uploadingAssets.values()).filter(
+      (asset) => asset.status === "processing"
+    );
+
+    if (processingAssets.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      for (const asset of processingAssets) {
+        try {
+          const response = await fetch(`/api/livepeer/asset/${asset.assetId}`);
+          if (response.ok) {
+            const data = await response.json();
+
+            if (data.storage?.ipfs?.cid) {
+              setUploadingAssets((prev) => {
+                const updated = new Map(prev);
+                updated.set(asset.sectionId, {
+                  ...asset,
+                  status: "ready",
+                  cid: data.storage.ipfs.cid,
+                });
+                return updated;
+              });
+              toast.success(`Video ready for section`);
+            } else if (data.status?.phase === "failed") {
+              setUploadingAssets((prev) => {
+                const updated = new Map(prev);
+                updated.set(asset.sectionId, {
+                  ...asset,
+                  status: "failed",
+                  error: "Processing failed",
+                });
+                return updated;
+              });
+              toast.error("Video processing failed");
+            }
+          }
+        } catch (error) {
+          console.error("Poll asset error:", error);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [uploadingAssets]);
+
+  useEffect(() => {
+    const processingAssets = Array.from(uploadingAssets.values()).filter(
+      (asset) => asset.status === "processing"
+    );
+
+    if (processingAssets.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      for (const asset of processingAssets) {
+        try {
+          const response = await fetch(`/api/livepeer/asset/${asset.assetId}`);
+          if (response.ok) {
+            const data = await response.json();
+
+            if (data.storage?.ipfs?.cid) {
+              setUploadingAssets((prev) => {
+                const updated = new Map(prev);
+                updated.set(asset.sectionId, {
+                  ...asset,
+                  status: "ready",
+                  cid: data.storage.ipfs.cid,
+                });
+                return updated;
+              });
+              toast.success(`Video ready for section`);
+            } else if (data.status?.phase === "failed") {
+              setUploadingAssets((prev) => {
+                const updated = new Map(prev);
+                updated.set(asset.sectionId, {
+                  ...asset,
+                  status: "failed",
+                  error: "Processing failed",
+                });
+                return updated;
+              });
+              toast.error("Video processing failed");
+            }
+          }
+        } catch (error) {
+          console.error("Poll asset error:", error);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [uploadingAssets]);
 
   async function loadCourseData() {
     if (!courseId) {
@@ -234,6 +363,14 @@ function EditCourseContent() {
       setIsAuthorized(true);
       setCourseData(course);
       setSections(course.sections || []);
+      setDraftSections(course.sections || []);
+      setPendingChanges({
+        sectionsToAdd: [],
+        sectionsToUpdate: new Map(),
+        sectionsToDelete: new Set(),
+        reorderNeeded: false,
+      });
+      setHasSectionChanges(false);
 
       setFormData({
         title: course.title,
@@ -245,12 +382,6 @@ function EditCourseContent() {
         difficulty: course.difficulty,
         isActive: course.isActive,
       });
-
-      if (course.thumbnailCID) {
-        setThumbnailPreview(
-          `https://gateway.pinata.cloud/ipfs/${course.thumbnailCID}`
-        );
-      }
     } catch (error) {
       console.error("Failed to load course:", error);
       toast.error("Failed to load course");
@@ -288,6 +419,12 @@ function EditCourseContent() {
     }
   }
 
+  function removeThumbnail() {
+    setThumbnailFile(null);
+    setThumbnailPreview("");
+    setHasChanges(false);
+  }
+
   async function uploadThumbnail(): Promise<string> {
     if (!thumbnailFile) {
       throw new Error("No thumbnail file");
@@ -298,13 +435,13 @@ function EditCourseContent() {
       const formData = new FormData();
       formData.append("file", thumbnailFile);
 
-      const response = await fetch("/api/ipfs/signed-url", {
+      const response = await fetch("/api/upload-thumbnail", {
         method: "POST",
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error("Upload failed");
+        throw new Error("Failed to upload thumbnail");
       }
 
       const data = await response.json();
@@ -359,6 +496,28 @@ function EditCourseContent() {
       return;
     }
 
+    const processingAssets = Array.from(uploadingAssets.values()).filter(
+      (asset) => asset.status === "uploading" || asset.status === "processing"
+    );
+
+    if (processingAssets.length > 0) {
+      toast.error("Please wait for video processing to complete", {
+        description: `${processingAssets.length} video(s) still processing`,
+      });
+      return;
+    }
+
+    const failedAssets = Array.from(uploadingAssets.values()).filter(
+      (asset) => asset.status === "failed"
+    );
+
+    if (failedAssets.length > 0) {
+      toast.error("Some videos failed to process", {
+        description: "Please re-upload failed videos",
+      });
+      return;
+    }
+
     try {
       let thumbnailCID = formData.thumbnailCID;
 
@@ -367,40 +526,188 @@ function EditCourseContent() {
         thumbnailCID = await uploadThumbnail();
       }
 
-      const transaction = prepareUpdateCourseTransaction({
-        courseId: BigInt(courseId),
-        metadata: {
-          title: formData.title.trim(),
-          description: formData.description.trim(),
-          thumbnailCID: thumbnailCID,
-          creatorName: formData.creatorName.trim(),
-          category: formData.category,
-          difficulty: formData.difficulty,
-        },
-        pricePerMonth: formData.pricePerMonth,
-        isActive: formData.isActive,
-      });
-
-      sendTransaction(transaction, {
-        onSuccess: () => {
-          toast.success("Course updated successfully");
-          setHasChanges(false);
-          setTimeout(() => {
-            router.push("/myCourse");
-          }, 1500);
-        },
-        onError: (error) => {
-          toast.error("Failed to update course", {
-            description: error.message,
-          });
-        },
-      });
+      await commitAllChanges(thumbnailCID);
     } catch (error) {
-      toast.error("Failed to prepare update", {
+      toast.error("Failed to update", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     }
   };
+
+  async function commitAllChanges(thumbnailCID: string) {
+    const courseTransaction = prepareUpdateCourseTransaction({
+      courseId: BigInt(courseId!),
+      metadata: {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        thumbnailCID: thumbnailCID,
+        creatorName: formData.creatorName.trim(),
+        category: formData.category,
+        difficulty: formData.difficulty,
+      },
+      pricePerMonth: formData.pricePerMonth,
+      isActive: formData.isActive,
+    });
+
+    sendTransaction(courseTransaction, {
+      onSuccess: async () => {
+        toast.success("Course metadata updated");
+
+        if (hasSectionChanges) {
+          await commitSectionChanges();
+        } else {
+          setHasChanges(false);
+          setTimeout(() => {
+            router.push("/myCourse");
+          }, 1500);
+        }
+      },
+      onError: (error) => {
+        toast.error("Failed to update course", {
+          description: error.message,
+        });
+      },
+    });
+  }
+
+  async function commitSectionChanges() {
+    const { sectionsToAdd, sectionsToUpdate, sectionsToDelete } =
+      pendingChanges;
+
+    let completedOperations = 0;
+    const totalOperations =
+      sectionsToAdd.length + sectionsToUpdate.size + sectionsToDelete.size;
+
+    if (sectionsToDelete.size > 0) {
+      for (const sectionId of sectionsToDelete) {
+        const transaction = prepareDeleteSectionTransaction({
+          courseId: BigInt(courseId!),
+          sectionId: BigInt(sectionId),
+        });
+
+        sendTransaction(transaction, {
+          onSuccess: () => {
+            completedOperations++;
+            toast.success(
+              `Section deleted (${completedOperations}/${totalOperations})`
+            );
+            if (completedOperations === totalOperations) {
+              finalizeSectionCommit();
+            }
+          },
+          onError: (error) => {
+            toast.error("Failed to delete section", {
+              description: error.message,
+            });
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    if (sectionsToUpdate.size > 0) {
+      for (const [sectionId, sectionData] of sectionsToUpdate) {
+        const section = sections.find((s) => s.id === sectionId);
+        if (!section) continue;
+
+        const asset = uploadingAssets.get(sectionId);
+        const finalCID = asset?.cid || sectionData.contentCID;
+
+        if (!finalCID) {
+          toast.error(`Section ${sectionData.title} missing video CID`);
+          continue;
+        }
+
+        const transaction = prepareUpdateSectionTransaction({
+          courseId: BigInt(courseId!),
+          sectionId: BigInt(section.sectionId),
+          title: sectionData.title,
+          contentCID: finalCID,
+          duration: sectionData.duration,
+        });
+
+        sendTransaction(transaction, {
+          onSuccess: () => {
+            completedOperations++;
+            toast.success(
+              `Section updated (${completedOperations}/${totalOperations})`
+            );
+            if (completedOperations === totalOperations) {
+              finalizeSectionCommit();
+            }
+          },
+          onError: (error) => {
+            toast.error("Failed to update section", {
+              description: error.message,
+            });
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    if (sectionsToAdd.length > 0) {
+      for (let i = 0; i < sectionsToAdd.length; i++) {
+        const sectionData = sectionsToAdd[i];
+        const draftSection = draftSections.find(
+          (d) =>
+            d.isNew && draftSections.filter((s) => s.isNew).indexOf(d) === i
+        );
+
+        const asset = draftSection
+          ? uploadingAssets.get(draftSection.id)
+          : undefined;
+        const finalCID = asset?.cid || sectionData.contentCID;
+
+        if (!finalCID) {
+          toast.error(`Section ${sectionData.title} missing video CID`);
+          continue;
+        }
+
+        const transaction = prepareAddSectionTransaction({
+          courseId: BigInt(courseId!),
+          title: sectionData.title,
+          contentCID: finalCID,
+          duration: sectionData.duration,
+        });
+
+        sendTransaction(transaction, {
+          onSuccess: () => {
+            completedOperations++;
+            toast.success(
+              `Section added (${completedOperations}/${totalOperations})`
+            );
+            if (completedOperations === totalOperations) {
+              finalizeSectionCommit();
+            }
+          },
+          onError: (error) => {
+            toast.error("Failed to add section", {
+              description: error.message,
+            });
+          },
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    if (totalOperations === 0) {
+      finalizeSectionCommit();
+    }
+  }
+
+  function finalizeSectionCommit() {
+    toast.success("All changes committed successfully!");
+    setHasChanges(false);
+    setHasSectionChanges(false);
+    setTimeout(() => {
+      loadCourseData();
+      router.push("/myCourse");
+    }, 2000);
+  }
 
   const handleCancel = () => {
     if (hasChanges) {
@@ -456,7 +763,10 @@ function EditCourseContent() {
     }
   }
 
-  async function uploadVideoToLivepeer(file: File): Promise<string> {
+  async function uploadVideoToLivepeer(
+    file: File,
+    sectionId: string
+  ): Promise<string> {
     setUploadingVideo(true);
     setVideoUploadProgress(0);
 
@@ -487,48 +797,29 @@ function EditCourseContent() {
           },
           onError: (error) => {
             console.error("Upload failed:", error);
+            setUploadingVideo(false);
             reject(error);
           },
           onProgress: (bytesUploaded, bytesTotal) => {
             const percentage = (bytesUploaded / bytesTotal) * 100;
             setVideoUploadProgress(Math.round(percentage));
           },
-          onSuccess: async () => {
+          onSuccess: () => {
             setUploadingVideo(false);
-            setProcessingAsset(true);
-            toast.info("Video uploaded. Processing...");
+            setVideoUploadProgress(0);
 
-            let attempts = 0;
-            const maxAttempts = 60;
+            setUploadingAssets((prev) => {
+              const updated = new Map(prev);
+              updated.set(sectionId, {
+                assetId: asset.id,
+                status: "processing",
+                sectionId,
+              });
+              return updated;
+            });
 
-            while (attempts < maxAttempts) {
-              await new Promise((res) => setTimeout(res, 3000));
-              attempts++;
-
-              try {
-                const assetResponse = await fetch(
-                  `/api/livepeer/asset/${asset.id}`
-                );
-                if (assetResponse.ok) {
-                  const assetData = await assetResponse.json();
-
-                  if (assetData.storage?.ipfs?.cid) {
-                    setProcessingAsset(false);
-                    toast.success("Video ready!");
-                    resolve(assetData.storage.ipfs.cid);
-                    return;
-                  }
-
-                  if (assetData.status?.phase === "failed") {
-                    throw new Error("Video processing failed");
-                  }
-                }
-              } catch (err) {
-                console.error("Check asset error:", err);
-              }
-            }
-
-            throw new Error("Video processing timeout");
+            toast.info("Video uploaded. Processing in background...");
+            resolve(asset.id);
           },
         });
 
@@ -536,7 +827,7 @@ function EditCourseContent() {
       });
     } catch (error) {
       setUploadingVideo(false);
-      setProcessingAsset(false);
+      setVideoUploadProgress(0);
       throw error;
     }
   }
@@ -566,70 +857,102 @@ function EditCourseContent() {
       let contentCID = sectionFormData.contentCID;
 
       if (videoFile) {
+        const tempSectionId = editingSectionId || `temp-${Date.now()}`;
         toast.info("Uploading video...");
-        contentCID = await uploadVideoToLivepeer(videoFile);
-      }
-
-      if (!contentCID) {
-        toast.error("Video is required");
-        return;
+        contentCID = await uploadVideoToLivepeer(videoFile, tempSectionId);
       }
 
       if (editingSectionId) {
-        const section = sections.find((s) => s.id === editingSectionId);
-        if (!section) {
-          toast.error("Section not found");
-          return;
-        }
+        const draftSection = draftSections.find(
+          (s) => s.id === editingSectionId
+        );
+        if (draftSection) {
+          setDraftSections((prev) =>
+            prev.map((s) =>
+              s.id === editingSectionId
+                ? {
+                    ...s,
+                    title: sectionFormData.title.trim(),
+                    contentCID: contentCID || s.contentCID,
+                    duration: sectionFormData.duration,
+                    isModified: !s.isNew,
+                  }
+                : s
+            )
+          );
 
-        const transaction = prepareUpdateSectionTransaction({
-          courseId: BigInt(courseId!),
-          sectionId: BigInt(section.sectionId),
-          title: sectionFormData.title.trim(),
-          contentCID: contentCID,
-          duration: sectionFormData.duration,
-        });
-
-        sendTransaction(transaction, {
-          onSuccess: () => {
-            toast.success("Section updated");
-            setSectionDialogOpen(false);
-            setTimeout(() => loadCourseData(), 2000);
-          },
-          onError: (error) => {
-            toast.error("Failed to update section", {
-              description: error.message,
+          if (!draftSection.isNew) {
+            setPendingChanges((prev) => {
+              const updated = new Map(prev.sectionsToUpdate);
+              updated.set(editingSectionId, {
+                title: sectionFormData.title.trim(),
+                contentCID: contentCID || sectionFormData.contentCID,
+                duration: sectionFormData.duration,
+              });
+              return { ...prev, sectionsToUpdate: updated };
             });
-          },
-        });
+          } else {
+            setPendingChanges((prev) => {
+              const updatedToAdd = prev.sectionsToAdd.map((s, idx) => {
+                if (
+                  draftSections.filter((d) => d.isNew).indexOf(draftSection) ===
+                  idx
+                ) {
+                  return {
+                    title: sectionFormData.title.trim(),
+                    contentCID: contentCID || sectionFormData.contentCID,
+                    duration: sectionFormData.duration,
+                  };
+                }
+                return s;
+              });
+              return { ...prev, sectionsToAdd: updatedToAdd };
+            });
+          }
+
+          setHasSectionChanges(true);
+          toast.success("Section updated (draft)");
+        }
       } else {
-        if (sections.length >= CONTRACT_LIMITS.MAX_SECTIONS) {
+        if (draftSections.length >= CONTRACT_LIMITS.MAX_SECTIONS) {
           toast.error(
             `Maximum ${CONTRACT_LIMITS.MAX_SECTIONS} sections allowed`
           );
           return;
         }
 
-        const transaction = prepareAddSectionTransaction({
-          courseId: BigInt(courseId!),
+        const newDraftId = `draft-${Date.now()}`;
+        const newDraftSection: DraftSection = {
+          id: newDraftId,
+          sectionId: "0",
           title: sectionFormData.title.trim(),
-          contentCID: contentCID,
+          contentCID: contentCID || "",
           duration: sectionFormData.duration,
-        });
+          orderId: draftSections.length,
+          createdAt: new Date().toISOString(),
+          isNew: true,
+          isDraft: true,
+        };
 
-        sendTransaction(transaction, {
-          onSuccess: () => {
-            toast.success("Section added");
-            setSectionDialogOpen(false);
-            setTimeout(() => loadCourseData(), 2000);
-          },
-          onError: (error) => {
-            toast.error("Failed to add section", {
-              description: error.message,
-            });
-          },
-        });
+        setDraftSections((prev) => [...prev, newDraftSection]);
+
+        setPendingChanges((prev) => ({
+          ...prev,
+          sectionsToAdd: [
+            ...prev.sectionsToAdd,
+            {
+              title: sectionFormData.title.trim(),
+              contentCID: contentCID || "",
+              duration: sectionFormData.duration,
+            },
+          ],
+        }));
+
+        setHasSectionChanges(true);
+        toast.success("Section added (draft)");
       }
+
+      setSectionDialogOpen(false);
     } catch (error) {
       toast.error("Operation failed", {
         description: error instanceof Error ? error.message : "Unknown error",
@@ -637,49 +960,62 @@ function EditCourseContent() {
     }
   }
 
-  function handleDeleteSection(section: CourseSection) {
+  function handleDeleteSection(section: DraftSection) {
     if (!confirm(`Delete "${section.title}"?`)) {
       return;
     }
 
-    const transaction = prepareDeleteSectionTransaction({
-      courseId: BigInt(courseId!),
-      sectionId: BigInt(section.sectionId),
-    });
+    if (section.isNew) {
+      setDraftSections((prev) => prev.filter((s) => s.id !== section.id));
+      setPendingChanges((prev) => ({
+        ...prev,
+        sectionsToAdd: prev.sectionsToAdd.filter(
+          (_, idx) =>
+            idx !==
+            draftSections
+              .filter((s) => s.isNew)
+              .findIndex((s) => s.id === section.id)
+        ),
+      }));
+    } else {
+      setDraftSections((prev) =>
+        prev.map((s) => (s.id === section.id ? { ...s, isDeleted: true } : s))
+      );
+      setPendingChanges((prev) => {
+        const updated = new Set(prev.sectionsToDelete);
+        updated.add(section.sectionId);
+        return { ...prev, sectionsToDelete: updated };
+      });
+    }
 
-    sendTransaction(transaction, {
-      onSuccess: () => {
-        toast.success("Section deleted");
-        setTimeout(() => loadCourseData(), 2000);
-      },
-      onError: (error) => {
-        toast.error("Failed to delete section", {
-          description: error.message,
-        });
-      },
-    });
+    setHasSectionChanges(true);
+    toast.success("Section marked for deletion (draft)");
   }
 
   function handleMoveSection(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return;
 
-    const transaction = prepareMoveSectionTransaction({
-      courseId: BigInt(courseId!),
-      fromIndex: BigInt(fromIndex),
-      toIndex: BigInt(toIndex),
+    const visibleSections = draftSections.filter((s) => !s.isDeleted);
+    const reordered = [...visibleSections];
+    const [movedSection] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, movedSection);
+
+    setDraftSections((prev) => {
+      const deleted = prev.filter((s) => s.isDeleted);
+      const reorderedWithOrderId = reordered.map((s, idx) => ({
+        ...s,
+        orderId: idx,
+      }));
+      return [...reorderedWithOrderId, ...deleted];
     });
 
-    sendTransaction(transaction, {
-      onSuccess: () => {
-        toast.success("Section moved");
-        setTimeout(() => loadCourseData(), 2000);
-      },
-      onError: (error) => {
-        toast.error("Failed to move section", {
-          description: error.message,
-        });
-      },
-    });
+    setPendingChanges((prev) => ({
+      ...prev,
+      reorderNeeded: true,
+    }));
+
+    setHasSectionChanges(true);
+    toast.success("Section reordered (draft)");
   }
 
   function formatDuration(seconds: number): string {
@@ -702,7 +1038,6 @@ function EditCourseContent() {
           <CardContent className="space-y-4">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-10 w-full" />
           </CardContent>
         </Card>
       </div>
@@ -870,30 +1205,64 @@ function EditCourseContent() {
             <CardTitle>Thumbnail</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {thumbnailPreview && (
-              <div className="relative w-full h-64 rounded-lg overflow-hidden border">
+            {thumbnailPreview || originalThumbnailUrl ? (
+              <div className="relative group">
                 <Image
-                  src={thumbnailPreview}
-                  alt="Thumbnail preview"
-                  fill
-                  className="object-cover"
+                  src={thumbnailPreview || originalThumbnailUrl || ""}
+                  alt="Thumbnail"
+                  width={400}
+                  height={192}
+                  className="w-full h-48 object-cover rounded-xl"
+                  unoptimized
                 />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center gap-2">
+                  <label className="px-4 py-2 bg-white text-slate-800 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleThumbnailChange}
+                      className="hidden"
+                    />
+                    Change
+                  </label>
+                  {thumbnailPreview && (
+                    <button
+                      type="button"
+                      onClick={removeThumbnail}
+                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : thumbnailUrlLoading ? (
+              <div className="flex items-center justify-center h-48 border-2 border-dashed border-border rounded-xl">
+                <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center h-48 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 transition-all">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleThumbnailChange}
+                  className="hidden"
+                />
+                <Upload className="h-10 w-10 text-muted-foreground mb-2" />
+                <span className="text-sm font-medium text-foreground">
+                  Click to upload thumbnail
+                </span>
+                <span className="text-xs text-muted-foreground mt-1">
+                  PNG, JPG up to 5MB
+                </span>
+              </label>
+            )}
+            {uploadingThumbnail && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Uploading thumbnail...
               </div>
             )}
-            <div className="flex items-center gap-4">
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={handleThumbnailChange}
-                className="flex-1"
-              />
-              {uploadingThumbnail && (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Max 5MB. Recommended: 1200x630px
-            </p>
           </CardContent>
         </Card>
 
@@ -940,25 +1309,6 @@ function EditCourseContent() {
             </div>
           </CardContent>
         </Card>
-
-        <div className="flex items-center justify-between border-t pt-6">
-          <Button type="button" variant="outline" onClick={handleCancel}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={isSending || !hasChanges}>
-            {isSending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Updating...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Update Course
-              </>
-            )}
-          </Button>
-        </div>
       </form>
 
       <Card>
@@ -967,13 +1317,17 @@ function EditCourseContent() {
             <div>
               <CardTitle>Course Sections</CardTitle>
               <CardDescription>
-                Manage your course content ({sections.length}/
+                Manage your course content (
+                {draftSections.filter((s) => !s.isDeleted).length}/
                 {CONTRACT_LIMITS.MAX_SECTIONS})
               </CardDescription>
             </div>
             <Button
               onClick={openAddSectionDialog}
-              disabled={sections.length >= CONTRACT_LIMITS.MAX_SECTIONS}
+              disabled={
+                draftSections.filter((s) => !s.isDeleted).length >=
+                CONTRACT_LIMITS.MAX_SECTIONS
+              }
             >
               <Plus className="mr-2 h-4 w-4" />
               Add Section
@@ -981,83 +1335,175 @@ function EditCourseContent() {
           </div>
         </CardHeader>
         <CardContent>
-          {sections.length === 0 ? (
+          {draftSections.filter((s) => !s.isDeleted).length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Video className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No sections yet. Add your first section to get started.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {sections.map((section, index) => (
-                <div
-                  key={section.id}
-                  className="flex items-center gap-3 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-                >
-                  <GripVertical className="h-5 w-5 text-muted-foreground cursor-move" />
-                  <div className="flex-1 min-w-0">
+              {draftSections
+                .filter((s) => !s.isDeleted)
+                .map((section, index) => (
+                  <div
+                    key={section.id}
+                    className={`flex items-center gap-3 p-4 border rounded-lg hover:bg-accent/50 transition-colors ${
+                      section.isNew
+                        ? "border-green-500 bg-green-50 dark:bg-green-950/20"
+                        : section.isModified
+                        ? "border-amber-500 bg-amber-50 dark:bg-amber-950/20"
+                        : ""
+                    }`}
+                  >
+                    <GripVertical className="h-5 w-5 text-muted-foreground cursor-move" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-muted-foreground">
+                          {index + 1}.
+                        </span>
+                        <h4 className="font-semibold truncate">
+                          {section.title}
+                        </h4>
+                        {section.isNew && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-green-500 text-white rounded">
+                            NEW
+                          </span>
+                        )}
+                        {section.isModified && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-amber-500 text-white rounded">
+                            MODIFIED
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatDuration(section.duration)}
+                        </span>
+                        {uploadingAssets.has(section.id) ? (
+                          <span className="flex items-center gap-1">
+                            {uploadingAssets.get(section.id)?.status ===
+                            "processing" ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                                <span className="text-blue-500">
+                                  Processing...
+                                </span>
+                              </>
+                            ) : uploadingAssets.get(section.id)?.status ===
+                              "ready" ? (
+                              <>
+                                <CheckCircle className="h-3 w-3 text-green-500" />
+                                <span className="text-green-500">Ready</span>
+                              </>
+                            ) : uploadingAssets.get(section.id)?.status ===
+                              "failed" ? (
+                              <>
+                                <AlertCircle className="h-3 w-3 text-red-500" />
+                                <span className="text-red-500">Failed</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="h-3 w-3 text-amber-500" />
+                                <span className="text-amber-500">
+                                  Uploading...
+                                </span>
+                              </>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <Video className="h-3 w-3" />
+                            {section.contentCID
+                              ? `${section.contentCID.slice(0, 8)}...`
+                              : "No video"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm text-muted-foreground">
-                        {index + 1}.
-                      </span>
-                      <h4 className="font-semibold truncate">
-                        {section.title}
-                      </h4>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {formatDuration(section.duration)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Video className="h-3 w-3" />
-                        {section.contentCID.slice(0, 8)}...
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {index > 0 && (
+                      {index > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleMoveSection(index, index - 1)}
+                          disabled={isSending}
+                        >
+                          ↑
+                        </Button>
+                      )}
+                      {index <
+                        draftSections.filter((s) => !s.isDeleted).length -
+                          1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleMoveSection(index, index + 1)}
+                          disabled={isSending}
+                        >
+                          ↓
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleMoveSection(index, index - 1)}
+                        onClick={() => openEditSectionDialog(section)}
                         disabled={isSending}
                       >
-                        ↑
+                        <Edit className="h-4 w-4" />
                       </Button>
-                    )}
-                    {index < sections.length - 1 && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleMoveSection(index, index + 1)}
+                        onClick={() => handleDeleteSection(section)}
                         disabled={isSending}
                       >
-                        ↓
+                        <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEditSectionDialog(section)}
-                      disabled={isSending}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteSection(section)}
-                      disabled={isSending}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <div className="flex items-center justify-between border-t pt-6">
+        <Button type="button" variant="outline" onClick={handleCancel}>
+          Cancel
+        </Button>
+        <div className="flex items-center gap-3">
+          {hasSectionChanges && (
+            <span className="text-sm text-amber-600 dark:text-amber-400">
+              {pendingChanges.sectionsToAdd.length} to add,{" "}
+              {pendingChanges.sectionsToUpdate.size} to update,{" "}
+              {pendingChanges.sectionsToDelete.size} to delete
+            </span>
+          )}
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              isSending ||
+              (!hasChanges && !hasSectionChanges) ||
+              Array.from(uploadingAssets.values()).some(
+                (a) => a.status === "uploading" || a.status === "processing"
+              )
+            }
+          >
+            {isSending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Updating...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                Update Course {hasSectionChanges && "& Commit Sections"}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
 
       <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
         <DialogContent className="max-w-2xl">
@@ -1155,7 +1601,9 @@ function EditCourseContent() {
               </div>
             )}
 
-            {processingAsset && (
+            {Array.from(uploadingAssets.values()).some(
+              (a) => a.status === "processing"
+            ) && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Processing video (this may take a few minutes)...
@@ -1167,18 +1615,14 @@ function EditCourseContent() {
             <Button
               variant="outline"
               onClick={() => setSectionDialogOpen(false)}
-              disabled={uploadingVideo || processingAsset || isSending}
+              disabled={uploadingVideo || isSending}
             >
               Cancel
             </Button>
             <Button
               onClick={handleSectionSubmit}
               disabled={
-                uploadingVideo ||
-                processingAsset ||
-                isSending ||
-                !sectionFormData.title.trim() ||
-                (!editingSectionId && !videoFile)
+                uploadingVideo || isSending || !sectionFormData.title.trim()
               }
             >
               {isSending ? (
