@@ -931,6 +931,14 @@ export default function CreateCoursePage() {
     thumbnailCID: string;
     videoCIDs: { sectionId: string; cid: string; filename: string }[];
   }> => {
+    console.log("[Create Course] 📤 uploadCourseAssetsToIPFS started");
+    console.log(
+      "[Create Course] Environment:",
+      typeof window !== "undefined" ? "client" : "server"
+    );
+    console.log(
+      "[Create Course] API endpoint: /api/course/upload-assets-hybrid"
+    );
     try {
       // Step 1: Validate thumbnail exists
       if (!formData.thumbnailFile) {
@@ -988,18 +996,48 @@ export default function CreateCoursePage() {
         )
       );
 
-      const setupResponse = await fetch("/api/course/upload-assets-hybrid", {
-        method: "POST",
-        body: uploadFormData,
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+      let setupResponse;
+      try {
+        setupResponse = await fetch("/api/course/upload-assets-hybrid", {
+          method: "POST",
+          body: uploadFormData,
+          signal: controller.signal,
+        });
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === "AbortError") {
+          throw new Error(
+            "Upload request timed out after 2 minutes. Please try again with fewer or smaller videos."
+          );
+        }
+        throw new Error(
+          "Network error: Unable to reach upload server. Please check your connection and try again."
+        );
+      }
+
+      clearTimeout(timeoutId);
 
       if (!setupResponse.ok) {
-        const errorData = await setupResponse.json();
-        throw new Error(errorData.error || "Failed to setup uploads");
+        let errorMessage = "Failed to setup uploads";
+        try {
+          const errorData = await setupResponse.json();
+          errorMessage = errorData.error || errorData.details || errorMessage;
+        } catch {
+          errorMessage = `Server error (${setupResponse.status}): ${setupResponse.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const setupResult = await setupResponse.json();
-      console.log("[Create Course] Setup successful:", setupResult);
+      console.log("[Create Course] ✅ Setup successful:", setupResult);
+      console.log("[Create Course] Thumbnail CID:", setupResult.thumbnailCID);
+      console.log(
+        "[Create Course] TUS endpoints received:",
+        setupResult.tusEndpoints?.length || 0
+      );
 
       // Update thumbnail status
       setThumbnailUploadStatus({
@@ -1191,9 +1229,12 @@ export default function CreateCoursePage() {
 
   // Publish course with real IPFS upload
   const publishCourse = async () => {
+    console.log("[Create Course] 🚀 publishCourse called");
+    console.log("[Create Course] isPublishing will be set to true");
     setIsPublishing(true);
     setUploadStage(UploadStage.UPLOADING_THUMBNAIL);
     setUploadError(undefined);
+    console.log("[Create Course] Modal should now be visible");
 
     try {
       // Validate required fields matching smart contract

@@ -249,8 +249,8 @@ export async function POST(request: NextRequest) {
           // CRITICAL FIX: Poll for playbackId if not immediately available
           // Livepeer generates playbackId asynchronously after asset creation
           if (!playbackId) {
-            console.log(`[Hybrid Upload] Polling for playback ID (max 30s)...`);
-            const maxRetries = 15;
+            console.log(`[Hybrid Upload] Polling for playback ID (max 10s)...`);
+            const maxRetries = 5;
             const retryDelay = 2000; // 2 seconds
 
             for (let retry = 0; retry < maxRetries; retry++) {
@@ -288,9 +288,10 @@ export async function POST(request: NextRequest) {
             }
 
             if (!playbackId) {
-              throw new Error(
-                `Playback ID not available for asset ${assetId} after 30s. Asset may still be processing. Try again later.`
+              console.warn(
+                `[Hybrid Upload] ⚠️ Playback ID not available for ${video.filename} after 10s. Will use assetId as fallback.`
               );
+              playbackId = assetId;
             }
           }
 

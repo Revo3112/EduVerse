@@ -18,7 +18,7 @@
  * Uses Shadcn UI components for consistent design language
  */
 
-'use client';
+"use client";
 
 import {
   Dialog,
@@ -26,9 +26,9 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Progress } from '@/components/ui/progress';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import {
   AlertCircle,
   CheckCircle,
@@ -38,18 +38,18 @@ import {
   Sparkles,
   Upload,
   Video,
-} from 'lucide-react';
+} from "lucide-react";
 
 /**
  * Upload stage enumeration
  */
 export enum UploadStage {
-  IDLE = 'IDLE',
-  UPLOADING_THUMBNAIL = 'UPLOADING_THUMBNAIL',
-  UPLOADING_VIDEOS = 'UPLOADING_VIDEOS',
-  FINALIZING = 'FINALIZING',
-  COMPLETE = 'COMPLETE',
-  ERROR = 'ERROR',
+  IDLE = "IDLE",
+  UPLOADING_THUMBNAIL = "UPLOADING_THUMBNAIL",
+  UPLOADING_VIDEOS = "UPLOADING_VIDEOS",
+  FINALIZING = "FINALIZING",
+  COMPLETE = "COMPLETE",
+  ERROR = "ERROR",
 }
 
 /**
@@ -58,7 +58,7 @@ export enum UploadStage {
 export interface FileUploadStatus {
   filename: string;
   progress: number;
-  status: 'pending' | 'uploading' | 'completed' | 'error';
+  status: "pending" | "uploading" | "completed" | "error";
   cid?: string;
   error?: string;
 }
@@ -102,6 +102,17 @@ export function CourseUploadProgress({
   onClose,
   error,
 }: CourseUploadProgressProps) {
+  // Debug logging for modal visibility
+  console.log("[CourseUploadProgress] Render:", {
+    isOpen,
+    stage,
+    thumbnailStatus: thumbnailStatus?.status,
+    videoStatusesCount: videoStatuses.length,
+    currentVideoIndex,
+    totalVideos,
+    hasError: !!error,
+  });
+
   // Calculate overall progress
   const calculateOverallProgress = (): number => {
     if (stage === UploadStage.IDLE) return 0;
@@ -112,9 +123,9 @@ export function CourseUploadProgress({
 
     // Thumbnail progress (33% or 50% depending on whether there are videos)
     if (thumbnailStatus) {
-      if (thumbnailStatus.status === 'completed') {
+      if (thumbnailStatus.status === "completed") {
         progress += 100 / steps;
-      } else if (thumbnailStatus.status === 'uploading') {
+      } else if (thumbnailStatus.status === "uploading") {
         progress += (thumbnailStatus.progress / 100) * (100 / steps);
       }
     }
@@ -122,8 +133,8 @@ export function CourseUploadProgress({
     // Video progress
     if (totalVideos > 0) {
       const videoProgress = videoStatuses.reduce((sum, video) => {
-        if (video.status === 'completed') return sum + 100;
-        if (video.status === 'uploading') return sum + video.progress;
+        if (video.status === "completed") return sum + 100;
+        if (video.status === "uploading") return sum + video.progress;
         return sum;
       }, 0);
 
@@ -139,17 +150,19 @@ export function CourseUploadProgress({
   const getStageDescription = (): string => {
     switch (stage) {
       case UploadStage.UPLOADING_THUMBNAIL:
-        return 'Uploading course thumbnail to IPFS...';
+        return "Uploading course thumbnail to IPFS...";
       case UploadStage.UPLOADING_VIDEOS:
-        return `Uploading section videos to IPFS (${currentVideoIndex + 1} of ${totalVideos})...`;
+        return `Uploading section videos to IPFS (${
+          currentVideoIndex + 1
+        } of ${totalVideos})...`;
       case UploadStage.FINALIZING:
-        return 'Finalizing upload and preparing course data...';
+        return "Finalizing upload and preparing course data...";
       case UploadStage.COMPLETE:
-        return 'Upload completed successfully!';
+        return "Upload completed successfully!";
       case UploadStage.ERROR:
-        return 'Upload failed. Please try again.';
+        return "Upload failed. Please try again.";
       default:
-        return 'Preparing upload...';
+        return "Preparing upload...";
     }
   };
 
@@ -171,14 +184,31 @@ export function CourseUploadProgress({
     }
   };
 
+  if (!isOpen) {
+    console.log("[CourseUploadProgress] Modal not visible - isOpen is false");
+    return null;
+  }
+
+  console.log("[CourseUploadProgress] Modal should be visible now");
+
   return (
-    <Dialog open={isOpen} onOpenChange={stage === UploadStage.COMPLETE || stage === UploadStage.ERROR ? onClose : undefined}>
-      <DialogContent className="sm:max-w-[600px]" onInteractOutside={(e) => {
-        // Prevent closing during upload
-        if (stage !== UploadStage.COMPLETE && stage !== UploadStage.ERROR) {
-          e.preventDefault();
-        }
-      }}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={
+        stage === UploadStage.COMPLETE || stage === UploadStage.ERROR
+          ? onClose
+          : undefined
+      }
+    >
+      <DialogContent
+        className="sm:max-w-[600px]"
+        onInteractOutside={(e) => {
+          // Prevent closing during upload
+          if (stage !== UploadStage.COMPLETE && stage !== UploadStage.ERROR) {
+            e.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
@@ -186,7 +216,9 @@ export function CourseUploadProgress({
             </div>
             <div>
               <DialogTitle className="text-2xl font-bold">
-                {stage === UploadStage.COMPLETE ? 'Upload Complete!' : 'Publishing Course'}
+                {stage === UploadStage.COMPLETE
+                  ? "Upload Complete!"
+                  : "Publishing Course"}
               </DialogTitle>
               <DialogDescription className="text-sm">
                 Uploading assets to IPFS - Do not close this window
@@ -259,7 +291,9 @@ export function CourseUploadProgress({
             <div className="space-y-2">
               <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Video className="h-4 w-4" />
-                Section Videos ({videoStatuses.filter(v => v.status === 'completed').length}/{videoStatuses.length})
+                Section Videos (
+                {videoStatuses.filter((v) => v.status === "completed").length}/
+                {videoStatuses.length})
               </h4>
 
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
@@ -288,7 +322,8 @@ export function CourseUploadProgress({
                     All Assets Uploaded Successfully
                   </h4>
                   <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                    Your course assets have been securely stored on IPFS. You can now proceed with the blockchain transaction.
+                    Your course assets have been securely stored on IPFS. You
+                    can now proceed with the blockchain transaction.
                   </p>
                 </div>
               </div>
@@ -306,7 +341,7 @@ export function CourseUploadProgress({
 interface FileUploadItemProps {
   filename: string;
   progress: number;
-  status: 'pending' | 'uploading' | 'completed' | 'error';
+  status: "pending" | "uploading" | "completed" | "error";
   cid?: string;
   error?: string;
   index?: number;
@@ -322,14 +357,16 @@ function FileUploadItem({
 }: FileUploadItemProps) {
   const getStatusIcon = () => {
     switch (status) {
-      case 'completed':
+      case "completed":
         return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'uploading':
+      case "uploading":
         return <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />;
-      case 'error':
+      case "error":
         return <AlertCircle className="h-4 w-4 text-red-600" />;
       default:
-        return <div className="h-4 w-4 rounded-full border-2 border-gray-300" />;
+        return (
+          <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+        );
     }
   };
 
@@ -347,38 +384,43 @@ function FileUploadItem({
   // };
 
   return (
-    <div className={cn(
-      'bg-muted/50 rounded-lg p-3 border transition-all',
-      status === 'uploading' && 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20',
-      status === 'completed' && 'border-green-200 dark:border-green-800',
-      status === 'error' && 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20'
-    )}>
+    <div
+      className={cn(
+        "bg-muted/50 rounded-lg p-3 border transition-all",
+        status === "uploading" &&
+          "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20",
+        status === "completed" && "border-green-200 dark:border-green-800",
+        status === "error" &&
+          "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20"
+      )}
+    >
       <div className="flex items-center gap-3">
         {getStatusIcon()}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-medium text-foreground truncate">
-              {index && `${index}. `}{filename}
+              {index && `${index}. `}
+              {filename}
             </p>
-            {status === 'uploading' && (
+            {status === "uploading" && (
               <span className="text-xs font-semibold text-blue-600">
                 {progress}%
               </span>
             )}
           </div>
 
-          {status === 'uploading' && (
+          {status === "uploading" && (
             <Progress value={progress} className="h-1 mt-2" />
           )}
 
-          {status === 'completed' && cid && (
+          {status === "completed" && cid && (
             <p className="text-xs text-muted-foreground mt-1 truncate">
               CID: {cid}
             </p>
           )}
 
-          {status === 'error' && error && (
+          {status === "error" && error && (
             <p className="text-xs text-red-600 dark:text-red-400 mt-1">
               {error}
             </p>
