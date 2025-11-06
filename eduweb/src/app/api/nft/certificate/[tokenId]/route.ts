@@ -13,16 +13,16 @@ const COURSE_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS!;
 
 interface CertificateData {
   tokenId: bigint;
+  platformName: string;
   recipientName: string;
-  institutionName: string;
-  recipient: string;
+  recipientAddress: string;
+  lifetimeFlag: boolean;
   isValid: boolean;
-  isMinted: boolean;
+  ipfsCID: string;
   baseRoute: string;
-  qrData: string;
-  mintedAt: bigint;
+  issuedAt: bigint;
   lastUpdated: bigint;
-  totalCourses: bigint;
+  totalCoursesCompleted: bigint;
   paymentReceiptHash: string;
 }
 
@@ -76,7 +76,7 @@ export async function GET(
     const certificateData = (await readContract({
       contract: certificateContract,
       method:
-        "function getCertificate(uint256 tokenId) view returns (tuple(uint256 tokenId, string recipientName, string institutionName, address recipient, bool isValid, bool isMinted, string baseRoute, string qrData, uint256 mintedAt, uint256 lastUpdated, uint256 totalCourses, bytes32 paymentReceiptHash))",
+        "function getCertificate(uint256 tokenId) view returns (tuple(uint256 tokenId, string platformName, string recipientName, address recipientAddress, bool lifetimeFlag, bool isValid, string ipfsCID, string baseRoute, uint256 issuedAt, uint256 lastUpdated, uint256 totalCoursesCompleted, bytes32 paymentReceiptHash))",
       params: [tokenId],
     })) as CertificateData;
 
@@ -105,13 +105,13 @@ export async function GET(
     }
 
     const metadata: CertificateMetadata = {
-      name: `${certificateData.institutionName} Certificate - ${certificateData.recipientName}`,
+      name: `${certificateData.platformName} Certificate - ${certificateData.recipientName}`,
       description: `This certificate verifies that ${
         certificateData.recipientName
-      } has successfully completed ${certificateData.totalCourses} course${
-        certificateData.totalCourses > 1 ? "s" : ""
-      } from ${
-        certificateData.institutionName
+      } has successfully completed ${
+        certificateData.totalCoursesCompleted
+      } course${certificateData.totalCoursesCompleted > 1 ? "s" : ""} from ${
+        certificateData.platformName
       }. Courses completed: ${courseTitles.join(", ")}.`,
       image: `${process.env.NEXT_PUBLIC_APP_URL}/api/nft/certificate/${tokenIdStr}/image`,
       external_url: `${process.env.NEXT_PUBLIC_APP_URL}/certificates?verify=${tokenId}`,
@@ -121,12 +121,12 @@ export async function GET(
           value: certificateData.recipientName,
         },
         {
-          trait_type: "Institution",
-          value: certificateData.institutionName,
+          trait_type: "Platform",
+          value: certificateData.platformName,
         },
         {
           trait_type: "Total Courses",
-          value: Number(certificateData.totalCourses),
+          value: Number(certificateData.totalCoursesCompleted),
           display_type: "number",
         },
         {
@@ -134,9 +134,9 @@ export async function GET(
           value: courseTitles.join(", "),
         },
         {
-          trait_type: "Minted Date",
+          trait_type: "Issued Date",
           value: new Date(
-            Number(certificateData.mintedAt) * 1000
+            Number(certificateData.issuedAt) * 1000
           ).toISOString(),
         },
         {
@@ -150,8 +150,16 @@ export async function GET(
           value: certificateData.isValid ? "Valid" : "Revoked",
         },
         {
+          trait_type: "Lifetime Certificate",
+          value: certificateData.lifetimeFlag ? "Yes" : "No",
+        },
+        {
           trait_type: "Recipient Address",
-          value: certificateData.recipient,
+          value: certificateData.recipientAddress,
+        },
+        {
+          trait_type: "IPFS CID",
+          value: certificateData.ipfsCID,
         },
         {
           trait_type: "Token ID",

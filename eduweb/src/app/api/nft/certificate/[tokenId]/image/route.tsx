@@ -10,16 +10,16 @@ const COURSE_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_COURSE_FACTORY_ADDRESS!;
 
 interface CertificateData {
   tokenId: bigint;
+  platformName: string;
   recipientName: string;
-  institutionName: string;
-  recipient: string;
+  recipientAddress: string;
+  lifetimeFlag: boolean;
   isValid: boolean;
-  isMinted: boolean;
+  ipfsCID: string;
   baseRoute: string;
-  qrData: string;
-  mintedAt: bigint;
+  issuedAt: bigint;
   lastUpdated: bigint;
-  totalCourses: bigint;
+  totalCoursesCompleted: bigint;
   paymentReceiptHash: string;
 }
 
@@ -65,7 +65,7 @@ export async function GET(
     const certificateData = (await readContract({
       contract: certificateContract,
       method:
-        "function getCertificate(uint256 tokenId) view returns (tuple(uint256 tokenId, string recipientName, string institutionName, address recipient, bool isValid, bool isMinted, string baseRoute, string qrData, uint256 mintedAt, uint256 lastUpdated, uint256 totalCourses, bytes32 paymentReceiptHash))",
+        "function getCertificate(uint256 tokenId) view returns (tuple(uint256 tokenId, string platformName, string recipientName, address recipientAddress, bool lifetimeFlag, bool isValid, string ipfsCID, string baseRoute, uint256 issuedAt, uint256 lastUpdated, uint256 totalCoursesCompleted, bytes32 paymentReceiptHash))",
       params: [tokenId],
     })) as CertificateData;
 
@@ -93,8 +93,8 @@ export async function GET(
       }
     }
 
-    const mintDate = new Date(
-      Number(certificateData.mintedAt) * 1000
+    const issueDate = new Date(
+      Number(certificateData.issuedAt) * 1000
     ).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
@@ -187,7 +187,7 @@ export async function GET(
                   textAlign: "center",
                 }}
               >
-                {certificateData.institutionName}
+                {certificateData.platformName}
               </h1>
               <p
                 style={{
@@ -248,8 +248,8 @@ export async function GET(
               >
                 has successfully completed{" "}
                 <strong style={{ color: "#1F2937" }}>
-                  {certificateData.totalCourses} course
-                  {Number(certificateData.totalCourses) > 1 ? "s" : ""}
+                  {certificateData.totalCoursesCompleted} course
+                  {Number(certificateData.totalCoursesCompleted) > 1 ? "s" : ""}
                 </strong>
               </p>
             </div>
@@ -311,7 +311,7 @@ export async function GET(
                     color: "#1F2937",
                   }}
                 >
-                  {mintDate}
+                  {issueDate}
                 </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column" }}>
