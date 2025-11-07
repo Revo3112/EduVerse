@@ -1507,9 +1507,6 @@ export default function CreateCoursePage() {
       // CourseFactory.createCourse(title, description, thumbnailCID, creatorName, pricePerMonth, category, difficulty)
       // CourseFactory.batchAddSections(courseId, SectionData[]) where SectionData = (title, contentCID, duration)
 
-      // Filter only sections that have video files
-      const videoSections = sections.filter((s) => s.file !== null);
-
       const courseData = {
         title: formData.title,
         description: formData.description,
@@ -1518,15 +1515,14 @@ export default function CreateCoursePage() {
         pricePerMonth: formData.pricePerMonth,
         category: formData.category,
         difficulty: formData.difficulty,
-        sections: videoSections.map((section) => {
-          const videoCID = videoCIDs.find((v) => v.sectionId === section.id);
-          if (!videoCID?.cid) {
+        sections: videoCIDs.map((videoCID) => {
+          const section = sections.find((s) => s.id === videoCID.sectionId);
+          if (!section) {
             throw new Error(
-              `Video CID not found for section "${section.title}". Upload may have failed.`
+              `Section not found for video CID "${videoCID.cid}". Data inconsistency detected.`
             );
           }
 
-          // CRITICAL: Validate contentCID is not empty
           const contentCID = videoCID.cid.trim();
           if (contentCID.length === 0) {
             throw new Error(
@@ -1534,7 +1530,6 @@ export default function CreateCoursePage() {
             );
           }
 
-          // CRITICAL: Livepeer playback IDs should be 16 chars minimum
           if (contentCID.length < 10) {
             throw new Error(
               `Invalid playback ID for section "${section.title}": "${contentCID}" (too short). Expected Livepeer playback ID or valid CID.`

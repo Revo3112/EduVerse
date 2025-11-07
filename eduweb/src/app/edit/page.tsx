@@ -144,6 +144,8 @@ interface ProgressState {
     current: number;
     total: number;
     fileName?: string;
+    uploadProgress?: number;
+    processingStatus?: "uploading" | "processing" | "ready" | "getting-cid";
   };
   operationDetails: {
     deleted: number;
@@ -823,7 +825,11 @@ function EditCourseContent() {
   }
 
   async function uploadVideoToLivepeer(
-    file: File
+    file: File,
+    onProgressUpdate?: (status: {
+      uploadProgress?: number;
+      processingStatus?: "uploading" | "processing" | "ready" | "getting-cid";
+    }) => void
   ): Promise<{ assetId: string; cid: string }> {
     try {
       const response = await fetch("/api/livepeer/upload", {
@@ -842,6 +848,8 @@ function EditCourseContent() {
       const data = await response.json();
       const { tusEndpoint, asset } = data;
 
+      onProgressUpdate?.({ uploadProgress: 0, processingStatus: "uploading" });
+
       await new Promise<void>((resolve, reject) => {
         const upload = new tus.Upload(file, {
           endpoint: tusEndpoint,
@@ -857,8 +865,16 @@ function EditCourseContent() {
           onProgress: (bytesUploaded, bytesTotal) => {
             const percentage = (bytesUploaded / bytesTotal) * 100;
             console.log(`Upload progress: ${Math.round(percentage)}%`);
+            onProgressUpdate?.({
+              uploadProgress: Math.round(percentage),
+              processingStatus: "uploading",
+            });
           },
           onSuccess: () => {
+            onProgressUpdate?.({
+              uploadProgress: 100,
+              processingStatus: "processing",
+            });
             resolve();
           },
         });
@@ -884,10 +900,24 @@ function EditCourseContent() {
           console.log(
             `[Upload] Video ready with CID: ${assetData.storage.ipfs.cid}`
           );
+          onProgressUpdate?.({
+            uploadProgress: 100,
+            processingStatus: "ready",
+          });
           return {
             assetId: asset.id,
             cid: assetData.storage.ipfs.cid,
           };
+        } else if (phase === "ready" && !assetData.storage?.ipfs?.cid) {
+          onProgressUpdate?.({
+            uploadProgress: 100,
+            processingStatus: "getting-cid",
+          });
+        } else if (phase === "processing" || phase === "waiting") {
+          onProgressUpdate?.({
+            uploadProgress: 100,
+            processingStatus: "processing",
+          });
         } else if (phase === "failed") {
           throw new Error("Video processing failed");
         }
@@ -901,6 +931,118 @@ function EditCourseContent() {
     } catch (error) {
       console.error("[Upload] Failed:", error);
       throw error;
+    }
+  }
+</text>
+
+<old_text line=907>
+  async function uploadAllVideosBeforeCommit(): Promise<boolean> {
+    const sectionsWithVideo = draftSections.filter(
+      (s) => s.videoFile && !s.isDeleted
+    );
+
+    if (sectionsWithVideo.length === 0) {
+      return true;
+    }
+
+    setProgressState((prev) => ({
+      ...prev,
+      videoProgress: {
+        current: 0,
+        total: sectionsWithVideo.length,
+      },
+    }));
+
+    try {
+      for (let i = 0; i < sectionsWithVideo.length; i++) {
+        const section = sectionsWithVideo[i];
+
+        setProgressState((prev) => ({
+          ...prev,
+          currentOperation: `Uploading video ${i + 1}/${
+            sectionsWithVideo.length
+          }...`,
+          videoProgress: {
+            current: i,
+            total: sectionsWithVideo.length,
+            fileName: section.videoFileName || "video",
+            uploadProgress: 0,
+            processingStatus: "uploading",
+          },
+        }));
+
+        const { assetId, cid } = await uploadVideoToLivepeer(
+          section.videoFile!,
+          (status) => {
+            setProgressState((prev) => ({
+              ...prev,
+              videoProgress: {
+                ...prev.videoProgress,
+                uploadProgress: status.uploadProgress,
+                processingStatus: status.processingStatus,
+              },
+            }));
+          }
+        );
+
+        setDraftSections((prev) => {
+          const updated = prev.map((s) =>
+            s.id === section.id
+              ? { ...s, contentCID: cid, assetId, videoFile: undefined }
+              : s
+          );
+          draftSectionsRef.current = updated;
+          return updated;
+        });
+
+        if (section.isNew) {
+          setPendingChanges((prev) => {
+            const newSections = draftSectionsRef.current.filter((s) => s.isNew);
+            const newSectionIndex = newSections.findIndex(
+              (s) => s.id === section.id
+            );
+
+            if (newSectionIndex === -1) return prev;
+
+            const updatedToAdd = [...prev.sectionsToAdd];
+            updatedToAdd[newSectionIndex] = {
+              ...updatedToAdd[newSectionIndex],
+              contentCID: cid,
+            };
+
+            return { ...prev, sectionsToAdd: updatedToAdd };
+          });
+        } else {
+          setPendingChanges((prev) => {
+            const updated = new Map(prev.sectionsToUpdate);
+            const existing = updated.get(section.sectionId);
+            if (existing) {
+              updated.set(section.sectionId, {
+                ...existing,
+                contentCID: cid,
+              });
+            }
+            return { ...prev, sectionsToUpdate: updated };
+          });
+        }
+
+        setProgressState((prev) => ({
+          ...prev,
+          videoProgress: {
+            ...prev.videoProgress,
+            current: i + 1,
+            uploadProgress: 100,
+            processingStatus: "ready",
+          },
+        }));
+      }
+
+      return true;
+    } catch (error) {
+      toast.error("Video upload failed", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+      return false;
     }
   }
 
@@ -1948,19 +2090,73 @@ function EditCourseContent() {
               {/* Video Progress */}
               {progressState.stage === "uploading-videos" &&
                 progressState.videoProgress.total > 0 && (
-                  <div className="bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-2">
+                  <div className="bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2">
                       <Video className="h-4 w-4 text-purple-600" />
                       <span className="text-sm font-semibold text-purple-900 dark:text-purple-100">
                         Video Upload Progress
                       </span>
                     </div>
-                    <div className="text-xs text-purple-700 dark:text-purple-300">
-                      {progressState.videoProgress.fileName && (
-                        <p className="mb-1 truncate">
+
+                    {progressState.videoProgress.fileName && (
+                      <div className="text-xs text-purple-700 dark:text-purple-300">
+                        <p className="mb-1 truncate font-medium">
                           {progressState.videoProgress.fileName}
                         </p>
+                      </div>
+                    )}
+
+                    {/* Processing Status */}
+                    {progressState.videoProgress.processingStatus && (
+                      <div className="flex items-center gap-2 text-xs">
+                        {progressState.videoProgress.processingStatus === "uploading" && (
+                          <>
+                            <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
+                            <span className="text-purple-700 dark:text-purple-300">
+                              Uploading to Livepeer... {progressState.videoProgress.uploadProgress || 0}%
+                            </span>
+                          </>
+                        )}
+                        {progressState.videoProgress.processingStatus === "processing" && (
+                          <>
+                            <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
+                            <span className="text-purple-700 dark:text-purple-300">
+                              Processing video... This may take a few minutes
+                            </span>
+                          </>
+                        )}
+                        {progressState.videoProgress.processingStatus === "getting-cid" && (
+                          <>
+                            <div className="h-2 w-2 bg-orange-500 rounded-full animate-pulse" />
+                            <span className="text-purple-700 dark:text-purple-300">
+                              Finalizing IPFS storage...
+                            </span>
+                          </>
+                        )}
+                        {progressState.videoProgress.processingStatus === "ready" && (
+                          <>
+                            <div className="h-2 w-2 bg-green-500 rounded-full" />
+                            <span className="text-purple-700 dark:text-purple-300">
+                              Video ready!
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Upload Progress Bar */}
+                    {progressState.videoProgress.uploadProgress !== undefined &&
+                      progressState.videoProgress.processingStatus === "uploading" && (
+                        <div className="space-y-1">
+                          <Progress
+                            value={progressState.videoProgress.uploadProgress}
+                            className="h-1.5"
+                          />
+                        </div>
                       )}
+
+                    {/* Overall Video Count */}
+                    <div className="text-xs text-purple-700 dark:text-purple-300 pt-1 border-t border-purple-200 dark:border-purple-800">
                       <p>
                         {progressState.videoProgress.current} of{" "}
                         {progressState.videoProgress.total} videos uploaded
