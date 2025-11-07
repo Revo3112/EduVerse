@@ -264,11 +264,11 @@ export function validateSections(sections: SectionData[]): {
     return { valid: false, error: "At least one section is required" };
   }
 
-  if (sections.length > 50) {
+  if (sections.length > 1000) {
     return {
       valid: false,
       error:
-        "Batch exceeds maximum limit of 50 sections. Split into multiple batches.",
+        "Batch exceeds maximum limit of 1000 sections. Split into multiple batches.",
     };
   }
 
@@ -328,7 +328,7 @@ export function ethToWei(ethValue: string): bigint {
     throw new Error(`Invalid ETH value: ${ethValue}`);
   }
 
-  const MAX_ETH = 1000000;
+  const MAX_ETH = 1;
   if (eth > MAX_ETH) {
     throw new Error(`ETH value too large: ${eth} (max: ${MAX_ETH})`);
   }
@@ -410,6 +410,11 @@ export function prepareCreateCourseTransaction(
   }
 
   const priceInWei = ethToWei(params.pricePerMonth);
+
+  const MAX_PRICE_WEI = ethToWei("1");
+  if (priceInWei > MAX_PRICE_WEI) {
+    throw new Error(`Price too high: ${params.pricePerMonth} ETH (max: 1 ETH)`);
+  }
 
   const categoryEnum = categoryToEnum(params.metadata.category);
   const difficultyEnum = difficultyToEnum(params.metadata.difficulty);
@@ -698,11 +703,9 @@ export function prepareUpdateCourseTransaction(
 
   const priceInWei = ethToWei(params.pricePerMonth);
 
-  const MAX_PRICE_WEI = ethToWei("1000000");
+  const MAX_PRICE_WEI = ethToWei("1");
   if (priceInWei > MAX_PRICE_WEI) {
-    throw new Error(
-      `Price too high: ${params.pricePerMonth} ETH (max: 1,000,000 ETH)`
-    );
+    throw new Error(`Price too high: ${params.pricePerMonth} ETH (max: 1 ETH)`);
   }
 
   const transaction = prepareContractCall({
