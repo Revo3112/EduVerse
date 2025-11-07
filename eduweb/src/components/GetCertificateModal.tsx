@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useActiveAccount } from "thirdweb/react";
 import {
-  checkCertificateEligibility,
+  checkEligibilityForCertificate,
   getCertificatePrice,
   getUserCertificateId,
   getCertificateCompletedCourses,
@@ -39,7 +39,7 @@ export function GetCertificateModal({
   const account = useActiveAccount();
   const address = account?.address;
 
-  const { mintOrUpdateCertificate, isMinting } = useCertificate();
+  const { mintOrUpdateCertificate } = useCertificate();
 
   const [recipientName, setRecipientName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -78,7 +78,7 @@ export function GetCertificateModal({
         setPriceLoading(true);
         setCheckingEligibility(true);
 
-        const eligibilityResult = await checkCertificateEligibility(
+        const eligibilityResult = await checkEligibilityForCertificate(
           address,
           courseId
         );
@@ -90,11 +90,9 @@ export function GetCertificateModal({
         const hasExistingCert = tokenId > BigInt(0);
         setIsFirstCertificate(!hasExistingCert);
 
-        let completedCoursesArray: bigint[] = [];
         if (hasExistingCert) {
           const courses = await getCertificateCompletedCourses(tokenId);
           setExistingCourses(courses);
-          completedCoursesArray = courses;
 
           const alreadyAdded = courses.some(
             (c) => c.toString() === courseId.toString()
