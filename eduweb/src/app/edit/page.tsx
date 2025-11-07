@@ -1180,7 +1180,6 @@ function EditCourseContent() {
                       id="price"
                       type="number"
                       step="0.001"
-                      min={0.00001}
                       max={MAX_PRICE_ETH}
                       value={formData.pricePerMonth}
                       onChange={(e) =>
