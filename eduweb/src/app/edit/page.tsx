@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -46,6 +47,8 @@ import {
   Video,
   Upload,
   Clock,
+  CheckCircle,
+  FileCheck,
 } from "lucide-react";
 import { executeQuery } from "@/lib/graphql-client";
 import { GET_COURSE_DETAILS } from "@/lib/graphql-queries";
@@ -121,6 +124,36 @@ interface PendingChanges {
   reorderNeeded: boolean;
 }
 
+interface ProgressState {
+  isOpen: boolean;
+  stage:
+    | "idle"
+    | "uploading-thumbnail"
+    | "uploading-videos"
+    | "updating-metadata"
+    | "deleting-sections"
+    | "updating-sections"
+    | "adding-sections"
+    | "reordering-sections"
+    | "complete"
+    | "error";
+  currentOperation: string;
+  currentStep: number;
+  totalSteps: number;
+  videoProgress: {
+    current: number;
+    total: number;
+    fileName?: string;
+  };
+  operationDetails: {
+    deleted: number;
+    updated: number;
+    added: number;
+    reordered: boolean;
+  };
+  error?: string;
+}
+
 const COURSE_CATEGORIES = [
   { value: "Programming", label: "Programming", icon: "💻" },
   { value: "Design", label: "Design", icon: "🎨" },
@@ -174,6 +207,24 @@ function EditCourseContent() {
   const [hasChanges, setHasChanges] = useState(false);
   const [hasSectionChanges, setHasSectionChanges] = useState(false);
   const draftSectionsRef = useRef<DraftSection[]>([]);
+
+  const [progressState, setProgressState] = useState<ProgressState>({
+    isOpen: false,
+    stage: "idle",
+    currentOperation: "",
+    currentStep: 0,
+    totalSteps: 0,
+    videoProgress: {
+      current: 0,
+      total: 0,
+    },
+    operationDetails: {
+      deleted: 0,
+      updated: 0,
+      added: 0,
+      reordered: false,
+    },
+  });
 
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -390,22 +441,80 @@ function EditCourseContent() {
     }
 
     try {
+      const totalOps =
+        (thumbnailFile ? 1 : 0) +
+        (sectionsWithVideo.length > 0 ? 1 : 0) +
+        1 +
+        (hasSectionChanges
+          ? pendingChanges.sectionsToDelete.size +
+            pendingChanges.sectionsToUpdate.size +
+            pendingChanges.sectionsToAdd.length +
+            (pendingChanges.reorderNeeded ? 1 : 0)
+          : 0);
+
+      setProgressState({
+        isOpen: true,
+        stage: thumbnailFile ? "uploading-thumbnail" : "uploading-videos",
+        currentOperation: thumbnailFile
+          ? "Uploading thumbnail..."
+          : "Preparing updates...",
+        currentStep: 0,
+        totalSteps: totalOps,
+        videoProgress: {
+          current: 0,
+          total: sectionsWithVideo.length,
+        },
+        operationDetails: {
+          deleted: 0,
+          updated: 0,
+          added: 0,
+          reordered: false,
+        },
+      });
+
       let thumbnailCID = formData.thumbnailCID;
 
       if (thumbnailFile) {
-        toast.info("Uploading thumbnail...");
+        setProgressState((prev) => ({
+          ...prev,
+          stage: "uploading-thumbnail",
+          currentOperation: "Uploading thumbnail to IPFS...",
+        }));
         thumbnailCID = await uploadThumbnail();
+        setProgressState((prev) => ({
+          ...prev,
+          currentStep: prev.currentStep + 1,
+        }));
       }
 
       if (sectionsWithVideo.length > 0) {
+        setProgressState((prev) => ({
+          ...prev,
+          stage: "uploading-videos",
+          currentOperation: "Uploading section videos...",
+        }));
         const videosUploaded = await uploadAllVideosBeforeCommit();
         if (!videosUploaded) {
+          setProgressState((prev) => ({
+            ...prev,
+            stage: "error",
+            error: "Failed to upload videos",
+          }));
           return;
         }
+        setProgressState((prev) => ({
+          ...prev,
+          currentStep: prev.currentStep + 1,
+        }));
       }
 
       await commitAllChanges(thumbnailCID);
     } catch (error) {
+      setProgressState((prev) => ({
+        ...prev,
+        stage: "error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      }));
       toast.error("Failed to update", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
@@ -413,6 +522,12 @@ function EditCourseContent() {
   };
 
   async function commitAllChanges(thumbnailCID: string) {
+    setProgressState((prev) => ({
+      ...prev,
+      stage: "updating-metadata",
+      currentOperation: "Updating course metadata on blockchain...",
+    }));
+
     const courseTransaction = prepareUpdateCourseTransaction({
       courseId: BigInt(courseId!),
       metadata: {
@@ -429,18 +544,31 @@ function EditCourseContent() {
 
     sendTransaction(courseTransaction, {
       onSuccess: async () => {
-        toast.success("Course metadata updated");
+        setProgressState((prev) => ({
+          ...prev,
+          currentStep: prev.currentStep + 1,
+        }));
 
         if (hasSectionChanges) {
           await commitSectionChanges();
         } else {
+          setProgressState((prev) => ({
+            ...prev,
+            stage: "complete",
+            currentOperation: "All changes saved successfully!",
+          }));
           setHasChanges(false);
           setTimeout(() => {
             router.push("/myCourse");
-          }, 1500);
+          }, 2000);
         }
       },
       onError: (error) => {
+        setProgressState((prev) => ({
+          ...prev,
+          stage: "error",
+          error: error.message,
+        }));
         toast.error("Failed to update course", {
           description: error.message,
         });
@@ -461,15 +589,15 @@ function EditCourseContent() {
       });
     };
 
-    let completedOperations = 0;
-    const totalOperations =
-      sectionsToAdd.length +
-      sectionsToUpdate.size +
-      sectionsToDelete.size +
-      (reorderNeeded ? 1 : 0);
-
     try {
       if (sectionsToDelete.size > 0) {
+        setProgressState((prev) => ({
+          ...prev,
+          stage: "deleting-sections",
+          currentOperation: `Deleting sections (0/${sectionsToDelete.size})...`,
+        }));
+
+        let deleted = 0;
         for (const sectionId of sectionsToDelete) {
           const sectionToDelete = draftSections.find(
             (s) => s.sectionId === sectionId
@@ -485,16 +613,30 @@ function EditCourseContent() {
           });
 
           await sendTransactionPromise(transaction);
-          completedOperations++;
-          toast.success(
-            `Section deleted (${completedOperations}/${totalOperations})`
-          );
+          deleted++;
+
+          setProgressState((prev) => ({
+            ...prev,
+            currentStep: prev.currentStep + 1,
+            currentOperation: `Deleting sections (${deleted}/${sectionsToDelete.size})...`,
+            operationDetails: {
+              ...prev.operationDetails,
+              deleted,
+            },
+          }));
 
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
 
       if (sectionsToUpdate.size > 0) {
+        setProgressState((prev) => ({
+          ...prev,
+          stage: "updating-sections",
+          currentOperation: `Updating sections (0/${sectionsToUpdate.size})...`,
+        }));
+
+        let updated = 0;
         for (const [sectionId, sectionData] of sectionsToUpdate) {
           const section = sections.find((s) => s.id === sectionId);
           if (!section) continue;
@@ -513,16 +655,29 @@ function EditCourseContent() {
           });
 
           await sendTransactionPromise(transaction);
-          completedOperations++;
-          toast.success(
-            `Section updated (${completedOperations}/${totalOperations})`
-          );
+          updated++;
+
+          setProgressState((prev) => ({
+            ...prev,
+            currentStep: prev.currentStep + 1,
+            currentOperation: `Updating sections (${updated}/${sectionsToUpdate.size})...`,
+            operationDetails: {
+              ...prev.operationDetails,
+              updated,
+            },
+          }));
 
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
 
       if (sectionsToAdd.length > 0) {
+        setProgressState((prev) => ({
+          ...prev,
+          stage: "adding-sections",
+          currentOperation: `Adding sections (0/${sectionsToAdd.length})...`,
+        }));
+
         const deletedNewSections = draftSections.filter(
           (s) => s.isNew && s.isDeleted
         );
@@ -532,6 +687,7 @@ function EditCourseContent() {
           }
         }
 
+        let added = 0;
         for (let i = 0; i < sectionsToAdd.length; i++) {
           const sectionData = sectionsToAdd[i];
 
@@ -548,16 +704,29 @@ function EditCourseContent() {
           });
 
           await sendTransactionPromise(transaction);
-          completedOperations++;
-          toast.success(
-            `Section added (${completedOperations}/${totalOperations})`
-          );
+          added++;
+
+          setProgressState((prev) => ({
+            ...prev,
+            currentStep: prev.currentStep + 1,
+            currentOperation: `Adding sections (${added}/${sectionsToAdd.length})...`,
+            operationDetails: {
+              ...prev.operationDetails,
+              added,
+            },
+          }));
 
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
 
       if (reorderNeeded) {
+        setProgressState((prev) => ({
+          ...prev,
+          stage: "reordering-sections",
+          currentOperation: "Reordering sections...",
+        }));
+
         const visibleSections = draftSections.filter(
           (s) => !s.isDeleted && !s.isNew
         );
@@ -569,16 +738,26 @@ function EditCourseContent() {
         });
 
         await sendTransactionPromise(transaction);
-        completedOperations++;
-        toast.success(
-          `Sections reordered (${completedOperations}/${totalOperations})`
-        );
+
+        setProgressState((prev) => ({
+          ...prev,
+          currentStep: prev.currentStep + 1,
+          operationDetails: {
+            ...prev.operationDetails,
+            reordered: true,
+          },
+        }));
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
       finalizeSectionCommit();
     } catch (error: any) {
+      setProgressState((prev) => ({
+        ...prev,
+        stage: "error",
+        error: error.message || "Unknown error",
+      }));
       toast.error("Transaction failed", {
         description: error.message || "Unknown error",
       });
@@ -586,13 +765,17 @@ function EditCourseContent() {
   }
 
   function finalizeSectionCommit() {
-    toast.success("All changes committed successfully!");
+    setProgressState((prev) => ({
+      ...prev,
+      stage: "complete",
+      currentOperation: "All changes saved successfully!",
+    }));
     setHasChanges(false);
     setHasSectionChanges(false);
     setTimeout(() => {
-      loadCourseData();
+      setProgressState((prev) => ({ ...prev, isOpen: false }));
       router.push("/myCourse");
-    }, 2000);
+    }, 3000);
   }
 
   const handleCancel = () => {
@@ -730,18 +913,29 @@ function EditCourseContent() {
       return true;
     }
 
-    toast.info(
-      `Uploading ${sectionsWithVideo.length} video(s)... This may take a while.`
-    );
+    setProgressState((prev) => ({
+      ...prev,
+      videoProgress: {
+        current: 0,
+        total: sectionsWithVideo.length,
+      },
+    }));
 
     try {
       for (let i = 0; i < sectionsWithVideo.length; i++) {
         const section = sectionsWithVideo[i];
-        toast.info(
-          `Uploading video ${i + 1}/${sectionsWithVideo.length}: ${
-            section.videoFileName || "video"
-          }`
-        );
+
+        setProgressState((prev) => ({
+          ...prev,
+          currentOperation: `Uploading video ${i + 1}/${
+            sectionsWithVideo.length
+          }...`,
+          videoProgress: {
+            current: i,
+            total: sectionsWithVideo.length,
+            fileName: section.videoFileName || "video",
+          },
+        }));
 
         const { assetId, cid } = await uploadVideoToLivepeer(
           section.videoFile!
@@ -788,9 +982,13 @@ function EditCourseContent() {
           });
         }
 
-        toast.success(
-          `Video ${i + 1}/${sectionsWithVideo.length} uploaded successfully`
-        );
+        setProgressState((prev) => ({
+          ...prev,
+          videoProgress: {
+            ...prev.videoProgress,
+            current: i + 1,
+          },
+        }));
       }
 
       return true;
@@ -1165,7 +1363,10 @@ function EditCourseContent() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="space-y-2.5">
-                      <Label htmlFor="category" className="text-sm font-semibold">
+                      <Label
+                        htmlFor="category"
+                        className="text-sm font-semibold"
+                      >
                         Category
                       </Label>
                       <Select
@@ -1191,7 +1392,10 @@ function EditCourseContent() {
                     </div>
 
                     <div className="space-y-2.5">
-                      <Label htmlFor="difficulty" className="text-sm font-semibold">
+                      <Label
+                        htmlFor="difficulty"
+                        className="text-sm font-semibold"
+                      >
                         Difficulty Level
                       </Label>
                       <Select
@@ -1468,9 +1672,7 @@ function EditCourseContent() {
                   <Button
                     type="submit"
                     className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors gap-2"
-                    disabled={
-                      isSending || (!hasChanges && !hasSectionChanges)
-                    }
+                    disabled={isSending || (!hasChanges && !hasSectionChanges)}
                   >
                     {isSending ? (
                       <>
@@ -1525,7 +1727,10 @@ function EditCourseContent() {
 
             <div className="space-y-6 py-4">
               <div className="space-y-2.5">
-                <Label htmlFor="section-title" className="text-sm font-semibold">
+                <Label
+                  htmlFor="section-title"
+                  className="text-sm font-semibold"
+                >
                   Section Title
                 </Label>
                 <Input
@@ -1570,7 +1775,10 @@ function EditCourseContent() {
               </div>
 
               <div className="space-y-2.5">
-                <Label htmlFor="section-video" className="text-sm font-semibold">
+                <Label
+                  htmlFor="section-video"
+                  className="text-sm font-semibold"
+                >
                   Video File
                 </Label>
                 <Input
@@ -1632,6 +1840,297 @@ function EditCourseContent() {
                 )}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Progress Dialog */}
+        <Dialog
+          open={progressState.isOpen}
+          onOpenChange={(open) => {
+            if (
+              !open &&
+              (progressState.stage === "complete" ||
+                progressState.stage === "error")
+            ) {
+              setProgressState((prev) => ({ ...prev, isOpen: false }));
+            }
+          }}
+        >
+          <DialogContent
+            className="sm:max-w-[600px]"
+            onInteractOutside={(e) => {
+              if (
+                progressState.stage !== "complete" &&
+                progressState.stage !== "error"
+              ) {
+                e.preventDefault();
+              }
+            }}
+          >
+            <DialogHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl">
+                  {progressState.stage === "complete" ? (
+                    <CheckCircle className="h-6 w-6 text-white" />
+                  ) : progressState.stage === "error" ? (
+                    <AlertCircle className="h-6 w-6 text-white" />
+                  ) : (
+                    <Loader2 className="h-6 w-6 text-white animate-spin" />
+                  )}
+                </div>
+                <div>
+                  <DialogTitle className="text-2xl font-bold">
+                    {progressState.stage === "complete"
+                      ? "Update Complete!"
+                      : progressState.stage === "error"
+                      ? "Update Failed"
+                      : "Updating Course"}
+                  </DialogTitle>
+                  <DialogDescription className="text-sm">
+                    {progressState.stage === "complete"
+                      ? "All changes have been saved successfully"
+                      : progressState.stage === "error"
+                      ? "An error occurred during the update"
+                      : "Processing your changes - Do not close this window"}
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* Overall Progress */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {progressState.stage === "uploading-thumbnail" && (
+                      <Upload className="h-5 w-5 text-blue-600 animate-pulse" />
+                    )}
+                    {progressState.stage === "uploading-videos" && (
+                      <Video className="h-5 w-5 text-purple-600 animate-pulse" />
+                    )}
+                    {progressState.stage === "updating-metadata" && (
+                      <FileCheck className="h-5 w-5 text-blue-600 animate-pulse" />
+                    )}
+                    {(progressState.stage === "deleting-sections" ||
+                      progressState.stage === "updating-sections" ||
+                      progressState.stage === "adding-sections" ||
+                      progressState.stage === "reordering-sections") && (
+                      <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                    )}
+                    {progressState.stage === "complete" && (
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    )}
+                    {progressState.stage === "error" && (
+                      <AlertCircle className="h-5 w-5 text-red-600" />
+                    )}
+                    <span className="text-sm font-medium text-foreground">
+                      {progressState.currentOperation}
+                    </span>
+                  </div>
+                  <span className="text-sm font-bold text-blue-600">
+                    {progressState.totalSteps > 0
+                      ? `${progressState.currentStep}/${progressState.totalSteps}`
+                      : ""}
+                  </span>
+                </div>
+
+                {progressState.totalSteps > 0 && (
+                  <Progress
+                    value={
+                      (progressState.currentStep / progressState.totalSteps) *
+                      100
+                    }
+                    className="h-2"
+                  />
+                )}
+              </div>
+
+              {/* Video Progress */}
+              {progressState.stage === "uploading-videos" &&
+                progressState.videoProgress.total > 0 && (
+                  <div className="bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Video className="h-4 w-4 text-purple-600" />
+                      <span className="text-sm font-semibold text-purple-900 dark:text-purple-100">
+                        Video Upload Progress
+                      </span>
+                    </div>
+                    <div className="text-xs text-purple-700 dark:text-purple-300">
+                      {progressState.videoProgress.fileName && (
+                        <p className="mb-1 truncate">
+                          {progressState.videoProgress.fileName}
+                        </p>
+                      )}
+                      <p>
+                        {progressState.videoProgress.current} of{" "}
+                        {progressState.videoProgress.total} videos uploaded
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+              {/* Operation Details */}
+              {(progressState.operationDetails.deleted > 0 ||
+                progressState.operationDetails.updated > 0 ||
+                progressState.operationDetails.added > 0 ||
+                progressState.operationDetails.reordered) && (
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                    Changes Applied
+                  </h4>
+                  <div className="space-y-1 text-xs text-blue-700 dark:text-blue-300">
+                    {progressState.operationDetails.deleted > 0 && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-3 w-3" />
+                        <span>
+                          {progressState.operationDetails.deleted} section(s)
+                          deleted
+                        </span>
+                      </div>
+                    )}
+                    {progressState.operationDetails.updated > 0 && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-3 w-3" />
+                        <span>
+                          {progressState.operationDetails.updated} section(s)
+                          updated
+                        </span>
+                      </div>
+                    )}
+                    {progressState.operationDetails.added > 0 && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-3 w-3" />
+                        <span>
+                          {progressState.operationDetails.added} section(s)
+                          added
+                        </span>
+                      </div>
+                    )}
+                    {progressState.operationDetails.reordered && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-3 w-3" />
+                        <span>Sections reordered</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {progressState.stage === "error" && progressState.error && (
+                <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-red-900 dark:text-red-100">
+                        Update Failed
+                      </h4>
+                      <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                        {progressState.error}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {progressState.stage === "complete" && (
+                <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-green-900 dark:text-green-100">
+                        All Changes Saved
+                      </h4>
+                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                        Your course has been updated successfully. Redirecting
+                        to your courses...
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Transaction Stages */}
+              {progressState.stage !== "idle" &&
+                progressState.stage !== "complete" &&
+                progressState.stage !== "error" && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-foreground">
+                      Update Stages
+                    </h4>
+                    <div className="space-y-2 text-xs">
+                      <div
+                        className={`flex items-center gap-2 ${
+                          progressState.stage === "uploading-thumbnail"
+                            ? "text-blue-600 font-semibold"
+                            : progressState.currentStep > 0
+                            ? "text-green-600"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {progressState.currentStep > 0 ? (
+                          <CheckCircle className="h-3 w-3" />
+                        ) : (
+                          <Clock className="h-3 w-3" />
+                        )}
+                        <span>Upload thumbnail</span>
+                      </div>
+                      {progressState.videoProgress.total > 0 && (
+                        <div
+                          className={`flex items-center gap-2 ${
+                            progressState.stage === "uploading-videos"
+                              ? "text-blue-600 font-semibold"
+                              : progressState.videoProgress.current ===
+                                progressState.videoProgress.total
+                              ? "text-green-600"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {progressState.videoProgress.current ===
+                          progressState.videoProgress.total ? (
+                            <CheckCircle className="h-3 w-3" />
+                          ) : (
+                            <Clock className="h-3 w-3" />
+                          )}
+                          <span>Upload videos</span>
+                        </div>
+                      )}
+                      <div
+                        className={`flex items-center gap-2 ${
+                          progressState.stage === "updating-metadata"
+                            ? "text-blue-600 font-semibold"
+                            : progressState.stage === "deleting-sections" ||
+                              progressState.stage === "updating-sections" ||
+                              progressState.stage === "adding-sections" ||
+                              progressState.stage === "reordering-sections"
+                            ? "text-green-600"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {progressState.stage === "deleting-sections" ||
+                        progressState.stage === "updating-sections" ||
+                        progressState.stage === "adding-sections" ||
+                        progressState.stage === "reordering-sections" ? (
+                          <CheckCircle className="h-3 w-3" />
+                        ) : (
+                          <Clock className="h-3 w-3" />
+                        )}
+                        <span>Update course metadata</span>
+                      </div>
+                      {(progressState.stage === "deleting-sections" ||
+                        progressState.stage === "updating-sections" ||
+                        progressState.stage === "adding-sections" ||
+                        progressState.stage === "reordering-sections") && (
+                        <div className="flex items-center gap-2 text-blue-600 font-semibold">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span>Update sections on blockchain</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>
