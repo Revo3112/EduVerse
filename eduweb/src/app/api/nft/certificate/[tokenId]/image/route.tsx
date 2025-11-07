@@ -23,6 +23,7 @@ interface CertificateData {
   lastUpdated: bigint;
   totalCoursesCompleted: bigint;
   paymentReceiptHash: string;
+  completedCourses: readonly bigint[];
 }
 
 export async function GET(
@@ -39,13 +40,12 @@ export async function GET(
       address: CERTIFICATE_MANAGER_ADDRESS,
     });
 
-    // @ts-expect-error - thirdweb v5 type inference issue with Next.js 15
     const certificateData = (await readContract({
       contract: certificateContract,
       method:
-        "function getCertificate(uint256 tokenId) view returns (tuple(uint256 tokenId, string platformName, string recipientName, address recipientAddress, bool lifetimeFlag, bool isValid, string ipfsCID, string baseRoute, uint256 issuedAt, uint256 lastUpdated, uint256 totalCoursesCompleted, bytes32 paymentReceiptHash))",
+        "function getCertificate(uint256) view returns ((uint256,string,string,address,bool,bool,string,string,uint256,uint256,uint256,bytes32,uint256[]))",
       params: [tokenId],
-    })) as CertificateData;
+    })) as unknown as CertificateData;
 
     if (!certificateData.ipfsCID || certificateData.ipfsCID === "") {
       return NextResponse.json(

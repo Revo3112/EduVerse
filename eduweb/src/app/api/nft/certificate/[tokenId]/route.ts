@@ -24,6 +24,7 @@ interface CertificateData {
   lastUpdated: bigint;
   totalCoursesCompleted: bigint;
   paymentReceiptHash: string;
+  completedCourses: readonly bigint[];
 }
 
 interface CourseData {
@@ -111,24 +112,18 @@ export async function GET(
       `[NFT Metadata API] Reading certificate data from blockchain...`
     );
 
-    // @ts-expect-error - thirdweb v5 type inference issue with Next.js 15
     const certificateData = (await readContract({
       contract: certificateContract,
       method:
-        "function getCertificate(uint256 tokenId) view returns (tuple(uint256 tokenId, string platformName, string recipientName, address recipientAddress, bool lifetimeFlag, bool isValid, string ipfsCID, string baseRoute, uint256 issuedAt, uint256 lastUpdated, uint256 totalCoursesCompleted, bytes32 paymentReceiptHash))",
+        "function getCertificate(uint256) view returns ((uint256,string,string,address,bool,bool,string,string,uint256,uint256,uint256,bytes32,uint256[]))",
       params: [tokenId],
-    })) as CertificateData;
+    })) as unknown as CertificateData;
 
     console.log(
       `[NFT Metadata API] Certificate found: ${certificateData.recipientName}`
     );
 
-    const completedCourses = (await readContract({
-      contract: certificateContract,
-      method:
-        "function getCertificateCompletedCourses(uint256 tokenId) view returns (uint256[])",
-      params: [tokenId],
-    })) as bigint[];
+    const completedCourses = [...certificateData.completedCourses];
 
     console.log(
       `[NFT Metadata API] Completed courses: ${completedCourses.length}`
@@ -137,13 +132,12 @@ export async function GET(
     const courseTitles: string[] = [];
     for (const courseId of completedCourses) {
       try {
-        // @ts-expect-error - thirdweb v5 type inference issue with Next.js 15
         const courseData = (await readContract({
           contract: courseFactoryContract,
           method:
-            "function getCourse(uint256 courseId) view returns (tuple(uint256 id, string title, string description, address creator, uint256 price, bool isActive, bool isDeleted, uint256 duration, uint256 createdAt, uint256 totalStudents, uint8 averageRating))",
+            "function getCourse(uint256) view returns ((uint256,string,string,address,uint256,bool,bool,uint256,uint256,uint256,uint8))",
           params: [courseId],
-        })) as CourseData;
+        })) as unknown as CourseData;
         courseTitles.push(courseData.title);
         console.log(
           `[NFT Metadata API] Course ${courseId}: ${courseData.title}`
