@@ -318,7 +318,7 @@ export async function generateAndUploadCertificate(
       } on EduVerse. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${
         data.completedCourses?.length || 1
       } verified course${(data.completedCourses?.length || 1) > 1 ? "s" : ""}.`,
-      image: imageUploadResult.data.signedUrl,
+      image: `https://${process.env.PINATA_GATEWAY}/ipfs/${imageUploadResult.data.cid}`,
       decimals: 0, // Non-fungible (ERC-1155 with amount=1)
 
       // Blockchain-compatible attributes matching Certificate struct fields

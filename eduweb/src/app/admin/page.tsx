@@ -41,7 +41,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 const DEPLOYER_ADDRESS = process.env.NEXT_PUBLIC_DEPLOYER_ADDRESS!;
 const EXPECTED_METADATA_URI = `${
   process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-}/api/nft/certificate`;
+}/api/metadata`;
 
 export default function AdminPage() {
   const account = useActiveAccount();
@@ -635,6 +635,40 @@ export default function AdminPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            {contractData.defaultMetadataBaseURI &&
+              contractData.defaultMetadataBaseURI !== EXPECTED_METADATA_URI && (
+                <Alert className="mb-6 border-yellow-600 bg-yellow-50 dark:bg-yellow-950/20">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                  <AlertTitle className="text-yellow-800 dark:text-yellow-400">
+                    Metadata URI Configuration Issue
+                  </AlertTitle>
+                  <AlertDescription className="text-yellow-700 dark:text-yellow-300 space-y-2">
+                    <p className="text-sm">
+                      MetaMask and NFT marketplaces cannot display certificate
+                      images with the current configuration.
+                    </p>
+                    <div className="text-xs space-y-1">
+                      <p>
+                        <span className="font-semibold">Current:</span>{" "}
+                        {contractData.defaultMetadataBaseURI}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Should be:</span>{" "}
+                        {EXPECTED_METADATA_URI}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleAutoFixMetadataURI}
+                      size="sm"
+                      className="mt-2 bg-yellow-600 hover:bg-yellow-700"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Auto-Fix Now
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
             <div className="bg-muted/50 p-4 rounded-lg space-y-2 mb-6">
               <h3 className="font-semibold text-sm">Current Contract Values</h3>
               <div className="grid grid-cols-2 gap-2 text-xs">
@@ -670,13 +704,26 @@ export default function AdminPage() {
                     {contractData.defaultBaseRoute || "Not loaded"}
                   </p>
                 </div>
-                <div>
+                <div className="col-span-2">
                   <span className="text-muted-foreground">
                     Metadata Base URI:
                   </span>
-                  <p className="font-mono break-all">
+                  <p
+                    className={`font-mono break-all ${
+                      contractData.defaultMetadataBaseURI !==
+                      EXPECTED_METADATA_URI
+                        ? "text-yellow-600 dark:text-yellow-400 font-semibold"
+                        : ""
+                    }`}
+                  >
                     {contractData.defaultMetadataBaseURI || "Not loaded"}
                   </p>
+                  {contractData.defaultMetadataBaseURI ===
+                    EXPECTED_METADATA_URI && (
+                    <p className="text-green-600 dark:text-green-400 text-xs mt-1">
+                      ✓ Correctly configured
+                    </p>
+                  )}
                 </div>
                 <div>
                   <span className="text-muted-foreground">
@@ -690,7 +737,9 @@ export default function AdminPage() {
                   <span className="text-muted-foreground">Platform Fee %:</span>
                   <p className="font-mono">
                     {contractData.platformFeePercentage
-                      ? `${contractData.platformFeePercentage}%`
+                      ? `${(
+                          Number(contractData.platformFeePercentage) / 100
+                        ).toFixed(2)}%`
                       : "Not loaded"}
                   </p>
                 </div>
@@ -870,7 +919,7 @@ export default function AdminPage() {
               <div className="flex gap-2">
                 <Input
                   type="text"
-                  placeholder="https://yourdomain.com/api/nft/certificate"
+                  placeholder="https://yourdomain.com/api/metadata"
                   value={metadataBaseURI}
                   onChange={(e) => setMetadataBaseURI(e.target.value)}
                 />

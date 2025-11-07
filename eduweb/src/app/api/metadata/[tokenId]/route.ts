@@ -23,10 +23,11 @@ import { NextRequest, NextResponse } from "next/server";
  * TypeScript interfaces for certificate data structure
  */
 interface CertificateCourse {
-  courseId: string;
+  course: {
+    id: string;
+  };
   addedAt: string;
-  ipfsCID: string;
-  transactionHash: string;
+  txHash: string;
 }
 
 interface Certificate {
@@ -34,14 +35,13 @@ interface Certificate {
   platformName: string;
   recipientName: string;
   recipientAddress: string;
-  lifetimeFlag: boolean;
   isValid: boolean;
   ipfsCID: string;
   baseRoute: string;
-  issuedAt: string;
+  createdAt: string;
   lastUpdated: string;
-  totalCoursesCompleted: number;
-  courses: CertificateCourse[];
+  totalCourses: number;
+  completedCourses: CertificateCourse[];
 }
 
 /**
@@ -61,18 +61,18 @@ async function getCertificateFromGoldsky(tokenId: string) {
         platformName
         recipientName
         recipientAddress
-        lifetimeFlag
         isValid
         ipfsCID
         baseRoute
-        issuedAt
+        createdAt
         lastUpdated
-        totalCoursesCompleted
-        courses(orderBy: addedAt, orderDirection: asc) {
-          courseId
+        totalCourses
+        completedCourses(orderBy: addedAt, orderDirection: asc) {
+          course {
+            id
+          }
           addedAt
-          ipfsCID
-          transactionHash
+          txHash
         }
       }
     }
@@ -114,14 +114,13 @@ function constructMetadata(certificate: Certificate) {
     platformName,
     recipientName,
     recipientAddress,
-    lifetimeFlag,
     isValid,
     ipfsCID,
     baseRoute,
-    issuedAt,
+    createdAt,
     lastUpdated,
-    totalCoursesCompleted,
-    courses,
+    totalCourses,
+    completedCourses,
   } = certificate;
 
   // Construct verification URL for QR code
@@ -130,10 +129,10 @@ function constructMetadata(certificate: Certificate) {
   return {
     // Standard ERC-1155 fields
     name: `${platformName} Certificate #${tokenId}`,
-    description: `This evolving certificate represents the complete learning journey of ${recipientName} on ${platformName}. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${totalCoursesCompleted} verified course${
-      totalCoursesCompleted > 1 ? "s" : ""
+    description: `This evolving certificate represents the complete learning journey of ${recipientName} on ${platformName}. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${totalCourses} verified course${
+      totalCourses > 1 ? "s" : ""
     }.`,
-    image: `ipfs://${ipfsCID}`,
+    image: `https://${process.env.PINATA_GATEWAY}/ipfs/${ipfsCID}`,
     external_url: verificationUrl,
     decimals: 0, // Non-fungible (ERC-1155 with supply=1)
 
@@ -159,7 +158,7 @@ function constructMetadata(certificate: Certificate) {
       {
         trait_type: "Lifetime Flag",
         display_type: "boolean",
-        value: lifetimeFlag,
+        value: true,
       },
       {
         trait_type: "Is Valid",
@@ -173,16 +172,18 @@ function constructMetadata(certificate: Certificate) {
       {
         trait_type: "Total Courses Completed",
         display_type: "number",
-        value: totalCoursesCompleted,
+        value: totalCourses,
       },
       {
         trait_type: "Completed Course IDs",
-        value: courses.map((c: CertificateCourse) => c.courseId).join(", "),
+        value: completedCourses
+          .map((c: CertificateCourse) => c.course.id)
+          .join(", "),
       },
       {
         trait_type: "Issued At",
         display_type: "date",
-        value: parseInt(issuedAt),
+        value: parseInt(createdAt),
       },
       {
         trait_type: "Last Updated",
@@ -201,14 +202,13 @@ function constructMetadata(certificate: Certificate) {
       base_route: baseRoute,
       certificate_version: "2.0",
       supports_multiple_courses: true,
-      is_soulbound: true, // Cannot be transferred
+      is_soulbound: true,
       blockchain_network: "Manta Pacific",
       certificate_type: "Evolving Learning Certificate",
-      courses: courses.map((c: CertificateCourse) => ({
-        courseId: c.courseId,
+      courses: completedCourses.map((c: CertificateCourse) => ({
+        courseId: c.course.id,
         addedAt: c.addedAt,
-        ipfsCID: c.ipfsCID,
-        transactionHash: c.transactionHash,
+        transactionHash: c.txHash,
       })),
     },
   };
