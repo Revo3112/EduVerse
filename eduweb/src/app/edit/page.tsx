@@ -54,6 +54,7 @@ import {
   prepareAddSectionTransaction,
   prepareUpdateSectionTransaction,
   prepareDeleteSectionTransaction,
+  prepareBatchReorderSectionsTransaction,
 } from "@/services/courseContract.service";
 import * as tus from "tus-js-client";
 
@@ -450,136 +451,139 @@ function EditCourseContent() {
   }
 
   async function commitSectionChanges() {
-    const { sectionsToAdd, sectionsToUpdate, sectionsToDelete } =
+    const { sectionsToAdd, sectionsToUpdate, sectionsToDelete, reorderNeeded } =
       pendingChanges;
+
+    const sendTransactionPromise = (transaction: any): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        sendTransaction(transaction, {
+          onSuccess: () => resolve(),
+          onError: (error) => reject(error),
+        });
+      });
+    };
 
     let completedOperations = 0;
     const totalOperations =
-      sectionsToAdd.length + sectionsToUpdate.size + sectionsToDelete.size;
+      sectionsToAdd.length +
+      sectionsToUpdate.size +
+      sectionsToDelete.size +
+      (reorderNeeded ? 1 : 0);
 
-    if (sectionsToDelete.size > 0) {
-      for (const sectionId of sectionsToDelete) {
-        const sectionToDelete = draftSections.find(
-          (s) => s.sectionId === sectionId
+    try {
+      if (sectionsToDelete.size > 0) {
+        for (const sectionId of sectionsToDelete) {
+          const sectionToDelete = draftSections.find(
+            (s) => s.sectionId === sectionId
+          );
+
+          if (sectionToDelete?.assetId) {
+            await deleteVideoFromLivepeer(sectionToDelete.assetId);
+          }
+
+          const transaction = prepareDeleteSectionTransaction({
+            courseId: BigInt(courseId!),
+            sectionId: BigInt(sectionId),
+          });
+
+          await sendTransactionPromise(transaction);
+          completedOperations++;
+          toast.success(
+            `Section deleted (${completedOperations}/${totalOperations})`
+          );
+
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+
+      if (sectionsToUpdate.size > 0) {
+        for (const [sectionId, sectionData] of sectionsToUpdate) {
+          const section = sections.find((s) => s.id === sectionId);
+          if (!section) continue;
+
+          if (!sectionData.contentCID) {
+            toast.error(`Section ${sectionData.title} missing video CID`);
+            continue;
+          }
+
+          const transaction = prepareUpdateSectionTransaction({
+            courseId: BigInt(courseId!),
+            sectionId: BigInt(section.sectionId),
+            title: sectionData.title,
+            contentCID: sectionData.contentCID,
+            duration: sectionData.duration,
+          });
+
+          await sendTransactionPromise(transaction);
+          completedOperations++;
+          toast.success(
+            `Section updated (${completedOperations}/${totalOperations})`
+          );
+
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+
+      if (sectionsToAdd.length > 0) {
+        const deletedNewSections = draftSections.filter(
+          (s) => s.isNew && s.isDeleted
+        );
+        for (const deletedSection of deletedNewSections) {
+          if (deletedSection.assetId) {
+            await deleteVideoFromLivepeer(deletedSection.assetId);
+          }
+        }
+
+        for (let i = 0; i < sectionsToAdd.length; i++) {
+          const sectionData = sectionsToAdd[i];
+
+          if (!sectionData.contentCID) {
+            toast.error(`Section ${sectionData.title} missing video CID`);
+            continue;
+          }
+
+          const transaction = prepareAddSectionTransaction({
+            courseId: BigInt(courseId!),
+            title: sectionData.title,
+            contentCID: sectionData.contentCID,
+            duration: sectionData.duration,
+          });
+
+          await sendTransactionPromise(transaction);
+          completedOperations++;
+          toast.success(
+            `Section added (${completedOperations}/${totalOperations})`
+          );
+
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+
+      if (reorderNeeded) {
+        const visibleSections = draftSections.filter(
+          (s) => !s.isDeleted && !s.isNew
+        );
+        const newOrder = visibleSections.map((s) => BigInt(s.sectionId));
+
+        const transaction = prepareBatchReorderSectionsTransaction({
+          courseId: BigInt(courseId!),
+          newOrder: newOrder,
+        });
+
+        await sendTransactionPromise(transaction);
+        completedOperations++;
+        toast.success(
+          `Sections reordered (${completedOperations}/${totalOperations})`
         );
 
-        if (sectionToDelete?.assetId) {
-          await deleteVideoFromLivepeer(sectionToDelete.assetId);
-        }
-
-        const transaction = prepareDeleteSectionTransaction({
-          courseId: BigInt(courseId!),
-          sectionId: BigInt(sectionId),
-        });
-
-        sendTransaction(transaction, {
-          onSuccess: () => {
-            completedOperations++;
-            toast.success(
-              `Section deleted (${completedOperations}/${totalOperations})`
-            );
-            if (completedOperations === totalOperations) {
-              finalizeSectionCommit();
-            }
-          },
-          onError: (error) => {
-            toast.error("Failed to delete section", {
-              description: error.message,
-            });
-          },
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-    }
-
-    if (sectionsToUpdate.size > 0) {
-      for (const [sectionId, sectionData] of sectionsToUpdate) {
-        const section = sections.find((s) => s.id === sectionId);
-        if (!section) continue;
-
-        if (!sectionData.contentCID) {
-          toast.error(`Section ${sectionData.title} missing video CID`);
-          continue;
-        }
-
-        const transaction = prepareUpdateSectionTransaction({
-          courseId: BigInt(courseId!),
-          sectionId: BigInt(section.sectionId),
-          title: sectionData.title,
-          contentCID: sectionData.contentCID,
-          duration: sectionData.duration,
-        });
-
-        sendTransaction(transaction, {
-          onSuccess: () => {
-            completedOperations++;
-            toast.success(
-              `Section updated (${completedOperations}/${totalOperations})`
-            );
-            if (completedOperations === totalOperations) {
-              finalizeSectionCommit();
-            }
-          },
-          onError: (error) => {
-            toast.error("Failed to update section", {
-              description: error.message,
-            });
-          },
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-    }
-
-    if (sectionsToAdd.length > 0) {
-      const deletedNewSections = draftSections.filter(
-        (s) => s.isNew && s.isDeleted
-      );
-      for (const deletedSection of deletedNewSections) {
-        if (deletedSection.assetId) {
-          await deleteVideoFromLivepeer(deletedSection.assetId);
-        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
-      for (let i = 0; i < sectionsToAdd.length; i++) {
-        const sectionData = sectionsToAdd[i];
-
-        if (!sectionData.contentCID) {
-          toast.error(`Section ${sectionData.title} missing video CID`);
-          continue;
-        }
-
-        const transaction = prepareAddSectionTransaction({
-          courseId: BigInt(courseId!),
-          title: sectionData.title,
-          contentCID: sectionData.contentCID,
-          duration: sectionData.duration,
-        });
-
-        sendTransaction(transaction, {
-          onSuccess: () => {
-            completedOperations++;
-            toast.success(
-              `Section added (${completedOperations}/${totalOperations})`
-            );
-            if (completedOperations === totalOperations) {
-              finalizeSectionCommit();
-            }
-          },
-          onError: (error) => {
-            toast.error("Failed to add section", {
-              description: error.message,
-            });
-          },
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-    }
-
-    if (totalOperations === 0) {
       finalizeSectionCommit();
+    } catch (error: any) {
+      toast.error("Transaction failed", {
+        description: error.message || "Unknown error",
+      });
     }
   }
 

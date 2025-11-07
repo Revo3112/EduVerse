@@ -987,3 +987,19 @@ export function prepareSwapSectionsTransaction(params: {
 
   return transaction;
 }
+
+export function prepareBatchReorderSectionsTransaction(params: {
+  courseId: bigint;
+  newOrder: bigint[];
+}) {
+  const { courseId, newOrder } = params;
+
+  const transaction = prepareContractCall({
+    contract: courseFactory,
+    method:
+      "function batchReorderSections(uint256 courseId, uint256[] calldata newOrder)",
+    params: [courseId, newOrder],
+  });
+
+  return transaction;
+}
