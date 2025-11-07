@@ -13,6 +13,7 @@ import {
   BaseURIUpdated,
   PlatformFeePercentageUpdated,
   PlatformWalletUpdated,
+  CourseMetadataURIUpdated,
 } from "../../generated/CourseLicense/CourseLicense";
 import {
   Enrollment,
@@ -814,6 +815,43 @@ export function handlePlatformWalletUpdatedLicense(
 
   log.info("Platform wallet updated to: {}", [
     event.params.newWallet.toHexString(),
+  ]);
+}
+
+export function handleCourseMetadataURIUpdated(
+  event: CourseMetadataURIUpdated,
+): void {
+  let config = getOrCreateContractConfig(event.address);
+  let courseId = event.params.courseId;
+  let metadataURI = event.params.metadataURI;
+
+  let description =
+    "Updated metadata URI for course " +
+    courseId.toString() +
+    " to: " +
+    metadataURI;
+
+  let eventId =
+    event.transaction.hash.toHexString() + "-" + event.logIndex.toString();
+  createAdminConfigEvent(
+    eventId,
+    event.transaction.from,
+    "METADATA_URI_UPDATE",
+    "courseMetadataURI",
+    courseId.toString(),
+    metadataURI,
+    COURSE_LICENSE_NAME,
+    description,
+    event.block.timestamp,
+    event.block.number,
+    event.transaction.hash,
+  );
+
+  updateNetworkStats(event, "CONFIG_UPDATE");
+
+  log.info("Course {} metadata URI updated to: {}", [
+    courseId.toString(),
+    metadataURI,
   ]);
 }
 

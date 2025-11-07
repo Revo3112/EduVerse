@@ -153,6 +153,8 @@ dataSources:
           handler: handlePlatformFeePercentageUpdated
         - event: PlatformWalletUpdated(indexed address,indexed address)
           handler: handlePlatformWalletUpdatedLicense
+        - event: CourseMetadataURIUpdated(indexed uint256,string)
+          handler: handleCourseMetadataURIUpdated
 
   # ==========================================================================
   # CONTRACT 3: ProgressTracker

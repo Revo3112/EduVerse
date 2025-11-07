@@ -101,6 +101,8 @@ dataSources:
           handler: handlePlatformFeePercentageUpdated
         - event: PlatformWalletUpdated(indexed address,indexed address)
           handler: handlePlatformWalletUpdatedLicense
+        - event: CourseMetadataURIUpdated(indexed uint256,string)
+          handler: handleCourseMetadataURIUpdated
   - kind: ethereum/contract
     name: ProgressTracker
     network: manta-pacific-sepolia

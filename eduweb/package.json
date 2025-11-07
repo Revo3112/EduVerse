@@ -23,6 +23,8 @@
     "set-metadata-uri": "tsx src/scripts/set-metadata-uri.ts",
     "test-metadata": "tsx src/scripts/test-metadata.ts",
     "verify-metadata": "tsx src/scripts/verify-certificate-metadata.ts",
+    "verify-admin": "tsx src/scripts/verify-admin-functions.ts",
+    "test-admin-tx": "tsx src/scripts/test-admin-transactions.ts",
     "test-nft-metadata": "tsx src/scripts/test-nft-metadata.ts",
     "fonts:test": "node scripts/test-fonts.js",
     "fonts:check": "ls -lh public/fonts/*.ttf 2>/dev/null || echo 'Fonts not found'"

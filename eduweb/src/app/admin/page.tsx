@@ -35,6 +35,7 @@ import {
   courseFactory,
   CONTRACT_ADDRESSES,
 } from "@/lib/contracts";
+import { getContract } from "thirdweb";
 import { chain } from "@/lib/chains";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -72,6 +73,18 @@ export default function AdminPage() {
   const [revokeReason, setRevokeReason] = useState("");
   const [fixingUris, setFixingUris] = useState(false);
   const [metadataBaseURI, setMetadataBaseURI] = useState("");
+
+  const [courseCertPrice, setCourseCertPrice] = useState("");
+  const [courseCertPriceId, setCourseCertPriceId] = useState("");
+  const [courseMetadataURI, setCourseMetadataURI] = useState("");
+  const [courseMetadataId, setCourseMetadataId] = useState("");
+  const [removeRatingCourseId, setRemoveRatingCourseId] = useState("");
+  const [removeRatingUser, setRemoveRatingUser] = useState("");
+  const [pauseRatingsCourseId, setPauseRatingsCourseId] = useState("");
+  const [emergencyCourseId, setEmergencyCourseId] = useState("");
+  const [emergencyEnrollmentId, setEmergencyEnrollmentId] = useState("");
+  const [resetProgressUser, setResetProgressUser] = useState("");
+  const [resetProgressCourse, setResetProgressCourse] = useState("");
 
   useEffect(() => {
     async function checkOwnership() {
@@ -508,6 +521,135 @@ export default function AdminPage() {
       toast.error((error as Error).message || "Failed to fix certificate URIs");
     } finally {
       setFixingUris(false);
+    }
+  }
+
+  async function handleSetCourseCertificatePrice() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: certificateManager,
+        method:
+          "function setCourseCertificatePrice(uint256 courseId, uint256 price)",
+        params: [BigInt(courseCertPriceId), BigInt(courseCertPrice)],
+      });
+      await sendTransaction({ transaction: tx, account });
+      toast.success("Course certificate price set successfully");
+    } catch (error) {
+      toast.error(
+        (error as Error).message || "Failed to set certificate price"
+      );
+    }
+  }
+
+  async function handleSetCourseMetadataURI() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: courseLicense,
+        method: "function setCourseMetadataURI(uint256 courseId, string uri)",
+        params: [BigInt(courseMetadataId), courseMetadataURI],
+      });
+      await sendTransaction({ transaction: tx, account });
+      toast.success("Course metadata URI updated successfully");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to update metadata URI");
+    }
+  }
+
+  async function handleRemoveRating() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: courseFactory,
+        method: "function removeRating(uint256 courseId, address user)",
+        params: [BigInt(removeRatingCourseId), removeRatingUser],
+      });
+      await sendTransaction({ transaction: tx, account });
+      toast.success("Rating removed successfully");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to remove rating");
+    }
+  }
+
+  async function handlePauseCourseRatings() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: courseFactory,
+        method: "function pauseCourseRatings(uint256 courseId)",
+        params: [BigInt(pauseRatingsCourseId)],
+      });
+      await sendTransaction({ transaction: tx, account });
+      toast.success("Course ratings paused successfully");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to pause ratings");
+    }
+  }
+
+  async function handleUnpauseCourseRatings() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: courseFactory,
+        method: "function unpauseCourseRatings(uint256 courseId)",
+        params: [BigInt(pauseRatingsCourseId)],
+      });
+      await sendTransaction({ transaction: tx, account });
+      toast.success("Course ratings unpaused successfully");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to unpause ratings");
+    }
+  }
+
+  async function handleEmergencyDeactivateCourse() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: courseFactory,
+        method: "function emergencyDeactivateCourse(uint256 courseId)",
+        params: [BigInt(emergencyCourseId)],
+      });
+      await sendTransaction({ transaction: tx, account });
+      toast.success("Course deactivated successfully");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to deactivate course");
+    }
+  }
+
+  async function handleEmergencyDeactivateLicense() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: courseLicense,
+        method: "function emergencyDeactivateLicense(uint256 tokenId)",
+        params: [BigInt(emergencyEnrollmentId)],
+      });
+      await sendTransaction({ transaction: tx, account });
+      toast.success("License deactivated successfully");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to deactivate license");
+    }
+  }
+
+  async function handleResetProgress() {
+    if (!account) return;
+    try {
+      const progressTrackerContract = getContract({
+        client: certificateManager.client,
+        chain: certificateManager.chain,
+        address: CONTRACT_ADDRESSES.PROGRESS_TRACKER,
+      });
+      const tx = prepareContractCall({
+        contract: progressTrackerContract,
+        method:
+          "function emergencyResetProgress(address student, uint256 courseId)",
+        params: [resetProgressUser, BigInt(resetProgressCourse)],
+      });
+      await sendTransaction({ transaction: tx, account });
+      toast.success("Progress reset successfully");
+    } catch (error) {
+      toast.error((error as Error).message || "Failed to reset progress");
     }
   }
 
@@ -1117,6 +1259,215 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
+        {/* Course Certificate Price Management */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Course Certificate Pricing
+            </CardTitle>
+            <CardDescription>
+              Set custom certificate prices per course
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Course ID</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter course ID"
+                  value={courseCertPriceId}
+                  onChange={(e) => setCourseCertPriceId(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Price (Wei)</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter price in wei"
+                  value={courseCertPrice}
+                  onChange={(e) => setCourseCertPrice(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button onClick={handleSetCourseCertificatePrice}>
+              Set Course Certificate Price
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Course Metadata URI */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Link className="h-5 w-5" />
+              Course Metadata URI
+            </CardTitle>
+            <CardDescription>
+              Update metadata URI for specific courses
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Course ID</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter course ID"
+                  value={courseMetadataId}
+                  onChange={(e) => setCourseMetadataId(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Metadata URI</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter metadata URI"
+                  value={courseMetadataURI}
+                  onChange={(e) => setCourseMetadataURI(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button onClick={handleSetCourseMetadataURI}>
+              Update Course Metadata URI
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Course Rating Moderation */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Course Rating Moderation
+            </CardTitle>
+            <CardDescription>Manage course ratings and reviews</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Course ID</Label>
+                  <Input
+                    type="text"
+                    placeholder="Enter course ID"
+                    value={removeRatingCourseId}
+                    onChange={(e) => setRemoveRatingCourseId(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>User Address</Label>
+                  <Input
+                    type="text"
+                    placeholder="0x..."
+                    value={removeRatingUser}
+                    onChange={(e) => setRemoveRatingUser(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Button onClick={handleRemoveRating} variant="destructive">
+                Remove User Rating
+              </Button>
+            </div>
+            <div className="space-y-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label>Course ID (Pause/Unpause)</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter course ID"
+                  value={pauseRatingsCourseId}
+                  onChange={(e) => setPauseRatingsCourseId(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handlePauseCourseRatings} variant="outline">
+                  <Pause className="h-4 w-4 mr-2" />
+                  Pause Ratings
+                </Button>
+                <Button onClick={handleUnpauseCourseRatings} variant="outline">
+                  <Play className="h-4 w-4 mr-2" />
+                  Unpause Ratings
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Emergency Controls */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              Emergency Controls
+            </CardTitle>
+            <CardDescription className="text-red-500">
+              Use these controls only in critical situations
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Deactivate Course</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter course ID"
+                  value={emergencyCourseId}
+                  onChange={(e) => setEmergencyCourseId(e.target.value)}
+                />
+                <Button
+                  onClick={handleEmergencyDeactivateCourse}
+                  variant="destructive"
+                  className="w-full"
+                >
+                  Emergency Deactivate Course
+                </Button>
+              </div>
+              <div className="space-y-2 pt-4 border-t">
+                <Label>Deactivate License (Token ID)</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter enrollment token ID"
+                  value={emergencyEnrollmentId}
+                  onChange={(e) => setEmergencyEnrollmentId(e.target.value)}
+                />
+                <Button
+                  onClick={handleEmergencyDeactivateLicense}
+                  variant="destructive"
+                  className="w-full"
+                >
+                  Emergency Deactivate License
+                </Button>
+              </div>
+              <div className="space-y-2 pt-4 border-t">
+                <Label>Reset Student Progress</Label>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Input
+                    type="text"
+                    placeholder="Student address (0x...)"
+                    value={resetProgressUser}
+                    onChange={(e) => setResetProgressUser(e.target.value)}
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Course ID"
+                    value={resetProgressCourse}
+                    onChange={(e) => setResetProgressCourse(e.target.value)}
+                  />
+                </div>
+                <Button
+                  onClick={handleResetProgress}
+                  variant="destructive"
+                  className="w-full"
+                >
+                  Reset Progress
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Contract Information */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
