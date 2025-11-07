@@ -22,6 +22,8 @@ import {
   Link,
   FileText,
   AlertTriangle,
+  Wallet,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +36,12 @@ import {
   CONTRACT_ADDRESSES,
 } from "@/lib/contracts";
 import { chain } from "@/lib/chains";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const DEPLOYER_ADDRESS = process.env.NEXT_PUBLIC_DEPLOYER_ADDRESS!;
+const EXPECTED_METADATA_URI = `${
+  process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+}/api/nft/certificate`;
 
 export default function AdminPage() {
   const account = useActiveAccount();
@@ -264,7 +270,9 @@ export default function AdminPage() {
       });
 
       await sendTransaction({ transaction: tx, account });
-      toast.success("Metadata base URI updated successfully");
+      toast.success(
+        "Metadata base URI updated successfully - NFTs will now appear in MetaMask!"
+      );
       await loadContractData();
     } catch (error) {
       toast.error(
@@ -272,6 +280,33 @@ export default function AdminPage() {
       );
     }
   }
+
+  async function handleAutoFixMetadataURI() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: certificateManager,
+        method: "function updateDefaultMetadataBaseURI(string newBaseURI)",
+        params: [EXPECTED_METADATA_URI],
+      });
+
+      await sendTransaction({ transaction: tx, account });
+      toast.success(
+        "NFT Metadata URI fixed! Certificates will now display in MetaMask"
+      );
+      await loadContractData();
+    } catch (error) {
+      toast.error(
+        (error as Error).message || "Failed to auto-fix metadata URI"
+      );
+    }
+  }
+
+  const isMetadataUriCorrect =
+    contractData.defaultMetadataBaseURI === EXPECTED_METADATA_URI;
+  const isMetadataUriEmpty =
+    !contractData.defaultMetadataBaseURI ||
+    contractData.defaultMetadataBaseURI === "";
 
   async function handleSetTokenURI() {
     if (!account) return;
@@ -716,6 +751,95 @@ export default function AdminPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* NFT Display Diagnostic Alert */}
+        {!isMetadataUriCorrect && (
+          <Alert
+            variant={isMetadataUriEmpty ? "destructive" : "default"}
+            className="border-2"
+          >
+            <AlertTriangle className="h-5 w-5" />
+            <AlertTitle className="text-lg font-bold">
+              {isMetadataUriEmpty
+                ? "🚨 Critical: NFTs Cannot Display in MetaMask"
+                : "⚠️ Warning: Incorrect Metadata URI"}
+            </AlertTitle>
+            <AlertDescription className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm">
+                  {isMetadataUriEmpty ? (
+                    <>
+                      The{" "}
+                      <code className="bg-muted px-1 rounded">
+                        defaultMetadataBaseURI
+                      </code>{" "}
+                      is <strong>not configured</strong>. Certificate NFTs will
+                      NOT appear in MetaMask or any wallet.
+                    </>
+                  ) : (
+                    <>
+                      The current metadata URI is incorrect. NFTs may not
+                      display properly in MetaMask.
+                    </>
+                  )}
+                </p>
+
+                <div className="bg-muted/50 p-3 rounded-md space-y-2 text-xs font-mono">
+                  <div>
+                    <span className="text-muted-foreground">Current:</span>
+                    <p className="text-destructive break-all">
+                      {contractData.defaultMetadataBaseURI || "(empty)"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Expected:</span>
+                    <p className="text-green-600 break-all">
+                      {EXPECTED_METADATA_URI}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <Button
+                    onClick={handleAutoFixMetadataURI}
+                    className="bg-green-600 hover:bg-green-700"
+                    size="sm"
+                  >
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Auto-Fix NFT Display (Recommended)
+                  </Button>
+                  <a
+                    href={`${
+                      process.env.NEXT_PUBLIC_APP_URL || ""
+                    }/api/nft/certificate/1`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-muted-foreground hover:underline flex items-center gap-1"
+                  >
+                    Test Metadata API
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isMetadataUriCorrect && (
+          <Alert variant="default" className="border-green-600 bg-green-50">
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
+            <AlertTitle className="text-green-800">
+              ✅ NFT Metadata URI Correctly Configured
+            </AlertTitle>
+            <AlertDescription className="text-green-700 text-sm">
+              Certificate NFTs will display properly in MetaMask and other
+              wallets. Current URI:{" "}
+              <code className="bg-green-100 px-1 rounded text-xs">
+                {contractData.defaultMetadataBaseURI}
+              </code>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Card>
           <CardHeader>

@@ -196,7 +196,7 @@ export function handleCertificateMinted(event: CertificateMinted): void {
     certificate.paymentReceiptHash = event.params.paymentReceiptHash;
     certificate.baseRoute = certData.baseRoute;
     certificate.isValid = certData.isValid;
-    certificate.totalCourses = ZERO_BIGINT;
+    certificate.totalCourses = BigInt.fromI32(certData.completedCourses.length);
     certificate.totalRevenue = event.params.pricePaid;
     certificate.totalRevenueEth = weiToEth(event.params.pricePaid);
     certificate.createdAt = event.block.timestamp;
@@ -227,6 +227,69 @@ export function handleCertificateMinted(event: CertificateMinted): void {
   let profile = getOrCreateUserProfile(event.params.owner, event);
   certificate.owner = profile.id;
   certificate.save();
+
+  if (!getCertResult.reverted) {
+    let certData = getCertResult.value;
+    for (let i = 0; i < certData.completedCourses.length; i++) {
+      let courseId = certData.completedCourses[i];
+      let courseIdStr = courseId.toString();
+
+      let scEnrollmentId =
+        event.params.owner.toHexString().toLowerCase() + "-" + courseIdStr;
+      let scEnrollment = StudentCourseEnrollment.load(scEnrollmentId);
+
+      if (!scEnrollment) {
+        log.warning(
+          "StudentCourseEnrollment not found for minted certificate: {}",
+          [scEnrollmentId],
+        );
+        continue;
+      }
+
+      let enrollmentId = scEnrollment.enrollment;
+      let enrollment = Enrollment.load(enrollmentId);
+
+      if (!enrollment) {
+        log.warning("Enrollment not found for minted certificate course: {}", [
+          enrollmentId,
+        ]);
+        continue;
+      }
+
+      enrollment.hasCertificate = true;
+      enrollment.certificateTokenId = tokenId;
+      enrollment.certificateAddedAt = event.block.timestamp;
+      enrollment.certificatePrice = event.params.pricePaid;
+      enrollment.lastTxHash = event.transaction.hash;
+      enrollment.save();
+
+      let course = Course.load(courseIdStr);
+      if (!course) {
+        log.warning("Course not found for minted certificate: {}", [
+          courseIdStr,
+        ]);
+        continue;
+      }
+
+      let certCourseId = certificateId + "-" + courseIdStr;
+      let certCourse = new CertificateCourse(certCourseId);
+      certCourse.certificate = certificateId;
+      certCourse.course = courseIdStr;
+      certCourse.enrollment = enrollmentId;
+      certCourse.addedAt = event.block.timestamp;
+      certCourse.pricePaid = event.params.pricePaid;
+      certCourse.pricePaidEth = weiToEth(event.params.pricePaid);
+      certCourse.isFirstCourse = i == 0;
+      certCourse.txHash = event.transaction.hash;
+      certCourse.blockNumber = event.block.number;
+      certCourse.save();
+
+      log.info(
+        "Created CertificateCourse for minted certificate - tokenId: {}, courseId: {}",
+        [tokenId.toString(), courseIdStr],
+      );
+    }
+  }
 
   profile.hasCertificate = true;
   profile.certificateTokenId = tokenId;
@@ -314,7 +377,73 @@ export function handleCourseAddedToCertificate(
     certificate.save();
   }
 
-  let isFirstCourse = certificate.totalCourses.equals(ONE_BIGINT);
+  if (!getCertResult.reverted) {
+    let certData = getCertResult.value;
+
+    for (let i = 0; i < certData.completedCourses.length; i++) {
+      let backfillCourseId = certData.completedCourses[i];
+      let backfillCourseIdStr = backfillCourseId.toString();
+      let backfillCertCourseId = certificateId + "-" + backfillCourseIdStr;
+
+      let existingCertCourse = CertificateCourse.load(backfillCertCourseId);
+      if (existingCertCourse != null) {
+        continue;
+      }
+
+      let backfillScEnrollmentId =
+        owner.toHexString().toLowerCase() + "-" + backfillCourseIdStr;
+      let backfillScEnrollment = StudentCourseEnrollment.load(
+        backfillScEnrollmentId,
+      );
+
+      if (!backfillScEnrollment) {
+        log.warning(
+          "Backfill: StudentCourseEnrollment not found for courseId: {}",
+          [backfillCourseIdStr],
+        );
+        continue;
+      }
+
+      let backfillEnrollmentId = backfillScEnrollment.enrollment;
+      let backfillEnrollment = Enrollment.load(backfillEnrollmentId);
+
+      if (!backfillEnrollment) {
+        log.warning("Backfill: Enrollment not found for courseId: {}", [
+          backfillCourseIdStr,
+        ]);
+        continue;
+      }
+
+      let backfillCourse = Course.load(backfillCourseIdStr);
+      if (!backfillCourse) {
+        log.warning("Backfill: Course not found: {}", [backfillCourseIdStr]);
+        continue;
+      }
+
+      backfillEnrollment.hasCertificate = true;
+      backfillEnrollment.certificateTokenId = tokenId;
+      backfillEnrollment.certificateAddedAt = event.block.timestamp;
+      backfillEnrollment.lastTxHash = event.transaction.hash;
+      backfillEnrollment.save();
+
+      let backfillCertCourse = new CertificateCourse(backfillCertCourseId);
+      backfillCertCourse.certificate = certificateId;
+      backfillCertCourse.course = backfillCourseIdStr;
+      backfillCertCourse.enrollment = backfillEnrollmentId;
+      backfillCertCourse.addedAt = event.block.timestamp;
+      backfillCertCourse.pricePaid = ZERO_BIGINT;
+      backfillCertCourse.pricePaidEth = weiToEth(ZERO_BIGINT);
+      backfillCertCourse.isFirstCourse = i == 0;
+      backfillCertCourse.txHash = event.transaction.hash;
+      backfillCertCourse.blockNumber = event.block.number;
+      backfillCertCourse.save();
+
+      log.info("Backfilled CertificateCourse - tokenId: {}, courseId: {}", [
+        tokenId.toString(),
+        backfillCourseIdStr,
+      ]);
+    }
+  }
 
   let scEnrollmentId =
     owner.toHexString().toLowerCase() + "-" + courseId.toString();
@@ -324,7 +453,7 @@ export function handleCourseAddedToCertificate(
     log.warning("StudentCourseEnrollment not found: {}", [scEnrollmentId]);
   }
 
-  let enrollmentId = scEnrollment ? scEnrollment.enrollmentId.toString() : "";
+  let enrollmentId = scEnrollment ? scEnrollment.enrollment : "";
   let enrollment = Enrollment.load(enrollmentId);
 
   if (!enrollment) {
@@ -345,18 +474,39 @@ export function handleCourseAddedToCertificate(
     log.warning("Course not found: {}", [courseId.toString()]);
   }
 
+  if (!enrollment || !course) {
+    log.error(
+      "Cannot create CertificateCourse - missing enrollment or course. Certificate: {}, Course: {}, Enrollment: {}",
+      [certificateId, courseId.toString(), enrollmentId],
+    );
+    return;
+  }
+
   let certCourseId = certificateId + "-" + courseId.toString();
-  let certCourse = new CertificateCourse(certCourseId);
-  certCourse.certificate = certificateId;
-  certCourse.course = courseId.toString();
-  certCourse.enrollment = enrollmentId;
-  certCourse.addedAt = event.block.timestamp;
-  certCourse.pricePaid = event.params.pricePaid;
-  certCourse.pricePaidEth = weiToEth(event.params.pricePaid);
-  certCourse.isFirstCourse = isFirstCourse;
-  certCourse.txHash = event.transaction.hash;
-  certCourse.blockNumber = event.block.number;
-  certCourse.save();
+  let existingCertCourse = CertificateCourse.load(certCourseId);
+  if (existingCertCourse == null) {
+    let certCourse = new CertificateCourse(certCourseId);
+    certCourse.certificate = certificateId;
+    certCourse.course = courseId.toString();
+    certCourse.enrollment = enrollmentId;
+    certCourse.addedAt = event.block.timestamp;
+    certCourse.pricePaid = event.params.pricePaid;
+    certCourse.pricePaidEth = weiToEth(event.params.pricePaid);
+    certCourse.isFirstCourse = certificate.totalCourses.equals(ONE_BIGINT);
+    certCourse.txHash = event.transaction.hash;
+    certCourse.blockNumber = event.block.number;
+    certCourse.save();
+
+    log.info(
+      "Created CertificateCourse for new course - tokenId: {}, courseId: {}",
+      [tokenId.toString(), courseId.toString()],
+    );
+  } else {
+    log.info("CertificateCourse already exists - tokenId: {}, courseId: {}", [
+      tokenId.toString(),
+      courseId.toString(),
+    ]);
+  }
 
   let eventId =
     event.transaction.hash.toHexString() + "-" + event.logIndex.toString();
@@ -401,6 +551,7 @@ export function handleCourseAddedToCertificate(
   if (course) {
     let creator = getOrCreateUserProfile(course.creator, event);
 
+    let isFirstCourse = certificate.totalCourses.equals(ONE_BIGINT);
     let platformFeePercent = isFirstCourse
       ? BigDecimal.fromString("10")
       : BigDecimal.fromString("5");
@@ -420,6 +571,7 @@ export function handleCourseAddedToCertificate(
       event,
     );
   } else {
+    let isFirstCourse = certificate.totalCourses.equals(ONE_BIGINT);
     let platformFeePercent = isFirstCourse
       ? BigDecimal.fromString("10")
       : BigDecimal.fromString("5");

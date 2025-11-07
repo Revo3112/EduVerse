@@ -67,11 +67,34 @@ export default function LearningPage() {
   const processedData = useMemo(() => {
     if (!enrollments) return { inProgress: [], history: [] };
 
-    const inProgress = enrollments.filter(
+    const recalculateCompletion = (enrollment: EnrollmentData) => {
+      const sectionsCompleted = enrollment.sectionsCompleted;
+      const totalSections = enrollment.totalSections;
+
+      if (totalSections === 0) return enrollment;
+
+      const calculatedPercentage = Math.floor(
+        (sectionsCompleted / totalSections) * 100
+      );
+
+      if (calculatedPercentage !== enrollment.completionPercentage) {
+        return {
+          ...enrollment,
+          completionPercentage: calculatedPercentage,
+          isCompleted: calculatedPercentage === 100,
+        };
+      }
+
+      return enrollment;
+    };
+
+    const recalculatedEnrollments = enrollments.map(recalculateCompletion);
+
+    const inProgress = recalculatedEnrollments.filter(
       (e) => e.isActive && !e.isCompleted && e.status === "ACTIVE"
     );
 
-    const history = enrollments.filter(
+    const history = recalculatedEnrollments.filter(
       (e) => e.isCompleted || e.status === "EXPIRED" || e.status === "COMPLETED"
     );
 

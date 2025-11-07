@@ -30,7 +30,13 @@ import {
   CourseEmergencyDeactivated,
   CourseFactory,
 } from "../../generated/CourseFactory/CourseFactory";
-import { Course, UserProfile, CourseSection } from "../../generated/schema";
+import {
+  Course,
+  UserProfile,
+  CourseSection,
+  Enrollment,
+  StudentCourseEnrollment,
+} from "../../generated/schema";
 import {
   updateNetworkStats,
   incrementPlatformCounter,
@@ -508,10 +514,16 @@ export function handleSectionAdded(event: SectionAdded): void {
   // Update Course entity
   let course = Course.load(courseId);
   if (course != null) {
-    course.sectionsCount = course.sectionsCount.plus(ONE_BIGINT);
+    let newSectionsCount = course.sectionsCount.plus(ONE_BIGINT);
+    course.sectionsCount = newSectionsCount;
     course.totalDuration = course.totalDuration.plus(event.params.duration);
     course.updatedAt = event.block.timestamp;
     course.save();
+
+    // Recalculate completion percentage for all enrollments of this course
+    // When a section is added, students who completed X out of Y sections
+    // should now show X out of (Y+1) sections (percentage will decrease)
+    recalculateEnrollmentCompletionsOnAdd(courseId, newSectionsCount, event);
 
     // Track network stats
     updateNetworkStats(event, "SECTION_ADDED");
@@ -616,16 +628,186 @@ export function handleSectionDeleted(event: SectionDeleted): void {
         }
       }
 
+      let newSectionsCount = course.sectionsCount.minus(ONE_BIGINT);
+
       // Update course metadata
-      course.sectionsCount = course.sectionsCount.minus(ONE_BIGINT);
+      course.sectionsCount = newSectionsCount;
       course.totalDuration = course.totalDuration.minus(deletedDuration);
       course.updatedAt = event.block.timestamp;
       course.save();
+
+      // CRITICAL: Recalculate completion percentage for all enrollments of this course
+      // Iterate through potential enrollment IDs to update completion percentages
+      recalculateEnrollmentCompletions(courseId, newSectionsCount, event);
     }
   }
 
   // Track network stats
   updateNetworkStats(event, "SECTION_DELETED");
+}
+
+/**
+ * Helper function to recalculate completion percentages for all enrollments of a course
+ * Called after section deletion to update student progress accurately
+ */
+function recalculateEnrollmentCompletions(
+  courseId: string,
+  newTotalSections: BigInt,
+  event: SectionDeleted,
+): void {
+  if (newTotalSections.equals(ZERO_BIGINT)) {
+    log.warning(
+      "Cannot recalculate enrollments for course {} - no sections remaining",
+      [courseId],
+    );
+    return;
+  }
+
+  log.info(
+    "Recalculating completion percentages for course {} with new section count {}",
+    [courseId, newTotalSections.toString()],
+  );
+
+  // Iterate through potential enrollment NFT token IDs
+  // Enrollment IDs are sequential BigInts starting from 1
+  // We check up to a reasonable limit (10000 enrollments)
+  let maxEnrollmentsToCheck = 10000;
+  let updatedCount = 0;
+
+  for (let i = 1; i <= maxEnrollmentsToCheck; i++) {
+    let enrollmentId = BigInt.fromI32(i).toString();
+    let enrollment = Enrollment.load(enrollmentId);
+
+    if (enrollment != null && enrollment.courseId.toString() == courseId) {
+      // Recalculate completion percentage with new total sections
+      let sectionsCompleted = enrollment.sectionsCompleted;
+
+      // If student completed more sections than currently exist, cap it
+      if (sectionsCompleted.gt(newTotalSections)) {
+        sectionsCompleted = newTotalSections;
+        enrollment.sectionsCompleted = newTotalSections;
+      }
+
+      // Calculate new percentage
+      let newPercentage = sectionsCompleted
+        .times(BigInt.fromI32(100))
+        .div(newTotalSections);
+      let oldPercentage = enrollment.completionPercentage;
+
+      enrollment.completionPercentage = newPercentage;
+
+      // Check if course is now complete (100%)
+      if (
+        newPercentage.equals(BigInt.fromI32(100)) &&
+        !enrollment.isCompleted
+      ) {
+        enrollment.isCompleted = true;
+        enrollment.completionDate = event.block.timestamp;
+        enrollment.status = "COMPLETED";
+      }
+
+      enrollment.lastActivityAt = event.block.timestamp;
+      enrollment.lastTxHash = event.transaction.hash;
+      enrollment.save();
+
+      updatedCount++;
+
+      log.info(
+        "Updated enrollment {} for course {} - Sections: {}/{}, Percentage: {}% -> {}%",
+        [
+          enrollmentId,
+          courseId,
+          sectionsCompleted.toString(),
+          newTotalSections.toString(),
+          oldPercentage.toString(),
+          newPercentage.toString(),
+        ],
+      );
+    }
+
+    // Early exit if we've checked enough empty slots
+    if (enrollment == null && i > 100 && updatedCount == 0) {
+      break;
+    }
+  }
+
+  log.info("Recalculated {} enrollments for course {}", [
+    BigInt.fromI32(updatedCount).toString(),
+    courseId,
+  ]);
+}
+
+/**
+ * Helper function to recalculate completion percentages when sections are added
+ * Called after section addition to update student progress accurately
+ */
+function recalculateEnrollmentCompletionsOnAdd(
+  courseId: string,
+  newTotalSections: BigInt,
+  event: SectionAdded,
+): void {
+  if (newTotalSections.equals(ZERO_BIGINT)) {
+    return;
+  }
+
+  log.info(
+    "Recalculating completion percentages after section added for course {} with new section count {}",
+    [courseId, newTotalSections.toString()],
+  );
+
+  let maxEnrollmentsToCheck = 10000;
+  let updatedCount = 0;
+
+  for (let i = 1; i <= maxEnrollmentsToCheck; i++) {
+    let enrollmentId = BigInt.fromI32(i).toString();
+    let enrollment = Enrollment.load(enrollmentId);
+
+    if (enrollment != null && enrollment.courseId.toString() == courseId) {
+      let sectionsCompleted = enrollment.sectionsCompleted;
+
+      // Recalculate percentage with new total sections
+      let newPercentage = sectionsCompleted
+        .times(BigInt.fromI32(100))
+        .div(newTotalSections);
+      let oldPercentage = enrollment.completionPercentage;
+
+      enrollment.completionPercentage = newPercentage;
+
+      // If was completed but now has new section, mark as incomplete
+      if (enrollment.isCompleted && newPercentage.lt(BigInt.fromI32(100))) {
+        enrollment.isCompleted = false;
+        enrollment.completionDate = ZERO_BIGINT;
+        enrollment.status = "ACTIVE";
+      }
+
+      enrollment.lastActivityAt = event.block.timestamp;
+      enrollment.lastTxHash = event.transaction.hash;
+      enrollment.save();
+
+      updatedCount++;
+
+      log.info(
+        "Updated enrollment {} for course {} after section add - Sections: {}/{}, Percentage: {}% -> {}%",
+        [
+          enrollmentId,
+          courseId,
+          sectionsCompleted.toString(),
+          newTotalSections.toString(),
+          oldPercentage.toString(),
+          newPercentage.toString(),
+        ],
+      );
+    }
+
+    if (enrollment == null && i > 100 && updatedCount == 0) {
+      break;
+    }
+  }
+
+  log.info("Recalculated {} enrollments after section add for course {}", [
+    BigInt.fromI32(updatedCount).toString(),
+    courseId,
+  ]);
 }
 
 /**

@@ -60,6 +60,41 @@ export async function GET(
     const { tokenId: tokenIdStr } = await params;
     const tokenId = BigInt(tokenIdStr);
 
+    console.log(`[NFT Metadata API] Fetching metadata for tokenId: ${tokenId}`);
+    console.log(
+      `[NFT Metadata API] Certificate Manager: ${CERTIFICATE_MANAGER_ADDRESS}`
+    );
+    console.log(`[NFT Metadata API] Course Factory: ${COURSE_FACTORY_ADDRESS}`);
+    console.log(
+      `[NFT Metadata API] Client ID exists: ${!!process.env
+        .NEXT_PUBLIC_THIRDWEB_CLIENT_ID}`
+    );
+
+    if (!CERTIFICATE_MANAGER_ADDRESS || !COURSE_FACTORY_ADDRESS) {
+      console.error(
+        "[NFT Metadata API] Missing contract addresses in environment variables"
+      );
+      return NextResponse.json(
+        {
+          error: "Contract addresses not configured",
+          details:
+            "NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS or NEXT_PUBLIC_COURSE_FACTORY_ADDRESS missing",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID) {
+      console.error("[NFT Metadata API] Missing Thirdweb client ID");
+      return NextResponse.json(
+        {
+          error: "Thirdweb client not configured",
+          details: "NEXT_PUBLIC_THIRDWEB_CLIENT_ID missing",
+        },
+        { status: 500 }
+      );
+    }
+
     const certificateContract = getContract({
       client,
       chain: mantaPacificTestnet,
@@ -72,6 +107,10 @@ export async function GET(
       address: COURSE_FACTORY_ADDRESS,
     });
 
+    console.log(
+      `[NFT Metadata API] Reading certificate data from blockchain...`
+    );
+
     // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
     const certificateData = (await readContract({
       contract: certificateContract,
@@ -80,6 +119,10 @@ export async function GET(
       params: [tokenId],
     })) as CertificateData;
 
+    console.log(
+      `[NFT Metadata API] Certificate found: ${certificateData.recipientName}`
+    );
+
     // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
     const completedCourses = (await readContract({
       contract: certificateContract,
@@ -87,6 +130,10 @@ export async function GET(
         "function getCertificateCompletedCourses(uint256 tokenId) view returns (uint256[])",
       params: [tokenId],
     })) as bigint[];
+
+    console.log(
+      `[NFT Metadata API] Completed courses: ${completedCourses.length}`
+    );
 
     const courseTitles: string[] = [];
     for (const courseId of completedCourses) {
@@ -99,7 +146,14 @@ export async function GET(
           params: [courseId],
         })) as CourseData;
         courseTitles.push(courseData.title);
-      } catch {
+        console.log(
+          `[NFT Metadata API] Course ${courseId}: ${courseData.title}`
+        );
+      } catch (error) {
+        console.warn(
+          `[NFT Metadata API] Could not fetch course ${courseId}:`,
+          error
+        );
         courseTitles.push(`Course #${courseId}`);
       }
     }
@@ -176,9 +230,28 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error("Error fetching certificate metadata:", error);
+    console.error(
+      "[NFT Metadata API] Error fetching certificate metadata:",
+      error
+    );
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[NFT Metadata API] Error details:", {
+      message: errorMessage,
+      tokenId: params ? (await params).tokenId : "unknown",
+      certificateManager: CERTIFICATE_MANAGER_ADDRESS,
+      courseFactory: COURSE_FACTORY_ADDRESS,
+      hasClientId: !!process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID,
+    });
+
     return NextResponse.json(
-      { error: "Failed to fetch certificate metadata" },
+      {
+        error: "Failed to fetch certificate metadata",
+        details: errorMessage,
+        tokenId: params ? (await params).tokenId : "unknown",
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }

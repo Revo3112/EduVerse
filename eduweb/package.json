@@ -20,7 +20,9 @@
     "goldsky:tag:prod": "goldsky subgraph tag create eduverse-platform/v1.0.0 --tag prod",
     "goldsky:tag:staging": "goldsky subgraph tag create eduverse-platform/v1.0.0 --tag staging",
     "set-nft-uris": "tsx src/scripts/set-contract-uris.ts",
-    "test-nft-metadata": "tsx src/scripts/test-nft-metadata.ts"
+    "test-nft-metadata": "tsx src/scripts/test-nft-metadata.ts",
+    "fonts:test": "node scripts/test-fonts.js",
+    "fonts:check": "ls -lh public/fonts/*.ttf 2>/dev/null || echo 'Fonts not found'"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

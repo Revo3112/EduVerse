@@ -69,6 +69,18 @@ function getGraphQLClient(): GraphQLClient {
       headers: {
         "Content-Type": "application/json",
       },
+      cache: "no-store",
+      fetch: (url, options) => {
+        return fetch(url, {
+          ...options,
+          cache: "no-store",
+          headers: {
+            ...options?.headers,
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+          },
+        });
+      },
     });
   }
   return graphqlClient;

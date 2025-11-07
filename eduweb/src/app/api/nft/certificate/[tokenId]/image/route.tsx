@@ -39,6 +39,7 @@ export async function GET(
       address: CERTIFICATE_MANAGER_ADDRESS,
     });
 
+    // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
     const certificateData = (await readContract({
       contract: certificateContract,
       method:

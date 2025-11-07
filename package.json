@@ -28,7 +28,9 @@
     "goldsky:build": "node scripts/sync-goldsky.js --rebuild",
     "goldsky:deploy": "node scripts/sync-goldsky.js --rebuild --deploy",
     "mcp:start": "npx @jpisnice/shadcn-ui-mcp-server --framework react",
-    "setup:mobile": "node scripts/export-system.js --target=mobile"
+    "setup:mobile": "node scripts/export-system.js --target=mobile",
+    "nft:diagnose": "npx hardhat run scripts/diagnose-nft-display.js --network mantaPacificTestnet",
+    "nft:fix": "npx hardhat run scripts/fix-nft-metadata-uri.js --network mantaPacificTestnet"
   },
   "keywords": [
     "web3",

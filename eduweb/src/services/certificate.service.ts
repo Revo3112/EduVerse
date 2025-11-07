@@ -4,9 +4,15 @@ import type {
   UploadErrorResponse,
   UploadSuccessResponse,
 } from "@/lib/pinata-types";
-import { createCanvas, loadImage, type CanvasRenderingContext2D } from "canvas";
+import {
+  createCanvas,
+  loadImage,
+  registerFont,
+  type CanvasRenderingContext2D,
+} from "canvas";
 import QRCode from "qrcode";
 import sharp from "sharp";
+import path from "path";
 import {
   uploadFileToPrivateIPFS,
   uploadJSONToPrivateIPFS,
@@ -32,7 +38,7 @@ const NAME_POSITION = {
   x: CANVAS_WIDTH / 2,
   y: 1800,
   fontSize: 285,
-  fontFamily: "Arial, sans-serif",
+  fontFamily: "Inter",
   fontWeight: "bold",
   color: "#2D1B4E",
   align: "center" as const,
@@ -46,7 +52,7 @@ const DESCRIPTION_POSITION = {
   x: CANVAS_WIDTH / 2,
   y: 2210,
   fontSize: 89,
-  fontFamily: "Arial, sans-serif",
+  fontFamily: "Inter",
   color: "#4A4A4A",
   align: "center" as const,
   maxWidth: 4275,
@@ -58,6 +64,39 @@ const QR_POSITION = {
   y: 2800,
   size: 1000,
 };
+
+let fontsRegistered = false;
+
+function registerCertificateFonts(): void {
+  if (fontsRegistered) {
+    return;
+  }
+
+  try {
+    const fontsDir = path.join(process.cwd(), "public", "fonts");
+
+    registerFont(path.join(fontsDir, "Inter-Regular.ttf"), {
+      family: "Inter",
+      weight: "normal",
+    });
+
+    registerFont(path.join(fontsDir, "Inter-Bold.ttf"), {
+      family: "Inter",
+      weight: "bold",
+    });
+
+    fontsRegistered = true;
+    console.log("[Certificate Service] Fonts registered successfully");
+  } catch (error) {
+    console.error("[Certificate Service] Failed to register fonts:", error);
+    console.error(
+      "[Certificate Service] Certificates will use fallback system fonts"
+    );
+    console.error(
+      "[Certificate Service] Please ensure Inter-Regular.ttf and Inter-Bold.ttf are in public/fonts/"
+    );
+  }
+}
 
 /**
  * Generate QR code for certificate verification
@@ -169,6 +208,8 @@ export async function generateAndUploadCertificate(
   const startTime = Date.now();
 
   try {
+    registerCertificateFonts();
+
     console.log("[Certificate Service] Starting certificate generation...");
     console.log("[Certificate Service] Student:", data.studentName);
     console.log("[Certificate Service] Course:", data.courseName);
