@@ -141,7 +141,6 @@ const COURSE_DIFFICULTIES = [
 ];
 
 const MAX_PRICE_ETH = 1;
-const MIN_PRICE_ETH = 0.001;
 
 const CONTRACT_LIMITS = {
   TITLE_MAX: 100,
@@ -1181,7 +1180,7 @@ function EditCourseContent() {
                       id="price"
                       type="number"
                       step="0.001"
-                      min={MIN_PRICE_ETH}
+                      min={0.00001}
                       max={MAX_PRICE_ETH}
                       value={formData.pricePerMonth}
                       onChange={(e) =>
