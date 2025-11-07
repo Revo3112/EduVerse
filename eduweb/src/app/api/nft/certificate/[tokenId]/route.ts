@@ -111,7 +111,7 @@ export async function GET(
       `[NFT Metadata API] Reading certificate data from blockchain...`
     );
 
-    // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+    // @ts-expect-error - thirdweb v5 type inference issue with Next.js 15
     const certificateData = (await readContract({
       contract: certificateContract,
       method:
@@ -123,7 +123,6 @@ export async function GET(
       `[NFT Metadata API] Certificate found: ${certificateData.recipientName}`
     );
 
-    // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
     const completedCourses = (await readContract({
       contract: certificateContract,
       method:
@@ -138,7 +137,7 @@ export async function GET(
     const courseTitles: string[] = [];
     for (const courseId of completedCourses) {
       try {
-        // @ts-ignore - thirdweb v5 type inference issue with Next.js 15
+        // @ts-expect-error - thirdweb v5 type inference issue with Next.js 15
         const courseData = (await readContract({
           contract: courseFactoryContract,
           method:
