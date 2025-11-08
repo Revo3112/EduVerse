@@ -1496,44 +1496,44 @@ function EditCourseContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-10 px-4 md:px-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-6 px-4 sm:px-6">
+      <div className="max-w-6xl mx-auto">
         {/* Header Section */}
-        <div className="mb-10 flex items-center gap-4">
+        <div className="mb-6 flex items-center gap-3">
           <Button
             variant="outline"
             onClick={handleCancel}
-            className="gap-2 hover:bg-slate-100 transition-colors"
+            className="gap-2 hover:bg-slate-100 transition-colors h-9 px-3"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
           <div className="flex-1">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
               Edit Course
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Manage and update your course content
             </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="grid gap-8 lg:grid-cols-3">
+          <div className="grid gap-6 lg:grid-cols-12">
             {/* Main Content */}
-            <div className="lg:col-span-2 space-y-8">
+            <div className="lg:col-span-8 space-y-6">
               {/* Course Information Card */}
               <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-5 border-b border-slate-100">
-                  <CardTitle className="text-xl font-bold">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg font-bold">
                     Course Information
                   </CardTitle>
-                  <CardDescription className="text-slate-500 mt-2">
+                  <CardDescription className="text-slate-500 text-sm">
                     Update your course details and metadata
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-8 space-y-6">
-                  <div className="space-y-2.5">
+                <CardContent className="pt-3 space-y-3">
+                  <div className="space-y-1.5">
                     <Label htmlFor="title" className="text-sm font-semibold">
                       Course Title
                     </Label>
@@ -1545,7 +1545,7 @@ function EditCourseContent() {
                       }
                       placeholder="Enter course title"
                       disabled={isSending}
-                      className="h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
+                      className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.title && (
                       <p className="text-xs font-medium text-red-500 mt-1.5 flex items-center gap-1">
@@ -1555,7 +1555,7 @@ function EditCourseContent() {
                     )}
                   </div>
 
-                  <div className="space-y-2.5">
+                  <div className="space-y-1.5">
                     <Label
                       htmlFor="description"
                       className="text-sm font-semibold"
@@ -1581,7 +1581,7 @@ function EditCourseContent() {
                     )}
                   </div>
 
-                  <div className="space-y-2.5">
+                  <div className="space-y-1.5">
                     <Label
                       htmlFor="creatorName"
                       className="text-sm font-semibold"
@@ -1596,7 +1596,7 @@ function EditCourseContent() {
                       }
                       placeholder="Your full name"
                       disabled={isSending}
-                      className="h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
+                      className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.creatorName && (
                       <p className="text-xs font-medium text-red-500 mt-1.5 flex items-center gap-1">
@@ -1607,7 +1607,7 @@ function EditCourseContent() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div className="space-y-2.5">
+                    <div className="space-y-1.5">
                       <Label
                         htmlFor="category"
                         className="text-sm font-semibold"
@@ -1621,7 +1621,7 @@ function EditCourseContent() {
                         }
                         disabled={isSending}
                       >
-                        <SelectTrigger className="h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500">
+                        <SelectTrigger className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="border-slate-200">
@@ -1636,7 +1636,7 @@ function EditCourseContent() {
                       </Select>
                     </div>
 
-                    <div className="space-y-2.5">
+                    <div className="space-y-1.5">
                       <Label
                         htmlFor="difficulty"
                         className="text-sm font-semibold"
@@ -1650,7 +1650,7 @@ function EditCourseContent() {
                         }
                         disabled={isSending}
                       >
-                        <SelectTrigger className="h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500">
+                        <SelectTrigger className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="border-slate-200">
@@ -1664,7 +1664,7 @@ function EditCourseContent() {
                     </div>
                   </div>
 
-                  <div className="space-y-2.5">
+                  <div className="space-y-1.5">
                     <Label htmlFor="price" className="text-sm font-semibold">
                       Price (ETH per month)
                     </Label>
@@ -1678,7 +1678,7 @@ function EditCourseContent() {
                         handleInputChange("pricePerMonth", e.target.value)
                       }
                       disabled={isSending}
-                      className="h-11 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
+                      className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.pricePerMonth && (
                       <p className="text-xs font-medium text-red-500 mt-1.5 flex items-center gap-1">
@@ -1692,12 +1692,12 @@ function EditCourseContent() {
 
               {/* Course Sections Card */}
               <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-5 border-b border-slate-100 flex items-center justify-between">
+                <CardHeader className="pb-1">
                   <div className="flex-1">
-                    <CardTitle className="text-xl font-bold">
+                    <CardTitle className="text-lg font-bold">
                       Course Sections
                     </CardTitle>
-                    <CardDescription className="text-slate-500 mt-2">
+                    <CardDescription className="text-slate-500 text-sm">
                       {draftSections.filter((s) => !s.isDeleted).length}{" "}
                       section(s)
                       {hasSectionChanges && (
@@ -1745,13 +1745,13 @@ function EditCourseContent() {
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {draftSections
                         .filter((s) => !s.isDeleted)
                         .map((section, index) => (
                           <div
                             key={section.id}
-                            className={`flex items-center gap-4 p-5 rounded-xl border transition-all ${
+                            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
                               section.isNew
                                 ? "bg-green-50/50 border-green-200 shadow-sm"
                                 : section.isModified
@@ -1860,13 +1860,15 @@ function EditCourseContent() {
             </div>
 
             {/* Sidebar */}
-            <div className="lg:col-span-1 space-y-8">
+            <div className="lg:col-span-4 space-y-6">
               {/* Thumbnail Card */}
               <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-5 border-b border-slate-100">
-                  <CardTitle className="text-lg font-bold">Thumbnail</CardTitle>
+                <CardHeader className="pb-1">
+                  <CardTitle className="text-base font-semibold">
+                    Thumbnail
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-4">
+                <CardContent className="pt-2 space-y-2">
                   {thumbnailPreview || originalThumbnailUrl ? (
                     <div className="relative aspect-video rounded-lg overflow-hidden bg-slate-100 shadow-sm group">
                       <Image
@@ -1910,13 +1912,15 @@ function EditCourseContent() {
 
               {/* Actions Card */}
               <Card className="border-0 shadow-sm hover:shadow-md transition-shadow sticky top-6">
-                <CardHeader className="pb-5 border-b border-slate-100">
-                  <CardTitle className="text-lg font-bold">Actions</CardTitle>
+                <CardHeader className="pb-1">
+                  <CardTitle className="text-base font-semibold">
+                    Actions
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6 space-y-3">
+                <CardContent className="pt-2 space-y-2">
                   <Button
                     type="submit"
-                    className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors gap-2"
+                    className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors gap-2"
                     disabled={isSending || (!hasChanges && !hasSectionChanges)}
                   >
                     {isSending ? (
@@ -1934,8 +1938,8 @@ function EditCourseContent() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full h-11 border-slate-300 hover:bg-slate-50 rounded-lg transition-colors font-semibold"
                     onClick={handleCancel}
+                    className="w-full h-10 border-slate-300 hover:bg-slate-50 rounded-lg transition-colors font-semibold"
                     disabled={isSending}
                   >
                     Cancel
@@ -1958,12 +1962,12 @@ function EditCourseContent() {
 
         {/* Section Dialog */}
         <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
-          <DialogContent className="sm:max-w-md border-slate-200 shadow-lg">
+          <DialogContent className="sm:max-w-lg border-slate-200 shadow-lg">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold">
+              <DialogTitle className="text-lg font-bold">
                 {editingSectionId ? "Edit Section" : "Add Section"}
               </DialogTitle>
-              <DialogDescription className="text-slate-600 mt-2">
+              <DialogDescription className="text-slate-600 text-sm">
                 {editingSectionId
                   ? "Update section details and video"
                   : "Create a new section for your course"}
@@ -2445,21 +2449,21 @@ function EditCourseContent() {
 
 function EditCourseLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-10 px-4 md:px-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-10">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-6 px-4 sm:px-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center gap-3 mb-6">
           <Skeleton className="h-10 w-24 rounded-lg" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-10 w-64 rounded-lg" />
             <Skeleton className="h-4 w-48 rounded-lg" />
           </div>
         </div>
-        <div className="grid gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-8">
+        <div className="grid gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-8 space-y-6">
             <Skeleton className="h-80 rounded-xl" />
             <Skeleton className="h-96 rounded-xl" />
           </div>
-          <div className="space-y-8">
+          <div className="lg:col-span-4 space-y-6">
             <Skeleton className="h-64 rounded-xl" />
             <Skeleton className="h-40 rounded-xl sticky top-6" />
           </div>
