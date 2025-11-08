@@ -723,9 +723,9 @@ function EditCourseContent() {
           const section = sections.find((s) => s.id === sectionId);
           if (!section) continue;
 
-          if (!sectionData.contentCID) {
+          if (!sectionData.contentCID || sectionData.contentCID.trim() === "") {
             throw new Error(
-              `Section "${sectionData.title}" is missing video CID. Video upload may have failed. Please retry or remove this section.`
+              `Section "${sectionData.title}" has no video content. The video upload may have failed or the video file was not attached. Please re-upload the video for this section.`
             );
           }
 
@@ -785,9 +785,9 @@ function EditCourseContent() {
         for (let i = 0; i < sectionsToAdd.length; i++) {
           const sectionData = sectionsToAdd[i];
 
-          if (!sectionData.contentCID) {
+          if (!sectionData.contentCID || sectionData.contentCID.trim() === "") {
             throw new Error(
-              `Section "${sectionData.title}" is missing video CID. Video upload may have failed. Please retry or remove this section.`
+              `Section "${sectionData.title}" has no video content. The video upload may have failed or you forgot to attach a video file. Please edit this section, upload a video, then try saving again.`
             );
           }
 
@@ -993,7 +993,7 @@ function EditCourseContent() {
             console.log(`[Edit Upload] TUS upload complete`);
             onProgressUpdate?.({
               uploadProgress: 100,
-              processingStatus: "ready",
+              processingStatus: "getting-cid",
             });
             resolve();
           },
@@ -1002,12 +1002,66 @@ function EditCourseContent() {
         upload.start();
       });
 
-      const playbackId = asset.playbackId || asset.id;
+      let playbackId = asset.playbackId || "";
+
+      if (!playbackId) {
+        console.log(`[Edit Upload] Polling for playbackId (max 10s)...`);
+        onProgressUpdate?.({
+          uploadProgress: 100,
+          processingStatus: "getting-cid",
+        });
+
+        const maxRetries = 5;
+        const retryDelay = 2000;
+
+        for (let retry = 0; retry < maxRetries; retry++) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+
+          try {
+            const assetResponse = await fetch(
+              `/api/livepeer/asset/${asset.id}`
+            );
+
+            if (assetResponse.ok) {
+              const assetData = await assetResponse.json();
+              playbackId = assetData.playbackId || "";
+
+              if (playbackId) {
+                console.log(
+                  `[Edit Upload] ✅ PlaybackId retrieved: ${playbackId} (after ${
+                    (retry + 1) * 2
+                  }s)`
+                );
+                break;
+              }
+
+              console.log(
+                `[Edit Upload] Retry ${
+                  retry + 1
+                }/${maxRetries}: PlaybackId not ready yet...`
+              );
+            }
+          } catch (pollError) {
+            console.error(
+              `[Edit Upload] Error polling asset ${asset.id}:`,
+              pollError
+            );
+          }
+        }
+
+        if (!playbackId) {
+          console.warn(
+            `[Edit Upload] ⚠️ PlaybackId not available after 10s. Using assetId as fallback.`
+          );
+          playbackId = asset.id;
+        }
+      }
+
+      onProgressUpdate?.({ uploadProgress: 100, processingStatus: "ready" });
 
       console.log(
-        `[Edit Upload] ✅ Upload complete, using playbackId: ${playbackId}`
+        `[Edit Upload] ✅ Upload complete, playbackId: ${playbackId}`
       );
-      console.log(`[Edit Upload] Video processing continues in background`);
 
       return {
         assetId: asset.id,
@@ -1168,6 +1222,25 @@ function EditCourseContent() {
       toast.error(
         `Duration must be ${CONTRACT_LIMITS.SECTION_DURATION_MIN}-${CONTRACT_LIMITS.SECTION_DURATION_MAX} seconds`
       );
+      return;
+    }
+
+    const editingSection = editingSectionId
+      ? draftSections.find((s) => s.id === editingSectionId)
+      : null;
+
+    if (!editingSectionId && !videoFile) {
+      toast.error("Video file required for new section", {
+        description: "Please upload a video file before adding this section",
+      });
+      return;
+    }
+
+    if (editingSectionId && !videoFile && !editingSection?.contentCID) {
+      toast.error("Video file required", {
+        description:
+          "This section has no existing video. Please upload a video file.",
+      });
       return;
     }
 
