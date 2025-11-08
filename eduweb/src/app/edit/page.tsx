@@ -1524,7 +1524,7 @@ function EditCourseContent() {
             <div className="lg:col-span-8 space-y-6">
               {/* Course Information Card */}
               <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-0">
                   <CardTitle className="text-lg font-bold">
                     Course Information
                   </CardTitle>
@@ -1548,7 +1548,7 @@ function EditCourseContent() {
                       className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.title && (
-                      <p className="text-xs font-medium text-red-500 mt-1.5 flex items-center gap-1">
+                      <p className="text-xs font-medium text-red-500 mt-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.title}
                       </p>
@@ -1574,7 +1574,7 @@ function EditCourseContent() {
                       className="border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all resize-none"
                     />
                     {errors.description && (
-                      <p className="text-xs font-medium text-red-500 mt-1.5 flex items-center gap-1">
+                      <p className="text-xs font-medium text-red-500 mt-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.description}
                       </p>
@@ -1599,14 +1599,14 @@ function EditCourseContent() {
                       className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.creatorName && (
-                      <p className="text-xs font-medium text-red-500 mt-1.5 flex items-center gap-1">
+                      <p className="text-xs font-medium text-red-500 mt-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.creatorName}
                       </p>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label
                         htmlFor="category"
@@ -1681,7 +1681,7 @@ function EditCourseContent() {
                       className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.pricePerMonth && (
-                      <p className="text-xs font-medium text-red-500 mt-1.5 flex items-center gap-1">
+                      <p className="text-xs font-medium text-red-500 mt-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.pricePerMonth}
                       </p>
@@ -1692,66 +1692,64 @@ function EditCourseContent() {
 
               {/* Course Sections Card */}
               <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-1">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg font-bold">
-                      Course Sections
-                    </CardTitle>
-                    <CardDescription className="text-slate-500 text-sm">
-                      {draftSections.filter((s) => !s.isDeleted).length}{" "}
-                      section(s)
-                      {hasSectionChanges && (
-                        <span className="text-amber-600 font-semibold ml-2 inline-block">
-                          (
-                          {pendingChanges.sectionsToAdd.length > 0 &&
-                            `${pendingChanges.sectionsToAdd.length} new`}
-                          {pendingChanges.sectionsToUpdate.size > 0 &&
-                            `${
-                              pendingChanges.sectionsToAdd.length > 0
-                                ? ", "
-                                : ""
-                            }${pendingChanges.sectionsToUpdate.size} modified`}
-                          {pendingChanges.sectionsToDelete.size > 0 &&
-                            `${
-                              pendingChanges.sectionsToAdd.length > 0 ||
-                              pendingChanges.sectionsToUpdate.size > 0
-                                ? ", "
-                                : ""
-                            }${pendingChanges.sectionsToDelete.size} removed`}
-                          )
-                        </span>
-                      )}
-                    </CardDescription>
+                <CardHeader className="pb-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg font-bold">
+                        Course Sections
+                      </CardTitle>
+                      <CardDescription className="text-slate-500 text-sm mt-0.5">
+                        {draftSections.filter((s) => !s.isDeleted).length}{" "}
+                        section(s)
+                        {hasSectionChanges && (
+                          <span className="text-amber-600 font-semibold ml-2 inline-block">
+                            {pendingChanges.sectionsToAdd.length > 0 &&
+                              `${pendingChanges.sectionsToAdd.length} new`}
+                            {pendingChanges.sectionsToUpdate.size > 0 &&
+                              pendingChanges.sectionsToAdd.length > 0 &&
+                              `, `}
+                            {pendingChanges.sectionsToUpdate.size > 0 &&
+                              `${pendingChanges.sectionsToUpdate.size} modified`}
+                            {pendingChanges.sectionsToDelete.size > 0 &&
+                              (pendingChanges.sectionsToAdd.length > 0 ||
+                                pendingChanges.sectionsToUpdate.size > 0) &&
+                              `, `}
+                            {pendingChanges.sectionsToDelete.size > 0 &&
+                              `${pendingChanges.sectionsToDelete.size} removed`}
+                          </span>
+                        )}
+                      </CardDescription>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={openAddSectionDialog}
+                      disabled={isSending}
+                      className="gap-2 bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Section
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    onClick={openAddSectionDialog}
-                    disabled={isSending}
-                    className="gap-2 bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Section
-                  </Button>
                 </CardHeader>
-                <CardContent className="pt-8">
+                <CardContent className="pt-3">
                   {draftSections.filter((s) => !s.isDeleted).length === 0 ? (
-                    <div className="text-center py-12 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200">
-                      <Video className="h-12 w-12 mx-auto mb-4 text-slate-300" />
+                    <div className="text-center py-8 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200">
+                      <Video className="h-10 w-10 mx-auto mb-3 text-slate-300" />
                       <p className="text-sm font-medium text-slate-600">
                         No sections yet
                       </p>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-xs text-slate-500 mt-0.5">
                         Add your first section to get started
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-2.5">
+                    <div className="space-y-2">
                       {draftSections
                         .filter((s) => !s.isDeleted)
                         .map((section, index) => (
                           <div
                             key={section.id}
-                            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
+                            className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
                               section.isNew
                                 ? "bg-green-50/50 border-green-200 shadow-sm"
                                 : section.isModified
@@ -1761,36 +1759,36 @@ function EditCourseContent() {
                           >
                             <GripVertical className="h-5 w-5 text-slate-400 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-3 flex-wrap">
-                                <h4 className="font-semibold text-slate-900 truncate">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="font-semibold text-slate-900 truncate text-sm">
                                   {section.title}
                                 </h4>
-                                <div className="flex gap-2">
+                                <div className="flex gap-1.5">
                                   {section.isNew && (
-                                    <span className="px-2.5 py-1 text-xs font-bold bg-green-500 text-white rounded-full">
+                                    <span className="px-2 py-0.5 text-xs font-bold bg-green-500 text-white rounded-full">
                                       NEW
                                     </span>
                                   )}
                                   {section.isModified && !section.isNew && (
-                                    <span className="px-2.5 py-1 text-xs font-bold bg-amber-500 text-white rounded-full">
+                                    <span className="px-2 py-0.5 text-xs font-bold bg-amber-500 text-white rounded-full">
                                       MODIFIED
                                     </span>
                                   )}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-4 mt-2.5 text-xs text-slate-600 flex-wrap">
-                                <span className="flex items-center gap-1.5">
-                                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-600 flex-wrap">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3 text-slate-400" />
                                   {formatDuration(section.duration)}
                                 </span>
                                 {section.videoFile ? (
-                                  <span className="flex items-center gap-1.5 text-amber-600 font-medium">
-                                    <Upload className="h-3.5 w-3.5" />
+                                  <span className="flex items-center gap-1 text-amber-600 font-medium">
+                                    <Upload className="h-3 w-3" />
                                     Pending upload
                                   </span>
                                 ) : (
-                                  <span className="flex items-center gap-1.5">
-                                    <Video className="h-3.5 w-3.5 text-slate-400" />
+                                  <span className="flex items-center gap-1">
+                                    <Video className="h-3 w-3 text-slate-400" />
                                     {section.contentCID
                                       ? `${section.contentCID.slice(0, 8)}...`
                                       : "No video"}
@@ -1798,7 +1796,7 @@ function EditCourseContent() {
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
                               {index > 0 && (
                                 <Button
                                   type="button"
@@ -1808,7 +1806,7 @@ function EditCourseContent() {
                                     handleMoveSection(index, index - 1)
                                   }
                                   disabled={isSending}
-                                  className="h-8 w-8 p-0 hover:bg-slate-100"
+                                  className="h-7 w-7 p-0 hover:bg-slate-100"
                                 >
                                   ↑
                                 </Button>
@@ -1825,7 +1823,7 @@ function EditCourseContent() {
                                     handleMoveSection(index, index + 1)
                                   }
                                   disabled={isSending}
-                                  className="h-8 w-8 p-0 hover:bg-slate-100"
+                                  className="h-7 w-7 p-0 hover:bg-slate-100"
                                 >
                                   ↓
                                 </Button>
@@ -1836,9 +1834,9 @@ function EditCourseContent() {
                                 size="sm"
                                 onClick={() => openEditSectionDialog(section)}
                                 disabled={isSending}
-                                className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
+                                className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
                               >
-                                <Edit className="h-4 w-4" />
+                                <Edit className="h-3.5 w-3.5" />
                               </Button>
                               <Button
                                 type="button"
@@ -1846,9 +1844,9 @@ function EditCourseContent() {
                                 size="sm"
                                 onClick={() => handleDeleteSection(section)}
                                 disabled={isSending}
-                                className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+                                className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           </div>
@@ -1863,12 +1861,12 @@ function EditCourseContent() {
             <div className="lg:col-span-4 space-y-6">
               {/* Thumbnail Card */}
               <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="pb-1">
+                <CardHeader className="pb-0">
                   <CardTitle className="text-base font-semibold">
                     Thumbnail
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-2 space-y-2">
+                <CardContent className="pt-2 space-y-1.5">
                   {thumbnailPreview || originalThumbnailUrl ? (
                     <div className="relative aspect-video rounded-lg overflow-hidden bg-slate-100 shadow-sm group">
                       <Image
@@ -1890,12 +1888,12 @@ function EditCourseContent() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-slate-400 hover:bg-slate-50 transition-all cursor-pointer">
-                      <Upload className="h-10 w-10 mx-auto mb-3 text-slate-400" />
-                      <p className="text-sm font-medium text-slate-700 mb-1">
+                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 hover:bg-slate-50 transition-all cursor-pointer">
+                      <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
+                      <p className="text-sm font-medium text-slate-700 mb-0.5">
                         Upload thumbnail
                       </p>
-                      <p className="text-xs text-slate-500 mb-4">
+                      <p className="text-xs text-slate-500 mb-3">
                         JPG, PNG or WebP
                       </p>
                       <Input
@@ -1912,15 +1910,15 @@ function EditCourseContent() {
 
               {/* Actions Card */}
               <Card className="border-0 shadow-sm hover:shadow-md transition-shadow sticky top-6">
-                <CardHeader className="pb-1">
+                <CardHeader className="pb-0">
                   <CardTitle className="text-base font-semibold">
                     Actions
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-2 space-y-2">
+                <CardContent className="pt-2 space-y-1.5">
                   <Button
                     type="submit"
-                    className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors gap-2"
+                    className="w-full h-9 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors gap-2"
                     disabled={isSending || (!hasChanges && !hasSectionChanges)}
                   >
                     {isSending ? (
@@ -1939,7 +1937,7 @@ function EditCourseContent() {
                     type="button"
                     variant="outline"
                     onClick={handleCancel}
-                    className="w-full h-10 border-slate-300 hover:bg-slate-50 rounded-lg transition-colors font-semibold"
+                    className="w-full h-9 border-slate-300 hover:bg-slate-50 rounded-lg transition-colors font-semibold"
                     disabled={isSending}
                   >
                     Cancel
@@ -1974,8 +1972,8 @@ function EditCourseContent() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-6 py-4">
-              <div className="space-y-2.5">
+            <div className="space-y-5 py-4">
+              <div className="space-y-1.5">
                 <Label
                   htmlFor="section-title"
                   className="text-sm font-semibold"
@@ -1996,7 +1994,7 @@ function EditCourseContent() {
                 />
               </div>
 
-              <div className="space-y-2.5">
+              <div className="space-y-1.5">
                 <Label
                   htmlFor="section-duration"
                   className="text-sm font-semibold"
@@ -2017,13 +2015,13 @@ function EditCourseContent() {
                   }
                   className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
                 />
-                <p className="text-xs text-slate-500 mt-1.5">
+                <p className="text-xs text-slate-500 mt-0.5">
                   {Math.floor(sectionFormData.duration / 60)} minutes{" "}
                   {sectionFormData.duration % 60} seconds
                 </p>
               </div>
 
-              <div className="space-y-2.5">
+              <div className="space-y-1.5">
                 <Label
                   htmlFor="section-video"
                   className="text-sm font-semibold"
@@ -2038,7 +2036,7 @@ function EditCourseContent() {
                   className="cursor-pointer h-10"
                 />
                 {videoFile && (
-                  <p className="text-xs font-medium text-green-600 mt-2 flex items-center gap-1.5">
+                  <p className="text-xs font-medium text-green-600 mt-1.5 flex items-center gap-1.5">
                     <span className="h-4 w-4 rounded-full bg-green-500 text-white flex items-center justify-center text-xs">
                       ✓
                     </span>
