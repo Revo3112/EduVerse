@@ -498,8 +498,8 @@ function EditCourseContent() {
           stage: "uploading-videos",
           currentOperation: "Uploading section videos...",
         }));
-        const videosUploaded = await uploadAllVideosBeforeCommit();
-        if (!videosUploaded) {
+        const updatedPending = await uploadAllVideosBeforeCommit();
+        if (!updatedPending) {
           setProgressState((prev) => ({
             ...prev,
             stage: "error",
@@ -511,6 +511,8 @@ function EditCourseContent() {
           ...prev,
           currentStep: prev.currentStep + 1,
         }));
+        await commitAllChanges(thumbnailCID, updatedPending);
+        return;
       }
 
       await commitAllChanges(thumbnailCID);
@@ -526,7 +528,10 @@ function EditCourseContent() {
     }
   };
 
-  async function commitAllChanges(thumbnailCID: string) {
+  async function commitAllChanges(
+    thumbnailCID: string,
+    updatedPending: PendingChanges | null = null
+  ) {
     const activeSections = draftSections.filter((s) => !s.isDeleted);
 
     if (activeSections.length === 0) {
@@ -618,7 +623,7 @@ function EditCourseContent() {
           }));
 
           if (hasSectionChanges) {
-            await commitSectionChanges();
+            await commitSectionChanges(updatedPending);
           } else {
             setProgressState((prev) => ({
               ...prev,
@@ -646,9 +651,12 @@ function EditCourseContent() {
     });
   }
 
-  async function commitSectionChanges() {
+  async function commitSectionChanges(
+    updatedPending: PendingChanges | null = null
+  ) {
+    const changesToCommit = updatedPending || pendingChanges;
     const { sectionsToAdd, sectionsToUpdate, sectionsToDelete, reorderNeeded } =
-      pendingChanges;
+      changesToCommit;
 
     const sendTransactionPromise = (
       transaction: any
@@ -1073,14 +1081,16 @@ function EditCourseContent() {
     }
   }
 
-  async function uploadAllVideosBeforeCommit(): Promise<boolean> {
+  async function uploadAllVideosBeforeCommit(): Promise<PendingChanges | null> {
     const sectionsWithVideo = draftSections.filter(
       (s) => s.videoFile && !s.isDeleted
     );
 
     if (sectionsWithVideo.length === 0) {
-      return true;
+      return pendingChanges;
     }
+
+    let updatedPendingChanges = { ...pendingChanges };
 
     setProgressState((prev) => ({
       ...prev,
@@ -1133,23 +1143,47 @@ function EditCourseContent() {
         });
 
         if (section.isNew) {
-          setPendingChanges((prev) => {
-            const newSections = draftSectionsRef.current.filter((s) => s.isNew);
-            const newSectionIndex = newSections.findIndex(
-              (s) => s.id === section.id
-            );
+          const newSections = draftSectionsRef.current.filter((s) => s.isNew);
+          const newSectionIndex = newSections.findIndex(
+            (s) => s.id === section.id
+          );
 
-            if (newSectionIndex === -1) return prev;
-
-            const updatedToAdd = [...prev.sectionsToAdd];
+          if (newSectionIndex !== -1) {
+            const updatedToAdd = [...updatedPendingChanges.sectionsToAdd];
             updatedToAdd[newSectionIndex] = {
               ...updatedToAdd[newSectionIndex],
               contentCID: cid,
             };
+            updatedPendingChanges = {
+              ...updatedPendingChanges,
+              sectionsToAdd: updatedToAdd,
+            };
+          }
 
+          setPendingChanges((prev) => {
+            const updatedToAdd = [...prev.sectionsToAdd];
+            if (newSectionIndex !== -1) {
+              updatedToAdd[newSectionIndex] = {
+                ...updatedToAdd[newSectionIndex],
+                contentCID: cid,
+              };
+            }
             return { ...prev, sectionsToAdd: updatedToAdd };
           });
         } else {
+          const updated = new Map(updatedPendingChanges.sectionsToUpdate);
+          const existing = updated.get(section.sectionId);
+          if (existing) {
+            updated.set(section.sectionId, {
+              ...existing,
+              contentCID: cid,
+            });
+            updatedPendingChanges = {
+              ...updatedPendingChanges,
+              sectionsToUpdate: updated,
+            };
+          }
+
           setPendingChanges((prev) => {
             const updated = new Map(prev.sectionsToUpdate);
             const existing = updated.get(section.sectionId);
@@ -1174,12 +1208,12 @@ function EditCourseContent() {
         }));
       }
 
-      return true;
+      return updatedPendingChanges;
     } catch (error) {
       toast.error("Video upload failed", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
-      return false;
+      return null;
     }
   }
 
