@@ -526,40 +526,99 @@ export async function uploadFileToPublicIPFS(
   const startTime = Date.now();
 
   try {
+    console.log("[Pinata Upload] ========================================");
     console.log("[Pinata Upload] Starting PUBLIC file upload...");
-    console.log("[Pinata Upload] File:", file.name, formatFileSize(file.size));
-    console.log("[Pinata Upload] Type:", file.type);
+    console.log("[Pinata Upload] File name:", file.name);
+    console.log(
+      "[Pinata Upload] File size:",
+      formatFileSize(file.size),
+      `(${file.size} bytes)`
+    );
+    console.log("[Pinata Upload] File type:", file.type);
+    console.log(
+      "[Pinata Upload] File constructor:",
+      file.constructor?.name || "Unknown"
+    );
+
+    // Verify Pinata SDK is available
+    console.log(
+      "[Pinata Upload] Pinata SDK available:",
+      typeof pinata !== "undefined"
+    );
+    console.log(
+      "[Pinata Upload] Pinata.upload available:",
+      typeof pinata?.upload !== "undefined"
+    );
+    console.log(
+      "[Pinata Upload] Pinata.upload.public available:",
+      typeof pinata?.upload?.public !== "undefined"
+    );
+
+    // Verify environment variables
+    console.log("[Pinata Upload] PINATA_JWT exists:", !!process.env.PINATA_JWT);
+    console.log(
+      "[Pinata Upload] PINATA_JWT length:",
+      process.env.PINATA_JWT?.length || 0
+    );
+    console.log("[Pinata Upload] PINATA_GATEWAY:", process.env.PINATA_GATEWAY);
 
     const keyvalues = buildKeyvalues(options);
     console.log(
       "[Pinata Upload] Keyvalues count:",
       Object.keys(keyvalues).length
     );
+    console.log(
+      "[Pinata Upload] Keyvalues:",
+      JSON.stringify(keyvalues, null, 2)
+    );
+
+    console.log("[Pinata Upload] Building upload chain...");
+    console.log("[Pinata Upload] Calling pinata.upload.public.file()...");
 
     let uploadBuilder = pinata.upload.public
       .file(file)
       .name(options.name || file.name)
       .keyvalues(keyvalues);
 
+    console.log("[Pinata Upload] Upload builder created");
+
     if (options.groupId) {
+      console.log("[Pinata Upload] Adding group:", options.groupId);
       uploadBuilder = uploadBuilder.group(options.groupId);
     }
 
+    console.log("[Pinata Upload] Executing upload to Pinata...");
+    console.log("[Pinata Upload] Awaiting uploadBuilder...");
+
     const upload = await uploadBuilder;
+
+    console.log(
+      "[Pinata Upload] Upload completed! Received response from Pinata"
+    );
+    console.log("[Pinata Upload] Response type:", typeof upload);
+    console.log(
+      "[Pinata Upload] Response keys:",
+      Object.keys(upload || {}).join(", ")
+    );
 
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(
-      "[Pinata Upload] PUBLIC upload completed in",
+      "[Pinata Upload] ✅ PUBLIC upload completed in",
       uploadTime,
       "seconds"
     );
-    console.log("[Pinata Upload] CID:", upload.cid);
+    console.log("[Pinata Upload] ✅ Response CID:", upload.cid);
+    console.log("[Pinata Upload] ✅ Response ID:", upload.id);
+    console.log("[Pinata Upload] ✅ Response Name:", upload.name);
+    console.log("[Pinata Upload] ✅ Response Size:", upload.size);
+    console.log("[Pinata Upload] ✅ Response MimeType:", upload.mime_type);
     console.log(
-      "[Pinata Upload] Public URL:",
+      "[Pinata Upload] ✅ Public URL:",
       `https://${process.env.PINATA_GATEWAY}/ipfs/${upload.cid}`
     );
+    console.log("[Pinata Upload] ========================================");
 
-    return {
+    const result: UploadSuccessResponse = {
       success: true,
       data: {
         cid: upload.cid,
@@ -573,17 +632,33 @@ export async function uploadFileToPublicIPFS(
         network: "public" as const,
       },
     };
+
+    console.log("[Pinata Upload] Returning success result");
+    return result;
   } catch (error: unknown) {
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(
-      "[Pinata Upload] PUBLIC upload failed after",
+    console.error("[Pinata Upload] ========================================");
+    console.error(
+      "[Pinata Upload] ❌ PUBLIC upload FAILED after",
       uploadTime,
       "seconds"
     );
 
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    console.error("[Pinata Upload] Error:", errorMessage);
+    console.error("[Pinata Upload] ❌ Error message:", errorMessage);
+    console.error("[Pinata Upload] ❌ Error type:", typeof error);
+    console.error(
+      "[Pinata Upload] ❌ Error constructor:",
+      error?.constructor?.name || "Unknown"
+    );
+
+    if (error instanceof Error) {
+      console.error("[Pinata Upload] ❌ Error stack:", error.stack);
+    }
+
+    console.error("[Pinata Upload] ❌ Full error object:", error);
+    console.error("[Pinata Upload] ========================================");
 
     return {
       success: false,

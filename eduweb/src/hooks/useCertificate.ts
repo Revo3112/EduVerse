@@ -299,6 +299,34 @@ export function useCertificate(
         throw new Error("Wallet not connected");
       }
 
+      console.log("[useCertificate] ========================================");
+      console.log("[useCertificate] Starting mintOrUpdateCertificate");
+      console.log("[useCertificate] Course ID:", courseId.toString());
+      console.log("[useCertificate] Recipient Name:", recipientName);
+      console.log("[useCertificate] IPFS CID:", ipfsCID);
+      console.log("[useCertificate] Base Route:", baseRoute);
+      console.log("[useCertificate] Account Address:", account.address);
+
+      // Validate IPFS CID format
+      const cidV0Regex = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
+      const cidV1Regex = /^(bafy|bafk|bafz|baf2)[a-z0-9]{52,}$/i;
+      const isValidCID = cidV0Regex.test(ipfsCID) || cidV1Regex.test(ipfsCID);
+
+      if (!isValidCID) {
+        console.error("[useCertificate] ❌ INVALID CID FORMAT:", ipfsCID);
+        toast.error("Invalid certificate CID format");
+        throw new Error(`Invalid IPFS CID format: ${ipfsCID}`);
+      }
+
+      console.log("[useCertificate] ✅ CID format valid");
+
+      // Validate CID is not empty or placeholder
+      if (!ipfsCID || ipfsCID.trim() === "" || ipfsCID === "pending") {
+        console.error("[useCertificate] ❌ CID is empty or invalid:", ipfsCID);
+        toast.error("Certificate CID is missing");
+        throw new Error("Certificate CID is required");
+      }
+
       setIsMinting(true);
       setError(null);
 
@@ -308,26 +336,57 @@ export function useCertificate(
 
       try {
         // 1. Check eligibility
+        console.log("[useCertificate] Step 1: Checking eligibility...");
         const eligibility = await checkEligibility(courseId);
+        console.log("[useCertificate] Eligibility result:", eligibility);
+
         if (!eligibility.eligible) {
+          console.error(
+            "[useCertificate] ❌ Not eligible:",
+            eligibility.reason
+          );
           throw new Error(eligibility.reason || "Not eligible for certificate");
         }
 
+        console.log(
+          "[useCertificate] ✅ Eligible - First certificate:",
+          eligibility.isFirstCertificate
+        );
+
         // 2. Calculate price
+        console.log("[useCertificate] Step 2: Calculating price...");
         const price = await getCertificatePrice(
           courseId,
           eligibility.isFirstCertificate
         );
+        console.log(
+          "[useCertificate] Price:",
+          price.toString(),
+          "wei (",
+          (Number(price) / 1e18).toFixed(6),
+          "MANTA)"
+        );
 
         // 3. Generate payment hash
+        console.log("[useCertificate] Step 3: Generating payment hash...");
         const paymentHash = generatePaymentHash(
           account.address,
           courseId,
           Date.now(),
           crypto.randomUUID()
         );
+        console.log("[useCertificate] Payment hash:", paymentHash);
 
         // 4. Prepare transaction
+        console.log("[useCertificate] Step 4: Preparing transaction...");
+        console.log("[useCertificate] Transaction params:");
+        console.log("  - courseId:", courseId.toString());
+        console.log("  - recipientName:", recipientName);
+        console.log("  - ipfsCID:", ipfsCID);
+        console.log("  - paymentHash:", paymentHash);
+        console.log("  - baseRoute:", baseRoute);
+        console.log("  - value:", price.toString());
+
         const transaction = await prepareMintOrUpdateCertificateTransaction(
           courseId,
           recipientName,
@@ -337,15 +396,52 @@ export function useCertificate(
           price
         );
 
+        console.log("[useCertificate] ✅ Transaction prepared");
+
         // 5. Send transaction
+        console.log("[useCertificate] Step 5: Sending transaction...");
         await new Promise<void>((resolve, reject) => {
           sendTransaction(transaction, {
-            onSuccess: () => {
-              console.log("Certificate transaction successful");
+            onSuccess: (result) => {
+              console.log(
+                "[useCertificate] ========================================"
+              );
+              console.log("[useCertificate] ✅ Transaction successful!");
+              console.log(
+                "[useCertificate] Transaction hash:",
+                result?.transactionHash
+              );
+              console.log(
+                "[useCertificate] CID stored in blockchain:",
+                ipfsCID
+              );
+              console.log("[useCertificate] Verification URL:");
+              console.log(
+                `  ${baseRoute}?tokenId=${tokenId || "pending"}&address=${
+                  account.address
+                }`
+              );
+              console.log("[useCertificate] Public image URL:");
+              console.log(
+                `  https://${
+                  process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway"
+                }/ipfs/${ipfsCID}`
+              );
+              console.log(
+                "[useCertificate] ========================================"
+              );
               resolve();
             },
             onError: (error) => {
-              console.error("Certificate transaction failed:", error);
+              console.error(
+                "[useCertificate] ========================================"
+              );
+              console.error("[useCertificate] ❌ Transaction failed!");
+              console.error("[useCertificate] Error:", error);
+              console.error("[useCertificate] CID that failed:", ipfsCID);
+              console.error(
+                "[useCertificate] ========================================"
+              );
               reject(error);
             },
           });

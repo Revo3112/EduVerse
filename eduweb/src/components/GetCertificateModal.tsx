@@ -204,9 +204,32 @@ export function GetCertificateModal({
         data.data.cid
       );
 
+      // Validate CID format
+      const cid = data.data.cid;
+      const cidV0Regex = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
+      const cidV1Regex = /^(bafy|bafk|bafz|baf2)[a-z0-9]{52,}$/i;
+      const isValidCID = cidV0Regex.test(cid) || cidV1Regex.test(cid);
+
+      if (!isValidCID) {
+        console.error("[GetCertificateModal] ❌ INVALID CID FORMAT:", cid);
+        throw new Error(`Invalid IPFS CID format received: ${cid}`);
+      }
+
+      if (!cid || cid.trim() === "" || cid === "pending") {
+        console.error("[GetCertificateModal] ❌ CID is empty or invalid:", cid);
+        throw new Error("Certificate CID is missing or invalid");
+      }
+
+      console.log("[GetCertificateModal] ✅ CID validation passed");
+      console.log(
+        "[GetCertificateModal] Public URL:",
+        data.data.imageUrl || data.data.signedUrl
+      );
+      console.log("[GetCertificateModal] Network:", data.data.network);
+
       setCertificateData({
         ipfsCID: data.data.cid,
-        previewUrl: data.data.signedUrl,
+        previewUrl: data.data.imageUrl || data.data.signedUrl,
         metadataCID: data.data.metadataCID || "",
       });
 
@@ -234,6 +257,17 @@ export function GetCertificateModal({
               process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
             }/certificates`;
 
+      console.log(
+        "[GetCertificateModal] Calling mintOrUpdateCertificate with:"
+      );
+      console.log("  - Course ID:", courseId.toString());
+      console.log(
+        "  - Recipient:",
+        isFirstCertificate ? recipientName.trim() : "Update"
+      );
+      console.log("  - CID:", data.data.cid);
+      console.log("  - Base Route:", baseRoute);
+
       await mintOrUpdateCertificate(
         courseId,
         isFirstCertificate ? recipientName.trim() : "Update",
@@ -242,6 +276,16 @@ export function GetCertificateModal({
       );
 
       console.log("[GetCertificateModal] ✅ Blockchain transaction confirmed!");
+      console.log(
+        "[GetCertificateModal] ✅ CID stored in blockchain:",
+        data.data.cid
+      );
+      console.log(
+        "[GetCertificateModal] ✅ Certificate accessible at:",
+        `https://${
+          process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway.pinata.cloud"
+        }/ipfs/${data.data.cid}`
+      );
       setStep("success");
       toast.success(
         isFirstCertificate

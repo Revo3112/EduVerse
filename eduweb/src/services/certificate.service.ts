@@ -15,7 +15,7 @@ import sharp from "sharp";
 import path from "path";
 import {
   uploadFileToPublicIPFS,
-  uploadJSONToPrivateIPFS,
+  uploadJSONToPublicIPFS,
 } from "./pinata-upload.service";
 
 export {
@@ -267,39 +267,135 @@ export async function generateAndUploadCertificate(
 
     const sizeKB = (optimizedBuffer.length / 1024).toFixed(2);
     console.log(`[Certificate Service] Image optimized (${sizeKB} KB)`);
+    console.log("[Certificate Service] Buffer length:", optimizedBuffer.length);
+    console.log("[Certificate Service] Buffer type:", typeof optimizedBuffer);
 
+    // Convert Buffer to Uint8Array for blob creation
     const uint8Array = new Uint8Array(optimizedBuffer);
-    const blob = new Blob([uint8Array], { type: "image/png" });
-    const file = new File([blob], `certificate-${data.certificateId}.png`, {
-      type: "image/png",
-    });
+    console.log(
+      "[Certificate Service] Uint8Array created, length:",
+      uint8Array.length
+    );
 
-    console.log("[Certificate Service] Uploading to Pinata PUBLIC IPFS...");
-    const imageUploadResult = await uploadFileToPublicIPFS(file, {
-      name: `certificate-${data.certificateId}.png`,
-      metadata: {
-        courseId: data.courseId.toString(),
-        fileType: "certificate",
-      },
-      keyvalues: {
-        certificateId: data.certificateId,
-        tokenId: data.tokenId?.toString() || "0",
-        studentName: data.studentName,
-        courseName: data.courseName,
-        recipientAddress: data.recipientAddress || data.walletAddress || "0x0",
-        completedCourses: data.completedCourses?.join(",") || data.courseId,
-        uploadedAt: new Date().toISOString(),
-        certificateVersion: "2.0",
-      },
+    // Create Blob from Uint8Array (use global Blob from Web API)
+    const blob = new Blob([uint8Array], { type: "image/png" });
+    console.log(
+      "[Certificate Service] Blob created, size:",
+      blob.size,
+      "type:",
+      blob.type
+    );
+
+    // Create File object from Blob
+    // Note: In Node.js v18+, File is available as global from undici
+    const fileName = `certificate-${data.certificateId}.png`;
+    let file: File;
+
+    try {
+      // Try to use global File constructor (Node.js v18+)
+      if (typeof File !== "undefined") {
+        file = new File([blob], fileName, { type: "image/png" });
+        console.log(
+          "[Certificate Service] File object created using global File constructor"
+        );
+      } else {
+        // Fallback: Cast blob as any to satisfy type checker
+        // Pinata SDK documentation states "you can pass a Blob directly"
+        console.log(
+          "[Certificate Service] WARNING: File constructor not available, using Blob directly"
+        );
+        file = blob as any;
+      }
+      console.log("[Certificate Service] File object ready, name:", fileName);
+    } catch (error) {
+      console.error("[Certificate Service] Error creating File object:", error);
+      // Fallback to Blob
+      console.log("[Certificate Service] Fallback: using Blob as File");
+      file = blob as any;
+    }
+
+    console.log(
+      "[Certificate Service] Starting upload to Pinata PUBLIC IPFS..."
+    );
+    console.log("[Certificate Service] File details:", {
+      name: fileName,
+      size: blob.size,
+      type: blob.type,
     });
+    console.log("[Certificate Service] Calling uploadFileToPublicIPFS...");
+
+    let imageUploadResult;
+    try {
+      imageUploadResult = await uploadFileToPublicIPFS(file, {
+        name: `certificate-${data.certificateId}.png`,
+        metadata: {
+          courseId: data.courseId.toString(),
+          fileType: "certificate",
+        },
+        keyvalues: {
+          certificateId: data.certificateId,
+          tokenId: data.tokenId?.toString() || "0",
+          recipientAddress:
+            data.recipientAddress || data.walletAddress || "0x0",
+          certificateVersion: "2.0",
+        },
+      });
+
+      console.log("[Certificate Service] Upload function returned");
+      console.log(
+        "[Certificate Service] Upload result success:",
+        imageUploadResult.success
+      );
+
+      if (imageUploadResult.success) {
+        console.log(
+          "[Certificate Service] Upload SUCCESS - CID:",
+          imageUploadResult.data.cid
+        );
+        console.log(
+          "[Certificate Service] Upload SUCCESS - Pinata ID:",
+          imageUploadResult.data.pinataId
+        );
+        console.log(
+          "[Certificate Service] Upload SUCCESS - Network:",
+          imageUploadResult.data.network
+        );
+      } else {
+        console.error(
+          "[Certificate Service] Upload FAILED - Error:",
+          imageUploadResult.error
+        );
+      }
+    } catch (error) {
+      console.error("[Certificate Service] EXCEPTION during upload:", error);
+      console.error("[Certificate Service] Exception type:", typeof error);
+      console.error(
+        "[Certificate Service] Exception message:",
+        error instanceof Error ? error.message : String(error)
+      );
+      console.error(
+        "[Certificate Service] Exception stack:",
+        error instanceof Error ? error.stack : "N/A"
+      );
+      throw error;
+    }
 
     if (!imageUploadResult.success) {
-      console.error("[Certificate Service] Image upload failed");
+      console.error(
+        "[Certificate Service] Image upload failed - returning error"
+      );
+      console.error(
+        "[Certificate Service] Error details:",
+        JSON.stringify(imageUploadResult.error, null, 2)
+      );
       return imageUploadResult;
     }
 
     console.log(
-      `[Certificate Service] Image uploaded: ${imageUploadResult.data.cid}`
+      `[Certificate Service] ✅ Image uploaded successfully: ${imageUploadResult.data.cid}`
+    );
+    console.log(
+      `[Certificate Service] ✅ Public URL: https://${process.env.PINATA_GATEWAY}/ipfs/${imageUploadResult.data.cid}`
     );
 
     // ========================================
@@ -409,8 +505,10 @@ export async function generateAndUploadCertificate(
       },
     };
 
-    console.log("[Certificate Service] Uploading metadata to Pinata...");
-    const metadataUploadResult = await uploadJSONToPrivateIPFS(metadata, {
+    console.log(
+      "[Certificate Service] Uploading metadata to Pinata PUBLIC IPFS..."
+    );
+    const metadataUploadResult = await uploadJSONToPublicIPFS(metadata, {
       name: `certificate-metadata-${data.certificateId}.json`,
       metadata: {
         courseId: data.courseId.toString(),
