@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
+import { waitForReceipt } from "thirdweb";
+import { client } from "@/app/client";
+import { mantaPacificTestnet } from "@/lib/chains";
 import Image from "next/image";
 import { useThumbnailUrl } from "@/hooks/useThumbnailUrl";
 import {
@@ -524,6 +527,20 @@ function EditCourseContent() {
   };
 
   async function commitAllChanges(thumbnailCID: string) {
+    const activeSections = draftSections.filter((s) => !s.isDeleted);
+
+    if (activeSections.length === 0) {
+      toast.error("Cannot save changes", {
+        description: "Course must have at least one section",
+      });
+      setProgressState((prev) => ({
+        ...prev,
+        stage: "error",
+        error: "Course must have at least one section",
+      }));
+      return;
+    }
+
     setProgressState((prev) => ({
       ...prev,
       stage: "updating-metadata",
@@ -545,24 +562,47 @@ function EditCourseContent() {
     });
 
     sendTransaction(courseTransaction, {
-      onSuccess: async () => {
-        setProgressState((prev) => ({
-          ...prev,
-          currentStep: prev.currentStep + 1,
-        }));
+      onSuccess: async (result) => {
+        try {
+          const receipt = await waitForReceipt({
+            client,
+            chain: mantaPacificTestnet,
+            transactionHash: result.transactionHash,
+          });
 
-        if (hasSectionChanges) {
-          await commitSectionChanges();
-        } else {
+          if (receipt.status !== "success") {
+            throw new Error("Transaction reverted on-chain");
+          }
+
           setProgressState((prev) => ({
             ...prev,
-            stage: "complete",
-            currentOperation: "All changes saved successfully!",
+            currentStep: prev.currentStep + 1,
           }));
-          setHasChanges(false);
-          setTimeout(() => {
-            router.push("/myCourse");
-          }, 2000);
+
+          if (hasSectionChanges) {
+            await commitSectionChanges();
+          } else {
+            setProgressState((prev) => ({
+              ...prev,
+              stage: "complete",
+              currentOperation: "All changes saved successfully!",
+            }));
+            setHasChanges(false);
+            setTimeout(() => {
+              router.push("/myCourse");
+            }, 2000);
+          }
+        } catch (error) {
+          setProgressState((prev) => ({
+            ...prev,
+            stage: "error",
+            error:
+              error instanceof Error ? error.message : "Transaction failed",
+          }));
+          toast.error("Transaction failed", {
+            description:
+              error instanceof Error ? error.message : "Unknown error",
+          });
         }
       },
       onError: (error) => {
@@ -582,10 +622,12 @@ function EditCourseContent() {
     const { sectionsToAdd, sectionsToUpdate, sectionsToDelete, reorderNeeded } =
       pendingChanges;
 
-    const sendTransactionPromise = (transaction: any): Promise<void> => {
+    const sendTransactionPromise = (
+      transaction: any
+    ): Promise<{ transactionHash: `0x${string}` }> => {
       return new Promise((resolve, reject) => {
         sendTransaction(transaction, {
-          onSuccess: () => resolve(),
+          onSuccess: (result) => resolve(result),
           onError: (error) => reject(error),
         });
       });
@@ -609,12 +651,22 @@ function EditCourseContent() {
             await deleteVideoFromLivepeer(sectionToDelete.assetId);
           }
 
-          const transaction = prepareDeleteSectionTransaction({
+          const deleteTransaction = prepareDeleteSectionTransaction({
             courseId: BigInt(courseId!),
             sectionId: BigInt(sectionId),
           });
 
-          await sendTransactionPromise(transaction);
+          const deleteResult = await sendTransactionPromise(deleteTransaction);
+
+          const deleteReceipt = await waitForReceipt({
+            client,
+            chain: mantaPacificTestnet,
+            transactionHash: deleteResult.transactionHash,
+          });
+
+          if (deleteReceipt.status !== "success") {
+            throw new Error("Delete transaction reverted on-chain");
+          }
           deleted++;
 
           setProgressState((prev) => ({
@@ -656,7 +708,18 @@ function EditCourseContent() {
             duration: sectionData.duration,
           });
 
-          await sendTransactionPromise(transaction);
+          const updateResult = await sendTransactionPromise(transaction);
+
+          const updateReceipt = await waitForReceipt({
+            client,
+            chain: mantaPacificTestnet,
+            transactionHash: updateResult.transactionHash,
+          });
+
+          if (updateReceipt.status !== "success") {
+            throw new Error("Update transaction reverted on-chain");
+          }
+
           updated++;
 
           setProgressState((prev) => ({
@@ -705,7 +768,18 @@ function EditCourseContent() {
             duration: sectionData.duration,
           });
 
-          await sendTransactionPromise(transaction);
+          const addResult = await sendTransactionPromise(transaction);
+
+          const addReceipt = await waitForReceipt({
+            client,
+            chain: mantaPacificTestnet,
+            transactionHash: addResult.transactionHash,
+          });
+
+          if (addReceipt.status !== "success") {
+            throw new Error("Add transaction reverted on-chain");
+          }
+
           added++;
 
           setProgressState((prev) => ({
@@ -734,12 +808,22 @@ function EditCourseContent() {
         );
         const newOrder = visibleSections.map((s) => BigInt(s.sectionId));
 
-        const transaction = prepareBatchReorderSectionsTransaction({
+        const reorderTransaction = prepareBatchReorderSectionsTransaction({
           courseId: BigInt(courseId!),
           newOrder: newOrder,
         });
 
-        await sendTransactionPromise(transaction);
+        const reorderResult = await sendTransactionPromise(reorderTransaction);
+
+        const reorderReceipt = await waitForReceipt({
+          client,
+          chain: mantaPacificTestnet,
+          transactionHash: reorderResult.transactionHash,
+        });
+
+        if (reorderReceipt.status !== "success") {
+          throw new Error("Reorder transaction reverted on-chain");
+        }
 
         setProgressState((prev) => ({
           ...prev,
@@ -933,9 +1017,7 @@ function EditCourseContent() {
       throw error;
     }
   }
-</text>
 
-<old_text line=907>
   async function uploadAllVideosBeforeCommit(): Promise<boolean> {
     const sectionsWithVideo = draftSections.filter(
       (s) => s.videoFile && !s.isDeleted
@@ -1033,102 +1115,6 @@ function EditCourseContent() {
             current: i + 1,
             uploadProgress: 100,
             processingStatus: "ready",
-          },
-        }));
-      }
-
-      return true;
-    } catch (error) {
-      toast.error("Video upload failed", {
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
-      return false;
-    }
-  }
-
-  async function uploadAllVideosBeforeCommit(): Promise<boolean> {
-    const sectionsWithVideo = draftSections.filter(
-      (s) => s.videoFile && !s.isDeleted
-    );
-
-    if (sectionsWithVideo.length === 0) {
-      return true;
-    }
-
-    setProgressState((prev) => ({
-      ...prev,
-      videoProgress: {
-        current: 0,
-        total: sectionsWithVideo.length,
-      },
-    }));
-
-    try {
-      for (let i = 0; i < sectionsWithVideo.length; i++) {
-        const section = sectionsWithVideo[i];
-
-        setProgressState((prev) => ({
-          ...prev,
-          currentOperation: `Uploading video ${i + 1}/${
-            sectionsWithVideo.length
-          }...`,
-          videoProgress: {
-            current: i,
-            total: sectionsWithVideo.length,
-            fileName: section.videoFileName || "video",
-          },
-        }));
-
-        const { assetId, cid } = await uploadVideoToLivepeer(
-          section.videoFile!
-        );
-
-        setDraftSections((prev) => {
-          const updated = prev.map((s) =>
-            s.id === section.id
-              ? { ...s, contentCID: cid, assetId, videoFile: undefined }
-              : s
-          );
-          draftSectionsRef.current = updated;
-          return updated;
-        });
-
-        if (section.isNew) {
-          setPendingChanges((prev) => {
-            const newSections = draftSectionsRef.current.filter((s) => s.isNew);
-            const newSectionIndex = newSections.findIndex(
-              (s) => s.id === section.id
-            );
-
-            if (newSectionIndex === -1) return prev;
-
-            const updatedToAdd = [...prev.sectionsToAdd];
-            updatedToAdd[newSectionIndex] = {
-              ...updatedToAdd[newSectionIndex],
-              contentCID: cid,
-            };
-
-            return { ...prev, sectionsToAdd: updatedToAdd };
-          });
-        } else {
-          setPendingChanges((prev) => {
-            const updated = new Map(prev.sectionsToUpdate);
-            const existing = updated.get(section.sectionId);
-            if (existing) {
-              updated.set(section.sectionId, {
-                ...existing,
-                contentCID: cid,
-              });
-            }
-            return { ...prev, sectionsToUpdate: updated };
-          });
-        }
-
-        setProgressState((prev) => ({
-          ...prev,
-          videoProgress: {
-            ...prev.videoProgress,
-            current: i + 1,
           },
         }));
       }
@@ -1308,6 +1294,15 @@ function EditCourseContent() {
   }
 
   function handleDeleteSection(section: DraftSection) {
+    const activeSections = draftSections.filter((s) => !s.isDeleted);
+
+    if (activeSections.length <= 1) {
+      toast.error("Cannot delete last section", {
+        description: "Course must have at least one section",
+      });
+      return;
+    }
+
     if (!confirm(`Delete "${section.title}"?`)) {
       return;
     }
@@ -2109,15 +2104,18 @@ function EditCourseContent() {
                     {/* Processing Status */}
                     {progressState.videoProgress.processingStatus && (
                       <div className="flex items-center gap-2 text-xs">
-                        {progressState.videoProgress.processingStatus === "uploading" && (
+                        {progressState.videoProgress.processingStatus ===
+                          "uploading" && (
                           <>
                             <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
                             <span className="text-purple-700 dark:text-purple-300">
-                              Uploading to Livepeer... {progressState.videoProgress.uploadProgress || 0}%
+                              Uploading to Livepeer...{" "}
+                              {progressState.videoProgress.uploadProgress || 0}%
                             </span>
                           </>
                         )}
-                        {progressState.videoProgress.processingStatus === "processing" && (
+                        {progressState.videoProgress.processingStatus ===
+                          "processing" && (
                           <>
                             <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
                             <span className="text-purple-700 dark:text-purple-300">
@@ -2125,7 +2123,8 @@ function EditCourseContent() {
                             </span>
                           </>
                         )}
-                        {progressState.videoProgress.processingStatus === "getting-cid" && (
+                        {progressState.videoProgress.processingStatus ===
+                          "getting-cid" && (
                           <>
                             <div className="h-2 w-2 bg-orange-500 rounded-full animate-pulse" />
                             <span className="text-purple-700 dark:text-purple-300">
@@ -2133,7 +2132,8 @@ function EditCourseContent() {
                             </span>
                           </>
                         )}
-                        {progressState.videoProgress.processingStatus === "ready" && (
+                        {progressState.videoProgress.processingStatus ===
+                          "ready" && (
                           <>
                             <div className="h-2 w-2 bg-green-500 rounded-full" />
                             <span className="text-purple-700 dark:text-purple-300">
@@ -2146,7 +2146,8 @@ function EditCourseContent() {
 
                     {/* Upload Progress Bar */}
                     {progressState.videoProgress.uploadProgress !== undefined &&
-                      progressState.videoProgress.processingStatus === "uploading" && (
+                      progressState.videoProgress.processingStatus ===
+                        "uploading" && (
                         <div className="space-y-1">
                           <Progress
                             value={progressState.videoProgress.uploadProgress}

@@ -569,7 +569,7 @@ export function prepareAddSectionTransaction(
   const transaction = prepareContractCall({
     contract: courseFactory,
     method:
-      "function addCourseSection(uint256 courseId, string title, string contentCID, uint256 duration)",
+      "function addCourseSection(uint256 courseId, string title, string contentCID, uint256 duration) returns (uint256)",
     params: [
       params.courseId,
       params.title.trim(),

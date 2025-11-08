@@ -7,6 +7,8 @@
  * ============================================================================
  */
 
+"use client";
+
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   getCreatorCourses,
@@ -124,6 +126,11 @@ export function useCreatorCourses(
   const fetchData = useCallback(
     async (isRefetch = false) => {
       if (!creatorAddress || !enabled) {
+        setIsLoading(false);
+        return;
+      }
+
+      if (typeof window === "undefined") {
         setIsLoading(false);
         return;
       }
@@ -299,6 +306,11 @@ export function useCourseDetail(
       return;
     }
 
+    if (typeof window === "undefined") {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       setIsError(false);
@@ -362,6 +374,11 @@ export function useCreatorStats(creatorAddress: string | undefined): {
 
   const fetchStats = useCallback(async () => {
     if (!creatorAddress) {
+      setIsLoading(false);
+      return;
+    }
+
+    if (typeof window === "undefined") {
       setIsLoading(false);
       return;
     }

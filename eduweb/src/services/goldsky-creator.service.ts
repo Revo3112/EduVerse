@@ -8,6 +8,8 @@
  * ============================================================================
  */
 
+"use client";
+
 import { GraphQLClient } from "graphql-request";
 
 // ============================================================================
@@ -22,6 +24,10 @@ let graphqlClient: GraphQLClient | null = null;
 let cachedEndpoint: string = "";
 
 function getGraphQLClient(): GraphQLClient {
+  if (typeof window === "undefined") {
+    throw new Error("GraphQLClient can only be initialized on the client side");
+  }
+
   const endpoint = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
 
   if (!endpoint) {

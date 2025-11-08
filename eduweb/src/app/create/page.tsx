@@ -51,7 +51,7 @@ import {
   Zap,
 } from "lucide-react";
 import Image from "next/image";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 import { waitForReceipt } from "thirdweb";
@@ -268,6 +268,8 @@ export default function CreateCoursePage() {
     step: "idle",
     status: "pending",
   });
+
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const extractVideoDuration = useCallback(
     async (file: File): Promise<number> => {
@@ -488,6 +490,14 @@ export default function CreateCoursePage() {
     };
 
     initializeDraftStorage();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Handle thumbnail upload with file storage
@@ -1893,7 +1903,7 @@ export default function CreateCoursePage() {
                 duration: 3000,
               });
 
-              setTimeout(() => {
+              redirectTimeoutRef.current = setTimeout(() => {
                 navigateToMyCourse();
               }, 3000);
             } catch (sectionError) {
