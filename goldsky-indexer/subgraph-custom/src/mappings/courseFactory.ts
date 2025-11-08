@@ -552,28 +552,6 @@ export function handleSectionAdded(event: SectionAdded): void {
       );
     }
   }
-
-  section.save();
-
-  // Track network stats
-  updateNetworkStats(event, "SECTION_UPDATED");
-
-  // Create activity event
-  if (section != null) {
-    let course = Course.load(event.params.courseId.toString());
-    if (course != null) {
-      createActivityEvent(
-        event,
-        "SECTION_UPDATED",
-        course.creator,
-        "Updated section: " + section.title,
-        event.params.courseId.toString(),
-        null,
-        null,
-        null,
-      );
-    }
-  }
 }
 
 /**

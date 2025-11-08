@@ -724,8 +724,9 @@ function EditCourseContent() {
           if (!section) continue;
 
           if (!sectionData.contentCID) {
-            toast.error(`Section ${sectionData.title} missing video CID`);
-            continue;
+            throw new Error(
+              `Section "${sectionData.title}" is missing video CID. Video upload may have failed. Please retry or remove this section.`
+            );
           }
 
           const transaction = prepareUpdateSectionTransaction({
@@ -785,8 +786,9 @@ function EditCourseContent() {
           const sectionData = sectionsToAdd[i];
 
           if (!sectionData.contentCID) {
-            toast.error(`Section ${sectionData.title} missing video CID`);
-            continue;
+            throw new Error(
+              `Section "${sectionData.title}" is missing video CID. Video upload may have failed. Please retry or remove this section.`
+            );
           }
 
           const transaction = prepareAddSectionTransaction({

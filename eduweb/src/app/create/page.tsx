@@ -969,7 +969,19 @@ export default function CreateCoursePage() {
         throw new Error("Thumbnail is required for publishing");
       }
 
+      // Validate ALL sections have files - don't silently skip sections
       const videoSections = sections.filter((s) => s.file !== null);
+
+      if (videoSections.length !== sections.length) {
+        const missingSections = sections
+          .filter((s) => !s.file)
+          .map((s) => s.title)
+          .join(", ");
+        throw new Error(
+          `The following sections are missing video files: ${missingSections}. This should not happen - please refresh and try again.`
+        );
+      }
+
       const totalSteps = 3 + (videoSections.length > 0 ? 1 : 0);
 
       // Initialize detailed progress
