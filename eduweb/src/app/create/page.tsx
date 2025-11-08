@@ -1552,9 +1552,9 @@ export default function CreateCoursePage() {
             );
           }
 
-          if (contentCID.length < 10) {
+          if (contentCID.length === 0) {
             throw new Error(
-              `Invalid playback ID for section "${section.title}": "${contentCID}" (too short). Expected Livepeer playback ID or valid CID.`
+              `Invalid content CID for section "${section.title}": CID cannot be empty. The video upload may have failed.`
             );
           }
 

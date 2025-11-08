@@ -242,14 +242,6 @@ export function validateCID(cid: string): {
     return { valid: false, error: "CID cannot be empty" };
   }
 
-  const trimmed = cid.trim();
-
-  // Only check maximum length for gas optimization
-  if (trimmed.length > 2000) {
-    return { valid: false, error: "CID is too long (maximum 2000 characters)" };
-  }
-
-  // NO MINIMUM LENGTH CHECK - Smart contract updated to accept any length
   return { valid: true };
 }
 

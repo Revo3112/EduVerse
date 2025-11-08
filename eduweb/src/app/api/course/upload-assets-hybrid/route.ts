@@ -318,10 +318,12 @@ export async function POST(request: NextRequest) {
             }
 
             if (!playbackId) {
-              console.warn(
-                `[Hybrid Upload] ⚠️ Playback ID not available for ${video.filename} after 10s. Will use assetId as fallback.`
+              console.error(
+                `[Hybrid Upload] ❌ Playback ID not available for ${video.filename} after 10s.`
               );
-              playbackId = assetId;
+              throw new Error(
+                `Failed to obtain playback ID for ${video.filename}. Livepeer asset creation is taking longer than expected. Please try again in a few moments.`
+              );
             }
           }
 
