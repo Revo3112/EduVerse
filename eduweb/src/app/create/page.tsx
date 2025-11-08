@@ -1580,6 +1580,7 @@ export default function CreateCoursePage() {
       // Prepare blockchain transaction
       try {
         // Step 2.1: Create course on blockchain
+        console.log("[Create Course] 🔗 Preparing blockchain transaction...");
         const createCourseTransaction = prepareCreateCourseTransaction({
           metadata: {
             title: formData.title,
@@ -1592,15 +1593,68 @@ export default function CreateCoursePage() {
           pricePerMonth: formData.pricePerMonth,
         });
 
+        console.log("[Create Course] ✅ Transaction prepared, sending...");
+        console.log("[Create Course] Transaction details:", {
+          title: formData.title,
+          price: formData.pricePerMonth,
+          sections: courseData.sections.length,
+        });
+
         // Send transaction using Thirdweb
         setBlockchainProgress({
           step: "Creating course on blockchain",
           status: "processing",
         });
+
+        console.log("[Create Course] 📤 Calling sendTransaction()...");
+
+        if (!activeAccount) {
+          console.error("[Create Course] ❌ Wallet not connected!");
+          toast.error("Wallet not connected", {
+            description: "Please connect your wallet to publish",
+          });
+          setIsPublishing(false);
+          setUploadStage(UploadStage.ERROR);
+          setUploadError(
+            "Wallet connection lost. Please reconnect and try again."
+          );
+          return;
+        }
+
+        console.log("[Create Course] Wallet connected:", activeAccount.address);
         sendTransaction(createCourseTransaction, {
+          onError: (error) => {
+            console.error("[Create Course] ❌ sendTransaction onError called!");
+            console.error("[Create Course] Error details:", error);
+
+            setBlockchainProgress({
+              step: "Transaction failed",
+              status: "error",
+            });
+
+            toast.error("Transaction failed", {
+              description:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to send transaction",
+            });
+
+            setIsPublishing(false);
+            setUploadStage(UploadStage.ERROR);
+            setUploadError(
+              error instanceof Error
+                ? `Blockchain transaction failed: ${error.message}`
+                : "Failed to create course on blockchain"
+            );
+          },
           onSuccess: async (result) => {
-            console.log("✅ Course created on blockchain!");
-            console.log("Transaction hash:", result.transactionHash);
+            console.log("[Create Course] ✅ sendTransaction onSuccess called!");
+            console.log(
+              "[Create Course] Transaction hash:",
+              result.transactionHash
+            );
+            console.log("[Create Course] Full result:", result);
+
             setBlockchainProgress({
               step: "Course created successfully",
               status: "success",
@@ -1777,12 +1831,27 @@ export default function CreateCoursePage() {
                     );
 
                     // Send batch transaction and wait for result
+                    console.log(
+                      `[Create Course] 📤 Sending batch ${batchNumber} transaction...`
+                    );
                     const batchResult = await new Promise<{
                       transactionHash: `0x${string}`;
                     }>((resolve, reject) => {
                       sendTransaction(batchTransaction, {
-                        onSuccess: (result) => resolve(result),
-                        onError: (error) => reject(error),
+                        onSuccess: (result) => {
+                          console.log(
+                            `[Create Course] ✅ Batch ${batchNumber} transaction sent:`,
+                            result.transactionHash
+                          );
+                          resolve(result);
+                        },
+                        onError: (error) => {
+                          console.error(
+                            `[Create Course] ❌ Batch ${batchNumber} transaction failed:`,
+                            error
+                          );
+                          reject(error);
+                        },
                       });
                     });
 
@@ -1958,15 +2027,6 @@ export default function CreateCoursePage() {
                 "[Create Course] Draft preserved for potential retry"
               );
             }
-          },
-          onError: (error) => {
-            console.error("Blockchain publishing failed:", error);
-            toast.error("Failed to publish course", {
-              description: error.message || "Please try again",
-            });
-            setUploadStage(UploadStage.ERROR);
-            setUploadError(error.message || "Transaction failed");
-            setIsPublishing(false);
           },
         });
       } catch (error) {

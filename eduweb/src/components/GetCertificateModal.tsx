@@ -52,6 +52,16 @@ export function GetCertificateModal({
     metadataCID: string;
   } | null>(null);
 
+  const [progressState, setProgressState] = useState<{
+    current: number;
+    total: number;
+    message: string;
+  }>({
+    current: 0,
+    total: 3,
+    message: "",
+  });
+
   const [actualPrice, setActualPrice] = useState<bigint>(BigInt(0));
   const [priceLoading, setPriceLoading] = useState(true);
   const [existingTokenId, setExistingTokenId] = useState<bigint>(BigInt(0));
@@ -140,6 +150,13 @@ export function GetCertificateModal({
 
     setIsLoading(true);
     setStep("generating");
+    setProgressState({
+      current: 1,
+      total: 3,
+      message: "Generating certificate image...",
+    });
+
+    console.log("[GetCertificateModal] 🎨 Starting certificate generation...");
 
     try {
       const requestBody = {
@@ -174,7 +191,18 @@ export function GetCertificateModal({
         throw new Error(errorData.error || "Failed to generate certificate");
       }
 
+      console.log("[GetCertificateModal] ✅ Certificate image generated");
+      setProgressState({
+        current: 2,
+        total: 3,
+        message: "Uploading to IPFS...",
+      });
+
       const data = await response.json();
+      console.log(
+        "[GetCertificateModal] ✅ IPFS upload complete, CID:",
+        data.data.cid
+      );
 
       setCertificateData({
         ipfsCID: data.data.cid,
@@ -183,6 +211,16 @@ export function GetCertificateModal({
       });
 
       setStep("minting");
+      setProgressState({
+        current: 3,
+        total: 3,
+        message: "Minting on blockchain...",
+      });
+
+      console.log(
+        "[GetCertificateModal] 🔗 Starting blockchain transaction..."
+      );
+
       toast.success(
         isFirstCertificate
           ? "Certificate generated! Minting on blockchain..."
@@ -203,6 +241,7 @@ export function GetCertificateModal({
         baseRoute
       );
 
+      console.log("[GetCertificateModal] ✅ Blockchain transaction confirmed!");
       setStep("success");
       toast.success(
         isFirstCertificate
@@ -214,11 +253,12 @@ export function GetCertificateModal({
         onSuccess();
       }
     } catch (error) {
-      console.error("[GetCertificateModal] Process error:", error);
+      console.error("[GetCertificateModal] ❌ Process error:", error);
       toast.error(
         error instanceof Error ? error.message : "Failed to process certificate"
       );
       setStep("input");
+      setProgressState({ current: 0, total: 3, message: "" });
     } finally {
       setIsLoading(false);
     }
@@ -229,6 +269,7 @@ export function GetCertificateModal({
       setStep("input");
       setRecipientName("");
       setCertificateData(null);
+      setProgressState({ current: 0, total: 3, message: "" });
       onClose();
     }
   };
@@ -339,9 +380,24 @@ export function GetCertificateModal({
         return (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">
-              Generating certificate image...
-            </p>
+            <div className="text-center space-y-2">
+              <p className="text-sm font-medium">
+                Step {progressState.current} of {progressState.total}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {progressState.message}
+              </p>
+            </div>
+            <div className="w-full max-w-xs bg-muted rounded-full h-2">
+              <div
+                className="bg-primary h-2 rounded-full transition-all duration-300"
+                style={{
+                  width: `${
+                    (progressState.current / progressState.total) * 100
+                  }%`,
+                }}
+              />
+            </div>
           </div>
         );
 
@@ -349,12 +405,25 @@ export function GetCertificateModal({
         return (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">
-              {isFirstCertificate
-                ? "Minting certificate on blockchain..."
-                : "Adding course to certificate..."}
-            </p>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-center space-y-2">
+              <p className="text-sm font-medium">
+                Step {progressState.current} of {progressState.total}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {progressState.message}
+              </p>
+            </div>
+            <div className="w-full max-w-xs bg-muted rounded-full h-2">
+              <div
+                className="bg-primary h-2 rounded-full transition-all duration-300"
+                style={{
+                  width: `${
+                    (progressState.current / progressState.total) * 100
+                  }%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
               Please confirm the transaction in your wallet
             </p>
           </div>

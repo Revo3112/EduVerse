@@ -561,8 +561,46 @@ function EditCourseContent() {
       isActive: formData.isActive,
     });
 
+    console.log("[Edit Course] 🔗 Prepared course metadata update transaction");
+    console.log("[Edit Course] 📤 Calling sendTransaction()...");
+
+    if (!activeAccount) {
+      console.error("[Edit Course] ❌ Wallet not connected!");
+      toast.error("Wallet not connected", {
+        description: "Please connect your wallet to publish changes",
+      });
+      setProgressState((prev) => ({
+        ...prev,
+        stage: "error",
+        error: "Wallet connection lost. Please reconnect and try again.",
+      }));
+      return;
+    }
+
+    console.log("[Edit Course] Wallet connected:", activeAccount.address);
+
     sendTransaction(courseTransaction, {
+      onError: (error) => {
+        console.error("[Edit Course] ❌ sendTransaction onError called!");
+        console.error("[Edit Course] Error details:", error);
+
+        toast.error("Transaction failed", {
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to send transaction",
+        });
+
+        setProgressState((prev) => ({
+          ...prev,
+          stage: "error",
+          error: error instanceof Error ? error.message : "Transaction failed",
+        }));
+      },
       onSuccess: async (result) => {
+        console.log("[Edit Course] ✅ sendTransaction onSuccess called!");
+        console.log("[Edit Course] Transaction hash:", result.transactionHash);
+
         try {
           const receipt = await waitForReceipt({
             client,
@@ -604,16 +642,6 @@ function EditCourseContent() {
               error instanceof Error ? error.message : "Unknown error",
           });
         }
-      },
-      onError: (error) => {
-        setProgressState((prev) => ({
-          ...prev,
-          stage: "error",
-          error: error.message,
-        }));
-        toast.error("Failed to update course", {
-          description: error.message,
-        });
       },
     });
   }
@@ -916,12 +944,14 @@ function EditCourseContent() {
     }) => void
   ): Promise<{ assetId: string; cid: string }> {
     try {
+      console.log(`[Edit Upload] Starting upload for: ${file.name}`);
+
       const response = await fetch("/api/livepeer/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: file.name,
-          enableIPFS: true,
+          enableIPFS: false,
         }),
       });
 
@@ -931,6 +961,9 @@ function EditCourseContent() {
 
       const data = await response.json();
       const { tusEndpoint, asset } = data;
+
+      console.log(`[Edit Upload] Got TUS endpoint and asset ID: ${asset.id}`);
+      console.log(`[Edit Upload] PlaybackId: ${asset.playbackId}`);
 
       onProgressUpdate?.({ uploadProgress: 0, processingStatus: "uploading" });
 
@@ -943,21 +976,22 @@ function EditCourseContent() {
             filetype: file.type,
           },
           onError: (error) => {
-            console.error("Upload failed:", error);
+            console.error("[Edit Upload] TUS upload failed:", error);
             reject(error);
           },
           onProgress: (bytesUploaded, bytesTotal) => {
             const percentage = (bytesUploaded / bytesTotal) * 100;
-            console.log(`Upload progress: ${Math.round(percentage)}%`);
+            console.log(`[Edit Upload] Progress: ${Math.round(percentage)}%`);
             onProgressUpdate?.({
               uploadProgress: Math.round(percentage),
               processingStatus: "uploading",
             });
           },
           onSuccess: () => {
+            console.log(`[Edit Upload] TUS upload complete`);
             onProgressUpdate?.({
               uploadProgress: 100,
-              processingStatus: "processing",
+              processingStatus: "ready",
             });
             resolve();
           },
@@ -966,54 +1000,19 @@ function EditCourseContent() {
         upload.start();
       });
 
-      console.log(`[Upload] Polling for IPFS CID for asset: ${asset.id}`);
-      const maxAttempts = 60;
-      const pollInterval = 5000;
+      const playbackId = asset.playbackId || asset.id;
 
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const assetResponse = await fetch(`/api/livepeer/asset/${asset.id}`);
+      console.log(
+        `[Edit Upload] ✅ Upload complete, using playbackId: ${playbackId}`
+      );
+      console.log(`[Edit Upload] Video processing continues in background`);
 
-        if (!assetResponse.ok) {
-          throw new Error("Failed to get asset status");
-        }
-
-        const assetData = await assetResponse.json();
-        const phase = assetData.status?.phase;
-
-        if (phase === "ready" && assetData.storage?.ipfs?.cid) {
-          console.log(
-            `[Upload] Video ready with CID: ${assetData.storage.ipfs.cid}`
-          );
-          onProgressUpdate?.({
-            uploadProgress: 100,
-            processingStatus: "ready",
-          });
-          return {
-            assetId: asset.id,
-            cid: assetData.storage.ipfs.cid,
-          };
-        } else if (phase === "ready" && !assetData.storage?.ipfs?.cid) {
-          onProgressUpdate?.({
-            uploadProgress: 100,
-            processingStatus: "getting-cid",
-          });
-        } else if (phase === "processing" || phase === "waiting") {
-          onProgressUpdate?.({
-            uploadProgress: 100,
-            processingStatus: "processing",
-          });
-        } else if (phase === "failed") {
-          throw new Error("Video processing failed");
-        }
-
-        if (attempt < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, pollInterval));
-        }
-      }
-
-      throw new Error("Video processing timeout");
+      return {
+        assetId: asset.id,
+        cid: playbackId,
+      };
     } catch (error) {
-      console.error("[Upload] Failed:", error);
+      console.error("[Edit Upload] Failed:", error);
       throw error;
     }
   }
