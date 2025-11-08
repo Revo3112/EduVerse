@@ -6,16 +6,16 @@
  * @description Provides type-safe methods for all upload operations
  */
 
-import { formatFileSize, pinata, pinataConfig } from '@/lib/pinata';
+import { formatFileSize, pinata, pinataConfig } from "@/lib/pinata";
 import type {
-    ErrorCode,
-    FileValidationRule,
-    PrivateUploadOptions,
-    SignedUrlResponse,
-    UploadErrorResponse,
-    UploadSuccessResponse,
-    ValidationResult
-} from '@/lib/pinata-types';
+  ErrorCode,
+  FileValidationRule,
+  PrivateUploadOptions,
+  SignedUrlResponse,
+  UploadErrorResponse,
+  UploadSuccessResponse,
+  ValidationResult,
+} from "@/lib/pinata-types";
 
 // ============================================================================
 // VALIDATION RULES
@@ -24,17 +24,17 @@ import type {
 export const FILE_VALIDATION_RULES: Record<string, FileValidationRule> = {
   thumbnail: {
     maxSize: 5 * 1024 * 1024, // 5MB
-    allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    allowedTypes: ["image/jpeg", "image/png", "image/webp"],
     minWidth: 800,
     minHeight: 450,
   },
   video: {
     maxSize: 500 * 1024 * 1024, // 500MB
-    allowedTypes: ['video/mp4', 'video/webm', 'video/mov', 'video/quicktime'],
+    allowedTypes: ["video/mp4", "video/webm", "video/mov", "video/quicktime"],
   },
   certificate: {
     maxSize: 2 * 1024 * 1024, // 2MB
-    allowedTypes: ['image/png'],
+    allowedTypes: ["image/png"],
     exactWidth: 1200,
     exactHeight: 900,
   },
@@ -50,14 +50,19 @@ export const FILE_VALIDATION_RULES: Record<string, FileValidationRule> = {
  * @param rules - Validation rules
  * @returns ValidationResult
  */
-export function validateFile(file: File, rules: FileValidationRule): ValidationResult {
+export function validateFile(
+  file: File,
+  rules: FileValidationRule
+): ValidationResult {
   // Size validation
   if (file.size > rules.maxSize) {
     return {
       valid: false,
       error: {
-        code: 'FILE_TOO_LARGE' as ErrorCode,
-        message: `File size ${formatFileSize(file.size)} exceeds maximum ${formatFileSize(rules.maxSize)}`,
+        code: "FILE_TOO_LARGE" as ErrorCode,
+        message: `File size ${formatFileSize(
+          file.size
+        )} exceeds maximum ${formatFileSize(rules.maxSize)}`,
       },
     };
   }
@@ -67,8 +72,10 @@ export function validateFile(file: File, rules: FileValidationRule): ValidationR
     return {
       valid: false,
       error: {
-        code: 'INVALID_FILE_TYPE' as ErrorCode,
-        message: `File type ${file.type} not allowed. Allowed types: ${rules.allowedTypes.join(', ')}`,
+        code: "INVALID_FILE_TYPE" as ErrorCode,
+        message: `File type ${
+          file.type
+        } not allowed. Allowed types: ${rules.allowedTypes.join(", ")}`,
       },
     };
   }
@@ -89,13 +96,15 @@ export async function validateImageDimensions(
   file: File,
   rules: FileValidationRule
 ): Promise<ValidationResult> {
-  if (!file.type.startsWith('image/')) {
+  if (!file.type.startsWith("image/")) {
     return { valid: true }; // Skip for non-images
   }
 
   // Check if we're in a browser environment
-  if (typeof window === 'undefined' || typeof Image === 'undefined') {
-    console.warn('[Pinata Upload] Image dimension validation skipped (server environment)');
+  if (typeof window === "undefined" || typeof Image === "undefined") {
+    console.warn(
+      "[Pinata Upload] Image dimension validation skipped (server environment)"
+    );
     return { valid: true }; // Skip validation in Node.js/server-side
   }
 
@@ -113,7 +122,7 @@ export async function validateImageDimensions(
         resolve({
           valid: false,
           error: {
-            code: 'INVALID_DIMENSIONS' as ErrorCode,
+            code: "INVALID_DIMENSIONS" as ErrorCode,
             message: `Width must be exactly ${rules.exactWidth}px, got ${width}px`,
           },
         });
@@ -124,7 +133,7 @@ export async function validateImageDimensions(
         resolve({
           valid: false,
           error: {
-            code: 'INVALID_DIMENSIONS' as ErrorCode,
+            code: "INVALID_DIMENSIONS" as ErrorCode,
             message: `Height must be exactly ${rules.exactHeight}px, got ${height}px`,
           },
         });
@@ -136,7 +145,7 @@ export async function validateImageDimensions(
         resolve({
           valid: false,
           error: {
-            code: 'INVALID_DIMENSIONS' as ErrorCode,
+            code: "INVALID_DIMENSIONS" as ErrorCode,
             message: `Width ${width}px is below minimum ${rules.minWidth}px`,
           },
         });
@@ -147,7 +156,7 @@ export async function validateImageDimensions(
         resolve({
           valid: false,
           error: {
-            code: 'INVALID_DIMENSIONS' as ErrorCode,
+            code: "INVALID_DIMENSIONS" as ErrorCode,
             message: `Height ${height}px is below minimum ${rules.minHeight}px`,
           },
         });
@@ -159,7 +168,7 @@ export async function validateImageDimensions(
         resolve({
           valid: false,
           error: {
-            code: 'INVALID_DIMENSIONS' as ErrorCode,
+            code: "INVALID_DIMENSIONS" as ErrorCode,
             message: `Width ${width}px exceeds maximum ${rules.maxWidth}px`,
           },
         });
@@ -170,7 +179,7 @@ export async function validateImageDimensions(
         resolve({
           valid: false,
           error: {
-            code: 'INVALID_DIMENSIONS' as ErrorCode,
+            code: "INVALID_DIMENSIONS" as ErrorCode,
             message: `Height ${height}px exceeds maximum ${rules.maxHeight}px`,
           },
         });
@@ -185,8 +194,8 @@ export async function validateImageDimensions(
       resolve({
         valid: false,
         error: {
-          code: 'INVALID_FILE' as ErrorCode,
-          message: 'Failed to load image',
+          code: "INVALID_FILE" as ErrorCode,
+          message: "Failed to load image",
         },
       });
     };
@@ -254,13 +263,16 @@ export async function uploadFileToPrivateIPFS(
   const startTime = Date.now();
 
   try {
-    console.log('[Pinata Upload] Starting file upload...');
-    console.log('[Pinata Upload] File:', file.name, formatFileSize(file.size));
-    console.log('[Pinata Upload] Type:', file.type);
+    console.log("[Pinata Upload] Starting file upload...");
+    console.log("[Pinata Upload] File:", file.name, formatFileSize(file.size));
+    console.log("[Pinata Upload] Type:", file.type);
 
     // Build keyvalues (respecting 9 limit)
     const keyvalues = buildKeyvalues(options);
-    console.log('[Pinata Upload] Keyvalues count:', Object.keys(keyvalues).length);
+    console.log(
+      "[Pinata Upload] Keyvalues count:",
+      Object.keys(keyvalues).length
+    );
 
     // Upload to private IPFS
     let uploadBuilder = pinata.upload.private
@@ -276,23 +288,28 @@ export async function uploadFileToPrivateIPFS(
     const upload = await uploadBuilder;
 
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log('[Pinata Upload] Upload completed in', uploadTime, 'seconds');
-    console.log('[Pinata Upload] CID:', upload.cid);
-    console.log('[Pinata Upload] Pinata ID:', upload.id);
+    console.log("[Pinata Upload] Upload completed in", uploadTime, "seconds");
+    console.log("[Pinata Upload] CID:", upload.cid);
+    console.log("[Pinata Upload] Pinata ID:", upload.id);
 
     // Generate signed URL
-    const expiry = options.metadata?.fileType === 'video'
-      ? pinataConfig.videoExpiry!
-      : pinataConfig.defaultExpiry!;
+    const expiry =
+      options.metadata?.fileType === "video"
+        ? pinataConfig.videoExpiry!
+        : pinataConfig.defaultExpiry!;
 
-    console.log('[Pinata Upload] Generating signed URL (expiry:', expiry, 'seconds)...');
+    console.log(
+      "[Pinata Upload] Generating signed URL (expiry:",
+      expiry,
+      "seconds)..."
+    );
 
     const signedUrl = await pinata.gateways.private.createAccessLink({
       cid: upload.cid,
       expires: expiry,
     });
 
-    console.log('[Pinata Upload] Signed URL generated successfully');
+    console.log("[Pinata Upload] Signed URL generated successfully");
 
     return {
       success: true,
@@ -303,25 +320,27 @@ export async function uploadFileToPrivateIPFS(
         size: upload.size,
         mimeType: upload.mime_type,
         signedUrl,
-        expiresAt: Date.now() + (expiry * 1000), // Unix timestamp in milliseconds
+        expiresAt: Date.now() + expiry * 1000, // Unix timestamp in milliseconds
         uploadedAt: new Date().toISOString(),
-        network: 'private' as const,
+        network: "private" as const,
       },
     };
   } catch (error: unknown) {
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log('[Pinata Upload] Upload failed after', uploadTime, 'seconds');
+    console.log("[Pinata Upload] Upload failed after", uploadTime, "seconds");
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Pinata Upload] Error:', errorMessage);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[Pinata Upload] Error:", errorMessage);
 
     return {
       success: false,
       error: {
-        code: 'UPLOAD_FAILED' as ErrorCode,
+        code: "UPLOAD_FAILED" as ErrorCode,
         message: errorMessage,
         details: error,
-        retryable: errorMessage.includes('network') || errorMessage.includes('timeout'),
+        retryable:
+          errorMessage.includes("network") || errorMessage.includes("timeout"),
       },
     };
   }
@@ -341,18 +360,21 @@ export async function uploadJSONToPrivateIPFS(
   const startTime = Date.now();
 
   try {
-    console.log('[Pinata Upload] Starting JSON upload...');
-    console.log('[Pinata Upload] Data keys:', Object.keys(data).join(', '));
+    console.log("[Pinata Upload] Starting JSON upload...");
+    console.log("[Pinata Upload] Data keys:", Object.keys(data).join(", "));
 
     // Build keyvalues (respecting 9 limit)
     const keyvalues = buildKeyvalues({
       ...options,
       keyvalues: {
         ...options.keyvalues,
-        dataType: 'json',
+        dataType: "json",
       },
     });
-    console.log('[Pinata Upload] Keyvalues count:', Object.keys(keyvalues).length);
+    console.log(
+      "[Pinata Upload] Keyvalues count:",
+      Object.keys(keyvalues).length
+    );
 
     // Upload to private IPFS
     let uploadBuilder = pinata.upload.private
@@ -368,8 +390,12 @@ export async function uploadJSONToPrivateIPFS(
     const upload = await uploadBuilder;
 
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log('[Pinata Upload] JSON upload completed in', uploadTime, 'seconds');
-    console.log('[Pinata Upload] CID:', upload.cid);
+    console.log(
+      "[Pinata Upload] JSON upload completed in",
+      uploadTime,
+      "seconds"
+    );
+    console.log("[Pinata Upload] CID:", upload.cid);
 
     // Generate signed URL
     const expiry = pinataConfig.defaultExpiry!;
@@ -385,24 +411,29 @@ export async function uploadJSONToPrivateIPFS(
         pinataId: upload.id,
         name: upload.name,
         size: upload.size,
-        mimeType: 'application/json',
+        mimeType: "application/json",
         signedUrl,
-        expiresAt: Date.now() + (expiry * 1000), // Unix timestamp in milliseconds
+        expiresAt: Date.now() + expiry * 1000, // Unix timestamp in milliseconds
         uploadedAt: new Date().toISOString(),
-        network: 'private' as const,
+        network: "private" as const,
       },
     };
   } catch (error: unknown) {
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log('[Pinata Upload] JSON upload failed after', uploadTime, 'seconds');
+    console.log(
+      "[Pinata Upload] JSON upload failed after",
+      uploadTime,
+      "seconds"
+    );
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Pinata Upload] Error:', errorMessage);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[Pinata Upload] Error:", errorMessage);
 
     return {
       success: false,
       error: {
-        code: 'UPLOAD_FAILED' as ErrorCode,
+        code: "UPLOAD_FAILED" as ErrorCode,
         message: errorMessage,
         details: error,
         retryable: false,
@@ -429,8 +460,8 @@ export async function generateSignedUrl(
   try {
     const expiry = expires || pinataConfig.defaultExpiry!;
 
-    console.log('[Pinata] Generating signed URL for CID:', cid);
-    console.log('[Pinata] Expiry:', expiry, 'seconds');
+    console.log("[Pinata] Generating signed URL for CID:", cid);
+    console.log("[Pinata] Expiry:", expiry, "seconds");
 
     const signedUrl = await pinata.gateways.private.createAccessLink({
       cid,
@@ -440,12 +471,13 @@ export async function generateSignedUrl(
     return {
       success: true,
       signedUrl,
-      expiresAt: Date.now() + (expiry * 1000), // Unix timestamp in milliseconds
+      expiresAt: Date.now() + expiry * 1000, // Unix timestamp in milliseconds
       expires: expiry,
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Pinata] Failed to generate signed URL:', errorMessage);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[Pinata] Failed to generate signed URL:", errorMessage);
 
     return {
       success: false,
@@ -465,10 +497,191 @@ export async function batchGenerateSignedUrls(
   cids: string[],
   expires?: number
 ): Promise<SignedUrlResponse[]> {
-  console.log('[Pinata] Generating signed URLs for', cids.length, 'CIDs...');
+  console.log("[Pinata] Generating signed URLs for", cids.length, "CIDs...");
 
-  const promises = cids.map(cid => generateSignedUrl(cid, expires));
+  const promises = cids.map((cid) => generateSignedUrl(cid, expires));
   const results = await Promise.all(promises);
 
   return results;
+}
+
+// ============================================================================
+// PUBLIC UPLOAD FUNCTIONS (for MetaMask-compatible NFT images)
+// ============================================================================
+
+/**
+ * Uploads file to Pinata PUBLIC IPFS (for NFT certificate images)
+ *
+ * IMPORTANT: Public uploads do not require signed URLs and are permanently accessible.
+ * Use this for certificate NFT images that need to display in MetaMask/OpenSea.
+ *
+ * @param file - File to upload
+ * @param options - Upload options
+ * @returns Promise<UploadSuccessResponse | UploadErrorResponse>
+ */
+export async function uploadFileToPublicIPFS(
+  file: File,
+  options: PrivateUploadOptions = {}
+): Promise<UploadSuccessResponse | UploadErrorResponse> {
+  const startTime = Date.now();
+
+  try {
+    console.log("[Pinata Upload] Starting PUBLIC file upload...");
+    console.log("[Pinata Upload] File:", file.name, formatFileSize(file.size));
+    console.log("[Pinata Upload] Type:", file.type);
+
+    const keyvalues = buildKeyvalues(options);
+    console.log(
+      "[Pinata Upload] Keyvalues count:",
+      Object.keys(keyvalues).length
+    );
+
+    let uploadBuilder = pinata.upload.public
+      .file(file)
+      .name(options.name || file.name)
+      .keyvalues(keyvalues);
+
+    if (options.groupId) {
+      uploadBuilder = uploadBuilder.group(options.groupId);
+    }
+
+    const upload = await uploadBuilder;
+
+    const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(
+      "[Pinata Upload] PUBLIC upload completed in",
+      uploadTime,
+      "seconds"
+    );
+    console.log("[Pinata Upload] CID:", upload.cid);
+    console.log(
+      "[Pinata Upload] Public URL:",
+      `https://${process.env.PINATA_GATEWAY}/ipfs/${upload.cid}`
+    );
+
+    return {
+      success: true,
+      data: {
+        cid: upload.cid,
+        pinataId: upload.id,
+        name: upload.name,
+        size: upload.size,
+        mimeType: upload.mime_type,
+        signedUrl: `https://${process.env.PINATA_GATEWAY}/ipfs/${upload.cid}`,
+        expiresAt: 0,
+        uploadedAt: new Date().toISOString(),
+        network: "public" as const,
+      },
+    };
+  } catch (error: unknown) {
+    const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(
+      "[Pinata Upload] PUBLIC upload failed after",
+      uploadTime,
+      "seconds"
+    );
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[Pinata Upload] Error:", errorMessage);
+
+    return {
+      success: false,
+      error: {
+        code: "UPLOAD_FAILED" as ErrorCode,
+        message: errorMessage,
+        details: error,
+        retryable:
+          errorMessage.includes("network") || errorMessage.includes("timeout"),
+      },
+    };
+  }
+}
+
+/**
+ * Uploads JSON data to Pinata PUBLIC IPFS
+ *
+ * Use this for publicly accessible metadata that doesn't contain sensitive data.
+ *
+ * @param data - JSON data to upload
+ * @param options - Upload options
+ * @returns Promise<UploadSuccessResponse | UploadErrorResponse>
+ */
+export async function uploadJSONToPublicIPFS(
+  data: Record<string, unknown>,
+  options: PrivateUploadOptions = {}
+): Promise<UploadSuccessResponse | UploadErrorResponse> {
+  const startTime = Date.now();
+
+  try {
+    console.log("[Pinata Upload] Starting PUBLIC JSON upload...");
+    console.log("[Pinata Upload] Data keys:", Object.keys(data).join(", "));
+
+    const keyvalues = buildKeyvalues({
+      ...options,
+      keyvalues: {
+        ...options.keyvalues,
+        dataType: "json",
+      },
+    });
+    console.log(
+      "[Pinata Upload] Keyvalues count:",
+      Object.keys(keyvalues).length
+    );
+
+    let uploadBuilder = pinata.upload.public
+      .json(data)
+      .name(options.name || `data_${Date.now()}.json`)
+      .keyvalues(keyvalues);
+
+    if (options.groupId) {
+      uploadBuilder = uploadBuilder.group(options.groupId);
+    }
+
+    const upload = await uploadBuilder;
+
+    const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(
+      "[Pinata Upload] PUBLIC JSON upload completed in",
+      uploadTime,
+      "seconds"
+    );
+    console.log("[Pinata Upload] CID:", upload.cid);
+
+    return {
+      success: true,
+      data: {
+        cid: upload.cid,
+        pinataId: upload.id,
+        name: upload.name,
+        size: upload.size,
+        mimeType: "application/json",
+        signedUrl: `https://${process.env.PINATA_GATEWAY}/ipfs/${upload.cid}`,
+        expiresAt: 0,
+        uploadedAt: new Date().toISOString(),
+        network: "public" as const,
+      },
+    };
+  } catch (error: unknown) {
+    const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(
+      "[Pinata Upload] PUBLIC JSON upload failed after",
+      uploadTime,
+      "seconds"
+    );
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[Pinata Upload] Error:", errorMessage);
+
+    return {
+      success: false,
+      error: {
+        code: "UPLOAD_FAILED" as ErrorCode,
+        message: errorMessage,
+        details: error,
+        retryable: false,
+      },
+    };
+  }
 }

@@ -14,7 +14,7 @@ import QRCode from "qrcode";
 import sharp from "sharp";
 import path from "path";
 import {
-  uploadFileToPrivateIPFS,
+  uploadFileToPublicIPFS,
   uploadJSONToPrivateIPFS,
 } from "./pinata-upload.service";
 
@@ -214,7 +214,7 @@ export async function generateAndUploadCertificate(
     console.log("[Certificate Service] Student:", data.studentName);
     console.log("[Certificate Service] Course:", data.courseName);
     console.log(
-      "[Certificate Service] Note: Using Pinata signed URLs for private IPFS"
+      "[Certificate Service] Note: Using Pinata PUBLIC IPFS for MetaMask compatibility"
     );
 
     const canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -274,8 +274,8 @@ export async function generateAndUploadCertificate(
       type: "image/png",
     });
 
-    console.log("[Certificate Service] Uploading to Pinata private IPFS...");
-    const imageUploadResult = await uploadFileToPrivateIPFS(file, {
+    console.log("[Certificate Service] Uploading to Pinata PUBLIC IPFS...");
+    const imageUploadResult = await uploadFileToPublicIPFS(file, {
       name: `certificate-${data.certificateId}.png`,
       metadata: {
         courseId: data.courseId.toString(),
@@ -443,7 +443,7 @@ export async function generateAndUploadCertificate(
         signedUrl: imageUploadResult.data.signedUrl,
         expiresAt: imageUploadResult.data.expiresAt,
         uploadedAt: imageUploadResult.data.uploadedAt,
-        network: "private" as const,
+        network: "public" as const,
         metadataCID: metadataUploadResult.data.cid,
         metadataSignedUrl: metadataUploadResult.data.signedUrl,
         metadataExpiresAt: metadataUploadResult.data.expiresAt,
