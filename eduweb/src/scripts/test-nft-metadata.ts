@@ -9,7 +9,7 @@ const client = createThirdwebClient({
 const COURSE_LICENSE_ADDRESS = process.env.NEXT_PUBLIC_COURSE_LICENSE_ADDRESS!;
 const CERTIFICATE_MANAGER_ADDRESS =
   process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!;
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL;
 
 async function testCourseLicenseMetadata() {
   console.log("\n🧪 Testing CourseLicense Metadata...");

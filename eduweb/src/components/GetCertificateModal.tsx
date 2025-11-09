@@ -166,10 +166,7 @@ export function GetCertificateModal({
         recipientAddress: address,
         platformName:
           process.env.NEXT_PUBLIC_PLATFORM_NAME || "EduVerse Academy",
-        baseRoute:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/certificates`
-            : "http://localhost:3000/certificates",
+        baseRoute: `${process.env.NEXT_PUBLIC_APP_URL}/certificates`,
         tokenId: isFirstCertificate ? "0" : existingTokenId.toString(),
         completedCourses: isFirstCertificate
           ? [courseId.toString()]
@@ -250,12 +247,7 @@ export function GetCertificateModal({
           : "Adding course to certificate..."
       );
 
-      const baseRoute =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/certificates`
-          : `${
-              process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-            }/certificates`;
+      const baseRoute = `${process.env.NEXT_PUBLIC_APP_URL}/certificates`;
 
       console.log(
         "[GetCertificateModal] Calling mintOrUpdateCertificate with:"
@@ -282,9 +274,7 @@ export function GetCertificateModal({
       );
       console.log(
         "[GetCertificateModal] ✅ Certificate accessible at:",
-        `https://${
-          process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway.pinata.cloud"
-        }/ipfs/${data.data.cid}`
+        `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${data.data.cid}`
       );
       setStep("success");
       toast.success(

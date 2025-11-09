@@ -13,7 +13,7 @@ export async function GET() {
     credentials: {
       jwtExists: !!process.env.PINATA_JWT,
       jwtLength: process.env.PINATA_JWT?.length || 0,
-      gateway: process.env.PINATA_GATEWAY || "NOT SET",
+      gateway: process.env.NEXT_PUBLIC_PINATA_GATEWAY || "NOT SET",
     },
     sdk: {
       available: typeof pinata !== "undefined",
@@ -93,7 +93,7 @@ export async function GET() {
   if (tests.upload?.success && tests.upload?.cid) {
     try {
       console.log("[Pinata Test] Testing MetaMask compatibility...");
-      const publicUrl = `https://${process.env.PINATA_GATEWAY}/ipfs/${tests.upload.cid}`;
+      const publicUrl = `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${tests.upload.cid}`;
       tests.metamaskCompatibility.imageUrlFormat = publicUrl;
 
       console.log("[Pinata Test] Fetching public URL:", publicUrl);
@@ -189,7 +189,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const gateway = process.env.PINATA_GATEWAY;
+    const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
     const publicUrl = `https://${gateway}/ipfs/${cid}`;
 
     testResults.urlTest = {

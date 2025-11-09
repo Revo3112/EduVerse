@@ -8,8 +8,8 @@
  * @security CRITICAL - PINATA_JWT must never be exposed to client
  */
 
-import { PinataSDK } from 'pinata';
-import type { PinataConfig } from './pinata-types';
+import { PinataSDK } from "pinata";
+import type { PinataConfig } from "./pinata-types";
 
 // ============================================================================
 // ENVIRONMENT VALIDATION
@@ -21,20 +21,19 @@ import type { PinataConfig } from './pinata-types';
  */
 function validateEnvironment(): PinataConfig {
   const jwt = process.env.PINATA_JWT;
-  const gateway = process.env.PINATA_GATEWAY;
+  const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
 
   if (!jwt) {
     throw new Error(
-      'PINATA_JWT environment variable is required. ' +
-      'Please add it to your .env.local file.'
+      "PINATA_JWT environment variable is required. " +
+        "Please add it to your .env.local file."
     );
   }
 
   if (!gateway) {
     throw new Error(
-      'PINATA_GATEWAY environment variable is required. ' +
-      'Please add it to your .env.local file. ' +
-      'Format: your-gateway.mypinata.cloud'
+      "NEXT_PUBLIC_PINATA_GATEWAY environment variable is required. " +
+        "Please add it to your .env.local file."
     );
   }
 
@@ -67,18 +66,26 @@ function validateEnvironment(): PinataConfig {
 function initializePinataSDK(): PinataSDK {
   const config = validateEnvironment();
 
-  console.log('[Pinata] Initializing SDK...');
-  console.log('[Pinata] Gateway:', config.gateway);
-  console.log('[Pinata] JWT length:', config.jwt.length);
-  console.log('[Pinata] Default signed URL expiry:', config.defaultExpiry, 'seconds');
-  console.log('[Pinata] Video signed URL expiry:', config.videoExpiry, 'seconds');
+  console.log("[Pinata] Initializing SDK...");
+  console.log("[Pinata] Gateway:", config.gateway);
+  console.log("[Pinata] JWT length:", config.jwt.length);
+  console.log(
+    "[Pinata] Default signed URL expiry:",
+    config.defaultExpiry,
+    "seconds"
+  );
+  console.log(
+    "[Pinata] Video signed URL expiry:",
+    config.videoExpiry,
+    "seconds"
+  );
 
   const sdk = new PinataSDK({
     pinataJwt: config.jwt,
     pinataGateway: config.gateway,
   });
 
-  console.log('[Pinata] SDK initialized successfully');
+  console.log("[Pinata] SDK initialized successfully");
 
   return sdk;
 }
@@ -123,17 +130,17 @@ export const pinataConfig = validateEnvironment();
  */
 export async function testPinataConnection(): Promise<boolean> {
   try {
-    console.log('[Pinata] Testing connection...');
+    console.log("[Pinata] Testing connection...");
 
     // List files with limit 1 to test API access
     const result = await pinata.files.private.list().limit(1);
 
-    console.log('[Pinata] Connection successful');
-    console.log('[Pinata] Files found:', result.files?.length ?? 0);
+    console.log("[Pinata] Connection successful");
+    console.log("[Pinata] Files found:", result.files?.length ?? 0);
 
     return true;
   } catch (error) {
-    console.error('[Pinata] Connection failed:', error);
+    console.error("[Pinata] Connection failed:", error);
     return false;
   }
 }
@@ -148,10 +155,10 @@ export async function testPinataConnection(): Promise<boolean> {
  * @returns Formatted string (e.g., "1.5 MB")
  */
 export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return "0 Bytes";
 
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
@@ -183,8 +190,8 @@ export function extractCID(url: string): string | null {
   }
 
   // Extract from ipfs:// URL
-  if (url.startsWith('ipfs://')) {
-    const cid = url.replace('ipfs://', '').split('/')[0];
+  if (url.startsWith("ipfs://")) {
+    const cid = url.replace("ipfs://", "").split("/")[0];
     return isValidCID(cid) ? cid : null;
   }
 

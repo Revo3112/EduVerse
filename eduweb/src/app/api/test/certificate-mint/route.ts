@@ -51,8 +51,7 @@ export async function POST(request: NextRequest) {
       paymentReceiptHash:
         "0x0000000000000000000000000000000000000000000000000000000000000000",
       platformName: "EduVerse Academy",
-      baseRoute:
-        process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000/certificates",
+      baseRoute: process.env.NEXT_PUBLIC_APP_URL,
       isValid: true,
       lifetimeFlag: true,
       blockchainTxHash: undefined,
@@ -90,8 +89,8 @@ export async function POST(request: NextRequest) {
     console.log("[Test Certificate Mint] ✅ Network:", result.data.network);
     console.log("[Test Certificate Mint] ✅ Pinata ID:", result.data.pinataId);
 
-    const imageUrl = `https://${process.env.PINATA_GATEWAY}/ipfs/${result.data.cid}`;
-    const metadataUrl = `https://${process.env.PINATA_GATEWAY}/ipfs/${result.data.metadataCID}`;
+    const imageUrl = `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${result.data.cid}`;
+    const metadataUrl = `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${result.data.metadataCID}`;
 
     console.log("[Test Certificate Mint] ✅ Image URL:", imageUrl);
     console.log("[Test Certificate Mint] ✅ Metadata URL:", metadataUrl);

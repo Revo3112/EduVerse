@@ -128,10 +128,7 @@ export async function POST(request: NextRequest) {
       lastUpdated: body.lastUpdated || Math.floor(Date.now() / 1000),
       paymentReceiptHash: body.paymentReceiptHash,
       platformName: body.platformName || "EduVerse",
-      baseRoute:
-        body.baseRoute ||
-        process.env.NEXT_PUBLIC_APP_URL ||
-        "http://localhost:3000",
+      baseRoute: body.baseRoute || process.env.NEXT_PUBLIC_APP_URL,
       isValid: body.isValid !== false,
       lifetimeFlag: body.lifetimeFlag !== false,
       blockchainTxHash: body.blockchainTxHash,
@@ -173,7 +170,7 @@ export async function POST(request: NextRequest) {
     console.log("[Certificate Generation API] CID:", result.data.cid);
 
     // Construct verification URL for QR code
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
     const tokenId = certificateData.tokenId || 0;
     const address = certificateData.recipientAddress || "0x0";
     const verificationUrl = `${baseUrl}/certificates?tokenId=${tokenId}&address=${address}`;

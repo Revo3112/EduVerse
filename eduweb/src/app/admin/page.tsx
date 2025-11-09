@@ -40,9 +40,7 @@ import { chain } from "@/lib/chains";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const DEPLOYER_ADDRESS = process.env.NEXT_PUBLIC_DEPLOYER_ADDRESS!;
-const EXPECTED_METADATA_URI = `${
-  process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-}/api/metadata`;
+const EXPECTED_METADATA_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/metadata`;
 
 export default function AdminPage() {
   const account = useActiveAccount();
@@ -458,7 +456,7 @@ export default function AdminPage() {
     if (!account) return;
     setFixingUris(true);
     try {
-      const APP_URL = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const APP_URL = process.env.NEXT_PUBLIC_APP_URL;
       const GRAPHQL_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
 
       if (!GRAPHQL_ENDPOINT) {
@@ -999,17 +997,17 @@ export default function AdminPage() {
                     <Wallet className="h-4 w-4 mr-2" />
                     Auto-Fix NFT Display (Recommended)
                   </Button>
-                  <a
-                    href={`${
-                      process.env.NEXT_PUBLIC_APP_URL || ""
-                    }/api/nft/certificate/1`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-muted-foreground hover:underline flex items-center gap-1"
-                  >
-                    Test Metadata API
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
+                  {tokenId && (
+                    <a
+                      href={`${process.env.NEXT_PUBLIC_APP_URL}/api/nft/certificate/${tokenId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-muted-foreground hover:underline flex items-center gap-1"
+                    >
+                      Test Metadata API
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
                 </div>
               </div>
             </AlertDescription>

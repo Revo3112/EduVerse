@@ -10,7 +10,7 @@ const CERTIFICATE_MANAGER_ADDRESS =
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL!;
 const CLIENT_ID = process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!;
 const GOLDSKY_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT!;
-const PINATA_GATEWAY = process.env.PINATA_GATEWAY!;
+const PINATA_GATEWAY = process.env.NEXT_PUBLIC_PINATA_GATEWAY!;
 
 async function verifyCertificateMetadata() {
   console.log("=".repeat(80));

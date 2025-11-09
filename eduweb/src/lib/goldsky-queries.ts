@@ -144,9 +144,7 @@ export async function fetchContractConfigState(
   }
 }
 
-export async function fetchAllAdminConfigEvents(): Promise<
-  AdminConfigEvent[]
-> {
+export async function fetchAllAdminConfigEvents(): Promise<AdminConfigEvent[]> {
   const query = `
     query GetAllAdminConfigEvents {
       adminConfigEvents(

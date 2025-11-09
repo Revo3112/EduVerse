@@ -423,9 +423,7 @@ export function useCertificate(
               );
               console.log("[useCertificate] Public image URL:");
               console.log(
-                `  https://${
-                  process.env.NEXT_PUBLIC_PINATA_GATEWAY || "gateway"
-                }/ipfs/${ipfsCID}`
+                `  https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${ipfsCID}`
               );
               console.log(
                 "[useCertificate] ========================================"

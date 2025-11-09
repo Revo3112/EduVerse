@@ -164,6 +164,7 @@ export interface GoldskyCertificate {
   // Display
   platformName: string;
   baseRoute: string;
+  ipfsCID: string;
 
   // Revenue Tracking
   totalRevenue: string;
@@ -610,6 +611,7 @@ export const GET_USER_CERTIFICATES_QUERY = gql`
       totalCourses
       platformName
       baseRoute
+      ipfsCID
       totalRevenue
       totalRevenueEth
       createdAt

@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  const gateway = process.env.PINATA_GATEWAY;
+  const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
 
   if (!gateway) {
-    return NextResponse.json({
-      error: "PINATA_GATEWAY not configured",
-      metamaskCompatible: false,
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "NEXT_PUBLIC_PINATA_GATEWAY not configured",
+        metamaskCompatible: false,
+      },
+      { status: 500 }
+    );
   }
 
   const testCIDs = [
@@ -43,7 +46,7 @@ export async function GET() {
     }
   }
 
-  const allAccessible = results.every(r => r.accessible);
+  const allAccessible = results.every((r) => r.accessible);
 
   return NextResponse.json({
     gateway,

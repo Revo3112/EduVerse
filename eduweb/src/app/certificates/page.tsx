@@ -36,6 +36,8 @@ import {
 } from "@/services/goldsky-mylearning.service";
 import type { CertificateData } from "@/services/goldsky-mylearning.service";
 import Image from "next/image";
+import { shareCertificateImage } from "@/lib/share-certificate";
+import { toast } from "sonner";
 
 interface CourseInCertificate {
   courseId: string;
@@ -72,6 +74,8 @@ interface Certificate {
   totalRevenueEth: number;
   verificationUrl: string;
   qrCodeUrl: string;
+  ipfsCID: string;
+  certificateImageUrl: string;
   courses: CourseInCertificate[];
 }
 
@@ -96,8 +100,10 @@ const formatShortDate = (date: Date): string => {
 };
 
 function transformCertificateData(certData: CertificateData): Certificate {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
   const verificationUrl = `${baseUrl}/verify-certificate?tokenId=${certData.tokenId}`;
+  const pinataGateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
+  const certificateImageUrl = `https://${pinataGateway}/ipfs/${certData.ipfsCID}`;
 
   return {
     id: certData.id,
@@ -116,6 +122,8 @@ function transformCertificateData(certData: CertificateData): Certificate {
     qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
       verificationUrl
     )}`,
+    ipfsCID: certData.ipfsCID,
+    certificateImageUrl,
     courses: certData.courses.map((course, index) => ({
       courseId: course.courseId,
       title: course.title,
@@ -143,6 +151,7 @@ interface CertificateCardProps {
   onCourseClick: (course: CourseInCertificate) => void;
   onShareClick: () => void;
   onQRCodeClick: () => void;
+  onDownloadClick: () => void;
 }
 
 const CertificateCard = ({
@@ -150,6 +159,7 @@ const CertificateCard = ({
   onCourseClick,
   onShareClick,
   onQRCodeClick,
+  onDownloadClick,
 }: CertificateCardProps) => {
   return (
     <div className="space-y-6">
@@ -184,6 +194,15 @@ const CertificateCard = ({
               title="View QR Code"
             >
               <QrCode className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onDownloadClick}
+              className="h-10 w-10"
+              title="Download Certificate"
+            >
+              <Download className="w-4 h-4" />
             </Button>
             <Button
               variant="outline"
@@ -445,23 +464,69 @@ export default function CertificatePage() {
     setSelectedCourse(null);
   }, []);
 
-  const handleShareClick = useCallback(() => {
+  const handleShareClick = useCallback(async () => {
     const cert = certificates[0];
-    if (!cert) return;
+    if (!cert) {
+      console.log("[Share] No certificate available");
+      return;
+    }
 
-    if (navigator.share) {
-      navigator
-        .share({
-          title: `${cert.studentName}'s Certificate - ${cert.platformName}`,
-          text: `View my blockchain-verified certificate with ${cert.totalCoursesCompleted} completed courses!`,
-          url: cert.verificationUrl,
-        })
-        .catch(() => {
-          navigator.clipboard.writeText(cert.verificationUrl);
-        });
-    } else {
-      navigator.clipboard.writeText(cert.verificationUrl);
-      alert("Certificate link copied to clipboard!");
+    console.log("[Share] Starting share process...");
+    console.log("[Share] Certificate image URL:", cert.certificateImageUrl);
+    console.log("[Share] Token ID:", cert.tokenId);
+
+    const result = await shareCertificateImage({
+      certificateImageUrl: cert.certificateImageUrl,
+      tokenId: cert.tokenId,
+      studentName: cert.studentName,
+      platformName: cert.platformName,
+      totalCoursesCompleted: cert.totalCoursesCompleted,
+      verificationUrl: cert.verificationUrl,
+    });
+
+    console.log("[Share] Result:", result);
+
+    if (result.success) {
+      console.log("[Share] ✅ Share successful");
+      toast.success("Certificate shared successfully!");
+    } else if (result.error) {
+      console.log("[Share] ❌ Share failed:", result.error);
+      toast.error(result.error);
+    }
+  }, [certificates]);
+
+  const handleDownloadClick = useCallback(async () => {
+    const cert = certificates[0];
+    if (!cert) {
+      console.log("[Download] No certificate available");
+      return;
+    }
+
+    console.log("[Download] Starting download...");
+    console.log("[Download] Certificate image URL:", cert.certificateImageUrl);
+
+    try {
+      const response = await fetch(cert.certificateImageUrl);
+      console.log("[Download] Fetch response status:", response.status);
+
+      const blob = await response.blob();
+      console.log("[Download] Blob size:", blob.size, "bytes");
+      console.log("[Download] Blob type:", blob.type);
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `certificate-${cert.tokenId}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      console.log("[Download] ✅ Download successful");
+      toast.success("Certificate downloaded successfully!");
+    } catch (error) {
+      console.error("[Download] ❌ Error:", error);
+      toast.error("Failed to download certificate. Please try again.");
     }
   }, [certificates]);
 
@@ -569,6 +634,7 @@ export default function CertificatePage() {
             onCourseClick={handleCourseClick}
             onShareClick={handleShareClick}
             onQRCodeClick={handleQRCodeClick}
+            onDownloadClick={handleDownloadClick}
           />
         ) : (
           <NoCertificateState />

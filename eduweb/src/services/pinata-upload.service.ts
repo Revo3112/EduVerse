@@ -560,7 +560,10 @@ export async function uploadFileToPublicIPFS(
       "[Pinata Upload] PINATA_JWT length:",
       process.env.PINATA_JWT?.length || 0
     );
-    console.log("[Pinata Upload] PINATA_GATEWAY:", process.env.PINATA_GATEWAY);
+    console.log(
+      "[Pinata Upload] NEXT_PUBLIC_PINATA_GATEWAY:",
+      process.env.NEXT_PUBLIC_PINATA_GATEWAY
+    );
 
     const keyvalues = buildKeyvalues(options);
     console.log(
@@ -614,7 +617,7 @@ export async function uploadFileToPublicIPFS(
     console.log("[Pinata Upload] ✅ Response MimeType:", upload.mime_type);
     console.log(
       "[Pinata Upload] ✅ Public URL:",
-      `https://${process.env.PINATA_GATEWAY}/ipfs/${upload.cid}`
+      `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${upload.cid}`
     );
     console.log("[Pinata Upload] ========================================");
 
@@ -626,7 +629,7 @@ export async function uploadFileToPublicIPFS(
         name: upload.name,
         size: upload.size,
         mimeType: upload.mime_type,
-        signedUrl: `https://${process.env.PINATA_GATEWAY}/ipfs/${upload.cid}`,
+        signedUrl: `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${upload.cid}`,
         expiresAt: 0,
         uploadedAt: new Date().toISOString(),
         network: "public" as const,
@@ -731,7 +734,7 @@ export async function uploadJSONToPublicIPFS(
         name: upload.name,
         size: upload.size,
         mimeType: "application/json",
-        signedUrl: `https://${process.env.PINATA_GATEWAY}/ipfs/${upload.cid}`,
+        signedUrl: `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${upload.cid}`,
         expiresAt: 0,
         uploadedAt: new Date().toISOString(),
         network: "public" as const,

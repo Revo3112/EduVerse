@@ -32,7 +32,7 @@ const CANVAS_WIDTH = 6250;
 const CANVAS_HEIGHT = 4419;
 
 // QR Code Configuration - Uses environment variable for deployment flexibility
-const QR_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const QR_BASE_URL = process.env.NEXT_PUBLIC_APP_URL;
 
 const NAME_POSITION = {
   x: CANVAS_WIDTH / 2,
@@ -395,7 +395,7 @@ export async function generateAndUploadCertificate(
       `[Certificate Service] ✅ Image uploaded successfully: ${imageUploadResult.data.cid}`
     );
     console.log(
-      `[Certificate Service] ✅ Public URL: https://${process.env.PINATA_GATEWAY}/ipfs/${imageUploadResult.data.cid}`
+      `[Certificate Service] ✅ Public URL: https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${imageUploadResult.data.cid}`
     );
 
     // ========================================
@@ -414,7 +414,7 @@ export async function generateAndUploadCertificate(
       } on EduVerse. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${
         data.completedCourses?.length || 1
       } verified course${(data.completedCourses?.length || 1) > 1 ? "s" : ""}.`,
-      image: `https://${process.env.PINATA_GATEWAY}/ipfs/${imageUploadResult.data.cid}`,
+      image: `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${imageUploadResult.data.cid}`,
       decimals: 0, // Non-fungible (ERC-1155 with amount=1)
 
       // Blockchain-compatible attributes matching Certificate struct fields

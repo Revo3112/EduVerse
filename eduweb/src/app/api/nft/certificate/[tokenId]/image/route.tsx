@@ -54,9 +54,8 @@ export async function GET(
       );
     }
 
-    const pinataGateway =
-      process.env.NEXT_PUBLIC_PINATA_GATEWAY || "https://gateway.pinata.cloud";
-    const imageUrl = `${pinataGateway}/ipfs/${certificateData.ipfsCID}`;
+    const pinataGateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
+    const imageUrl = `https://${pinataGateway}/ipfs/${certificateData.ipfsCID}`;
 
     const imageResponse = await fetch(imageUrl);
 

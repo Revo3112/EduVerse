@@ -350,6 +350,7 @@ export interface CertificateData {
   // Display
   platformName: string;
   baseRoute: string;
+  ipfsCID: string;
 
   // Pricing
   mintPrice: number; // ETH
@@ -530,6 +531,7 @@ function transformCertificate(
     // Display
     platformName: certificate.platformName,
     baseRoute: certificate.baseRoute,
+    ipfsCID: certificate.ipfsCID,
 
     // Pricing
     mintPrice: totalPaidEth,
