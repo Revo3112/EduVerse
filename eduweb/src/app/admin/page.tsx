@@ -38,6 +38,7 @@ import {
 import { getContract } from "thirdweb";
 import { chain } from "@/lib/chains";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { getContractConfig } from "@/services/goldsky-admin.service";
 
 const DEPLOYER_ADDRESS = process.env.NEXT_PUBLIC_DEPLOYER_ADDRESS!;
 const EXPECTED_METADATA_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/metadata`;
@@ -54,12 +55,15 @@ export default function AdminPage() {
     defaultBaseRoute?: string;
     defaultMetadataBaseURI?: string;
     platformWallet?: string;
+    licensePlatformWallet?: string;
+    licenseBaseURI?: string;
     platformFeePercentage?: string;
   }>({});
 
   const [certFee, setCertFee] = useState("");
   const [courseAddFee, setCourseAddFee] = useState("");
   const [platformWallet, setPlatformWallet] = useState("");
+  const [licensePlatformWallet, setLicensePlatformWallet] = useState("");
   const [platformName, setPlatformName] = useState("");
   const [baseRoute, setBaseRoute] = useState("");
   const [licenseBaseURI, setLicenseBaseURI] = useState("");
@@ -121,7 +125,9 @@ export default function AdminPage() {
         defaultBaseRoute,
         defaultMetadataBaseURI,
         platformWalletAddr,
+        licensePlatformWalletAddr,
         platformFeePercentage,
+        licenseConfig,
       ] = await Promise.all([
         readContract({
           contract: certificateManager,
@@ -155,9 +161,15 @@ export default function AdminPage() {
         }),
         readContract({
           contract: courseLicense,
+          method: "function platformWallet() view returns (address)",
+          params: [],
+        }),
+        readContract({
+          contract: courseLicense,
           method: "function platformFeePercentage() view returns (uint256)",
           params: [],
         }),
+        getContractConfig(CONTRACT_ADDRESSES.COURSE_LICENSE.toLowerCase()),
       ]);
 
       setContractData({
@@ -167,6 +179,9 @@ export default function AdminPage() {
         defaultBaseRoute,
         defaultMetadataBaseURI,
         platformWallet: platformWalletAddr,
+        licensePlatformWallet: licensePlatformWalletAddr,
+        licenseBaseURI:
+          licenseConfig?.baseURI || licenseConfig?.licenseBaseURI || "",
         platformFeePercentage: platformFeePercentage.toString(),
       });
       toast.success("Contract data loaded successfully");
@@ -231,6 +246,25 @@ export default function AdminPage() {
     } catch (error) {
       toast.error(
         (error as Error).message || "Failed to update platform wallet"
+      );
+    }
+  }
+
+  async function handleSetLicensePlatformWallet() {
+    if (!account) return;
+    try {
+      const tx = prepareContractCall({
+        contract: courseLicense,
+        method: "function setPlatformWallet(address _platformWallet)",
+        params: [licensePlatformWallet],
+      });
+
+      await sendTransaction({ transaction: tx, account });
+      toast.success("License platform wallet updated successfully");
+      await loadContractData();
+    } catch (error) {
+      toast.error(
+        (error as Error).message || "Failed to update license platform wallet"
       );
     }
   }
@@ -867,10 +901,26 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">
-                    Platform Wallet:
+                    Certificate Platform Wallet:
                   </span>
                   <p className="font-mono text-xs break-all">
                     {contractData.platformWallet || "Not loaded"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-muted-foreground">
+                    License Platform Wallet:
+                  </span>
+                  <p className="font-mono text-xs break-all">
+                    {contractData.licensePlatformWallet || "Not loaded"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-muted-foreground">
+                    License Base URI:
+                  </span>
+                  <p className="font-mono text-xs break-all">
+                    {contractData.licenseBaseURI || "Not set"}
                   </p>
                 </div>
                 <div>
@@ -913,7 +963,7 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Platform Wallet Address</Label>
+                <Label>Certificate Platform Wallet Address</Label>
                 <div className="flex gap-2">
                   <Input
                     type="text"
@@ -922,6 +972,21 @@ export default function AdminPage() {
                     onChange={(e) => setPlatformWallet(e.target.value)}
                   />
                   <Button onClick={handleSetPlatformWallet}>Update</Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>License Platform Wallet Address</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="0x..."
+                    value={licensePlatformWallet}
+                    onChange={(e) => setLicensePlatformWallet(e.target.value)}
+                  />
+                  <Button onClick={handleSetLicensePlatformWallet}>
+                    Update
+                  </Button>
                 </div>
               </div>
 
