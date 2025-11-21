@@ -8,6 +8,7 @@ import {
   getCertificatePrice,
   getUserCertificateId,
   getCertificateCompletedCourses,
+  getCertificateDetails,
 } from "@/services/certificate-blockchain.service";
 import {
   Dialog,
@@ -70,6 +71,12 @@ export function GetCertificateModal({
   const [courseAlreadyInCertificate, setCourseAlreadyInCertificate] =
     useState(false);
 
+  // Store existing certificate data (for reusing IPFS CID and recipient name)
+  const [existingCertificateData, setExistingCertificateData] = useState<{
+    ipfsCID: string;
+    recipientName: string;
+  } | null>(null);
+
   const [eligible, setEligible] = useState(true);
   const [eligibilityReason, setEligibilityReason] = useState<string | null>(
     null
@@ -103,6 +110,22 @@ export function GetCertificateModal({
         if (hasExistingCert) {
           const courses = await getCertificateCompletedCourses(tokenId);
           setExistingCourses(courses);
+
+          // Fetch existing certificate details (for reusing data)
+          try {
+            const certDetails = await getCertificateDetails(tokenId);
+            setExistingCertificateData({
+              ipfsCID: certDetails.ipfsCID,
+              recipientName: certDetails.recipientName,
+            });
+          } catch (error) {
+            console.error(
+              "[GetCertificateModal] Failed to fetch certificate details:",
+              error
+            );
+            toast.error("Failed to load existing certificate data");
+            setExistingCertificateData(null);
+          }
 
           const alreadyAdded = courses.some(
             (c) => c.toString() === courseId.toString()
@@ -149,93 +172,138 @@ export function GetCertificateModal({
     }
 
     setIsLoading(true);
-    setStep("generating");
-    setProgressState({
-      current: 1,
-      total: 3,
-      message: "Generating certificate image...",
-    });
 
-    console.log("[GetCertificateModal] 🎨 Starting certificate generation...");
+    console.log(
+      `[GetCertificateModal] 🎨 Starting ${isFirstCertificate ? "first certificate" : "course addition"}...`
+    );
 
     try {
-      const requestBody = {
-        studentName: isFirstCertificate ? recipientName.trim() : "Update",
-        courseName: courseTitle,
-        courseId: courseId.toString(),
-        recipientAddress: address,
-        platformName:
-          process.env.NEXT_PUBLIC_PLATFORM_NAME || "EduVerse Academy",
-        baseRoute: `${process.env.NEXT_PUBLIC_APP_URL}/certificates`,
-        tokenId: isFirstCertificate ? "0" : existingTokenId.toString(),
-        completedCourses: isFirstCertificate
-          ? [courseId.toString()]
-          : [...existingCourses.map((c) => c.toString()), courseId.toString()],
-        isValid: true,
-        lifetimeFlag: true,
-      };
+      let certificateCID: string;
+      let recipientNameToUse: string;
 
-      const response = await fetch("/api/certificate/generate-pinata", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
+      if (isFirstCertificate) {
+        // ✅ FIRST CERTIFICATE: Generate new image
+        setStep("generating");
+        setProgressState({
+          current: 1,
+          total: 3,
+          message: "Generating certificate image...",
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to generate certificate");
+        console.log("[GetCertificateModal] 🎨 Generating NEW certificate image");
+
+        const requestBody = {
+          studentName: recipientName.trim(),
+          courseName: courseTitle,
+          courseId: courseId.toString(),
+          recipientAddress: address,
+          platformName:
+            process.env.NEXT_PUBLIC_PLATFORM_NAME || "EduVerse Academy",
+          baseRoute: `${process.env.NEXT_PUBLIC_APP_URL}/certificates`,
+          tokenId: "0",
+          completedCourses: [courseId.toString()],
+          isValid: true,
+          lifetimeFlag: true,
+        };
+
+        const response = await fetch("/api/certificate/generate-pinata", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to generate certificate");
+        }
+
+        console.log("[GetCertificateModal] ✅ Certificate image generated");
+        setProgressState({
+          current: 2,
+          total: 3,
+          message: "Uploading to IPFS...",
+        });
+
+        const data = await response.json();
+        console.log(
+          "[GetCertificateModal] ✅ IPFS upload complete, CID:",
+          data.data.cid
+        );
+
+        // Validate CID format
+        const cid = data.data.cid;
+        const cidV0Regex = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
+        const cidV1Regex = /^(bafy|bafk|bafz|baf2)[a-z0-9]{52,}$/i;
+        const isValidCID = cidV0Regex.test(cid) || cidV1Regex.test(cid);
+
+        if (!isValidCID) {
+          console.error("[GetCertificateModal] ❌ INVALID CID FORMAT:", cid);
+          throw new Error(`Invalid IPFS CID format received: ${cid}`);
+        }
+
+        if (!cid || cid.trim() === "" || cid === "pending") {
+          console.error("[GetCertificateModal] ❌ CID is empty or invalid:", cid);
+          throw new Error("Certificate CID is missing or invalid");
+        }
+
+        console.log("[GetCertificateModal] ✅ CID validation passed");
+        console.log(
+          "[GetCertificateModal] Public URL:",
+          data.data.imageUrl || data.data.signedUrl
+        );
+        console.log("[GetCertificateModal] Network:", data.data.network);
+
+        setCertificateData({
+          ipfsCID: data.data.cid,
+          previewUrl: data.data.imageUrl || data.data.signedUrl,
+          metadataCID: data.data.metadataCID || "",
+        });
+
+        certificateCID = data.data.cid;
+        recipientNameToUse = recipientName.trim();
+      } else {
+        // ✅ UPDATE: Reuse existing certificate image
+        console.log(
+          "[GetCertificateModal] ♻️ Reusing existing certificate image"
+        );
+        console.log(
+          "[GetCertificateModal] Existing CID:",
+          existingCertificateData?.ipfsCID
+        );
+        console.log(
+          "[GetCertificateModal] Recipient Name:",
+          existingCertificateData?.recipientName
+        );
+
+        if (!existingCertificateData) {
+          throw new Error(
+            "Unable to load existing certificate. Please close and try again."
+          );
+        }
+
+        certificateCID = existingCertificateData.ipfsCID;
+        recipientNameToUse = existingCertificateData.recipientName;
+
+        // Skip certificate generation, go directly to minting
+        setStep("minting");
+        setProgressState({
+          current: 1,
+          total: 2, // Only 2 steps for updates
+          message: "Adding course to blockchain...",
+        });
       }
 
-      console.log("[GetCertificateModal] ✅ Certificate image generated");
-      setProgressState({
-        current: 2,
-        total: 3,
-        message: "Uploading to IPFS...",
-      });
-
-      const data = await response.json();
-      console.log(
-        "[GetCertificateModal] ✅ IPFS upload complete, CID:",
-        data.data.cid
-      );
-
-      // Validate CID format
-      const cid = data.data.cid;
-      const cidV0Regex = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
-      const cidV1Regex = /^(bafy|bafk|bafz|baf2)[a-z0-9]{52,}$/i;
-      const isValidCID = cidV0Regex.test(cid) || cidV1Regex.test(cid);
-
-      if (!isValidCID) {
-        console.error("[GetCertificateModal] ❌ INVALID CID FORMAT:", cid);
-        throw new Error(`Invalid IPFS CID format received: ${cid}`);
+      // Proceed with blockchain transaction (only update progress for first certificate)
+      if (isFirstCertificate) {
+        setStep("minting");
+        setProgressState({
+          current: 3,
+          total: 3,
+          message: "Minting on blockchain...",
+        });
       }
-
-      if (!cid || cid.trim() === "" || cid === "pending") {
-        console.error("[GetCertificateModal] ❌ CID is empty or invalid:", cid);
-        throw new Error("Certificate CID is missing or invalid");
-      }
-
-      console.log("[GetCertificateModal] ✅ CID validation passed");
-      console.log(
-        "[GetCertificateModal] Public URL:",
-        data.data.imageUrl || data.data.signedUrl
-      );
-      console.log("[GetCertificateModal] Network:", data.data.network);
-
-      setCertificateData({
-        ipfsCID: data.data.cid,
-        previewUrl: data.data.imageUrl || data.data.signedUrl,
-        metadataCID: data.data.metadataCID || "",
-      });
-
-      setStep("minting");
-      setProgressState({
-        current: 3,
-        total: 3,
-        message: "Minting on blockchain...",
-      });
 
       console.log(
         "[GetCertificateModal] 🔗 Starting blockchain transaction..."
@@ -253,28 +321,25 @@ export function GetCertificateModal({
         "[GetCertificateModal] Calling mintOrUpdateCertificate with:"
       );
       console.log("  - Course ID:", courseId.toString());
-      console.log(
-        "  - Recipient:",
-        isFirstCertificate ? recipientName.trim() : "Update"
-      );
-      console.log("  - CID:", data.data.cid);
+      console.log("  - Recipient:", recipientNameToUse);
+      console.log("  - CID:", certificateCID);
       console.log("  - Base Route:", baseRoute);
 
       await mintOrUpdateCertificate(
         courseId,
-        isFirstCertificate ? recipientName.trim() : "Update",
-        data.data.cid,
+        recipientNameToUse,
+        certificateCID,
         baseRoute
       );
 
       console.log("[GetCertificateModal] ✅ Blockchain transaction confirmed!");
       console.log(
         "[GetCertificateModal] ✅ CID stored in blockchain:",
-        data.data.cid
+        certificateCID
       );
       console.log(
         "[GetCertificateModal] ✅ Certificate accessible at:",
-        `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${data.data.cid}`
+        `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${certificateCID}`
       );
       setStep("success");
       toast.success(
@@ -389,7 +454,11 @@ export function GetCertificateModal({
             <Button
               onClick={handleMintOrUpdate}
               disabled={
-                isLoading || (isFirstCertificate && !recipientName.trim())
+                isLoading ||
+                priceLoading ||
+                checkingEligibility ||
+                (isFirstCertificate && !recipientName.trim()) ||
+                (!isFirstCertificate && !existingCertificateData)
               }
               className="w-full"
             >
@@ -397,6 +466,11 @@ export function GetCertificateModal({
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Processing...
+                </>
+              ) : priceLoading || checkingEligibility ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading...
                 </>
               ) : (
                 <>
@@ -426,9 +500,8 @@ export function GetCertificateModal({
               <div
                 className="bg-primary h-2 rounded-full transition-all duration-300"
                 style={{
-                  width: `${
-                    (progressState.current / progressState.total) * 100
-                  }%`,
+                  width: `${(progressState.current / progressState.total) * 100
+                    }%`,
                 }}
               />
             </div>
@@ -451,9 +524,8 @@ export function GetCertificateModal({
               <div
                 className="bg-primary h-2 rounded-full transition-all duration-300"
                 style={{
-                  width: `${
-                    (progressState.current / progressState.total) * 100
-                  }%`,
+                  width: `${(progressState.current / progressState.total) * 100
+                    }%`,
                 }}
               />
             </div>
