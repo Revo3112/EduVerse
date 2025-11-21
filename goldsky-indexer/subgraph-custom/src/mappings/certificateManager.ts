@@ -196,6 +196,7 @@ export function handleCertificateMinted(event: CertificateMinted): void {
     certificate.paymentReceiptHash = event.params.paymentReceiptHash;
     certificate.baseRoute = certData.baseRoute;
     certificate.isValid = certData.isValid;
+    certificate.lifetimeFlag = certData.lifetimeFlag;
     certificate.totalCourses = BigInt.fromI32(certData.completedCourses.length);
     certificate.totalRevenue = event.params.pricePaid;
     certificate.totalRevenueEth = weiToEth(event.params.pricePaid);
@@ -215,6 +216,7 @@ export function handleCertificateMinted(event: CertificateMinted): void {
     certificate.paymentReceiptHash = event.params.paymentReceiptHash;
     certificate.baseRoute = "";
     certificate.isValid = true;
+    certificate.lifetimeFlag = true;
     certificate.totalCourses = ZERO_BIGINT;
     certificate.totalRevenue = event.params.pricePaid;
     certificate.totalRevenueEth = weiToEth(event.params.pricePaid);
@@ -313,7 +315,7 @@ export function handleCertificateMinted(event: CertificateMinted): void {
 
   createActivityEvent(
     event,
-    "CERTIFICATE_MINTED",
+    "certificate_minted",
     event.params.owner,
     "Minted certificate: " + event.params.recipientName,
     null,
@@ -597,7 +599,7 @@ export function handleCourseAddedToCertificate(
 
   createActivityEvent(
     event,
-    "COURSE_ADDED_TO_CERTIFICATE",
+    "course_added_to_certificate",
     owner,
     "Added course '" + courseName + "' to certificate",
     courseForActivity,
@@ -638,7 +640,7 @@ export function handleCertificateUpdated(event: CertificateUpdated): void {
 
     createActivityEvent(
       event,
-      "CERTIFICATE_UPDATED",
+      "certificate_updated",
       certificate.recipientAddress,
       "Updated certificate metadata",
       null,
@@ -664,7 +666,7 @@ export function handleCertificateRevoked(event: CertificateRevoked): void {
 
     createActivityEvent(
       event,
-      "CERTIFICATE_REVOKED",
+      "certificate_revoked",
       certificate.recipientAddress,
       "Certificate revoked: " + event.params.reason,
       null,

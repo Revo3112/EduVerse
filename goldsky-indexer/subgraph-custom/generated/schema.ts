@@ -1238,6 +1238,19 @@ export class Certificate extends Entity {
     this.set("isValid", Value.fromBoolean(value));
   }
 
+  get lifetimeFlag(): boolean {
+    let value = this.get("lifetimeFlag");
+    if (!value || value.kind == ValueKind.NULL) {
+      return false;
+    } else {
+      return value.toBoolean();
+    }
+  }
+
+  set lifetimeFlag(value: boolean) {
+    this.set("lifetimeFlag", Value.fromBoolean(value));
+  }
+
   get totalCourses(): BigInt {
     let value = this.get("totalCourses");
     if (!value || value.kind == ValueKind.NULL) {

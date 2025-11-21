@@ -204,6 +204,7 @@ type Certificate @entity(immutable: false) {
   recipientAddress: Bytes! # Direct address field for queries
   recipientName: String!
   isValid: Boolean!
+  lifetimeFlag: Boolean! # Always true for lifetime validity
   totalCourses: BigInt!
 
   # Certificate Display & Routing
