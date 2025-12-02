@@ -217,12 +217,15 @@ export interface CertificateData {
   createdAt: string;
   lastUpdated: string;
 
-  courses: Array<{
+  // Uses completedCourses from schema (derivedFrom CertificateCourse.certificate)
+  completedCourses: Array<{
     id: string;
-    courseId: string;
     addedAt: string;
-    ipfsCID: string;
-    transactionHash: string;
+    pricePaid: string;
+    pricePaidEth: string;
+    isFirstCourse: boolean;
+    txHash: string;
+    blockNumber: string;
     course: {
       id: string;
       title: string;
@@ -661,12 +664,14 @@ export async function getUserCertificate(
         createdAt
         lastUpdated
 
-        courses {
+        completedCourses {
           id
-          courseId
           addedAt
-          ipfsCID
-          transactionHash
+          pricePaid
+          pricePaidEth
+          isFirstCourse
+          txHash
+          blockNumber
 
           course {
             id

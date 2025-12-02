@@ -31,6 +31,7 @@ interface FormData {
     title: string;
     duration: number;
     file: File | null;
+    contentCID?: string; // ✅ CRITICAL: Livepeer playback ID or IPFS CID
   }>;
   partialUpload?: PartialUploadData;
 }
@@ -78,13 +79,40 @@ export function PartialUploadRetry() {
       });
 
       const BATCH_SIZE = 50;
+
+      // ✅ CRITICAL FIX: Filter sections that have valid contentCID
       const allSections = partialDraft.sections
-        .filter((s) => s.file !== null)
+        .filter(
+          (s) =>
+            s.file !== null && s.contentCID && s.contentCID.trim().length > 0
+        )
         .map((s) => ({
-          title: s.title,
-          contentCID: "",
-          duration: s.duration,
+          title: s.title.trim(),
+          contentCID: s.contentCID!.trim(), // Use stored contentCID (Livepeer playbackId)
+          duration: Math.floor(Number(s.duration)),
         }));
+
+      // Validate we have sections with valid contentCIDs
+      if (allSections.length === 0) {
+        toast.error("Cannot retry", {
+          description:
+            "No sections with valid content CIDs found. Videos may need to be re-uploaded.",
+        });
+        setIsRetrying(false);
+        return;
+      }
+
+      console.log(
+        "[PartialUploadRetry] Sections to retry:",
+        allSections.length
+      );
+      allSections.forEach((s, i) => {
+        console.log(
+          `[PartialUploadRetry] Section ${i + 1}: "${s.title}" | CID: ${
+            s.contentCID
+          } | Duration: ${s.duration}s`
+        );
+      });
 
       const retriedBatches: number[] = [];
       const stillFailed: number[] = [];

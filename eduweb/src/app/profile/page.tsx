@@ -136,12 +136,27 @@ interface ExtendedCourse extends Course {
  * Certificate struct from CertificateManager.sol
  * Note: One certificate per user model (userCertificates mapping)
  */
+/**
+ * Completed course data from CertificateCourse entity
+ */
+interface CompletedCourseData {
+  id: string;
+  addedAt: bigint;
+  course: {
+    id: string;
+    title: string;
+    thumbnailCID: string;
+    category: string;
+    difficulty: string;
+  };
+}
+
 interface Certificate {
   tokenId: bigint;
   recipientName: string;
   recipientAddress: `0x${string}`; // Address type for web3
   platformName: string;
-  completedCourses: bigint[];
+  completedCourses: CompletedCourseData[]; // Full course data, not just IDs
   totalCoursesCompleted: bigint;
   ipfsCID: string;
   paymentReceiptHash: string;
@@ -163,6 +178,48 @@ interface SectionProgress {
   completedAt: bigint;
 }
 
+// Category and Difficulty mappings for enum string to number conversion
+const CATEGORY_MAP: Record<string, number> = {
+  Programming: 0,
+  Design: 1,
+  Business: 2,
+  Marketing: 3,
+  DataScience: 4,
+  Finance: 5,
+  Healthcare: 6,
+  Language: 7,
+  Arts: 8,
+  Mathematics: 9,
+  Science: 10,
+  Engineering: 11,
+  Technology: 12,
+  Education: 13,
+  Psychology: 14,
+  Culinary: 15,
+  PersonalDevelopment: 16,
+  Legal: 17,
+  Sports: 18,
+  Other: 19,
+};
+
+const DIFFICULTY_MAP: Record<string, number> = {
+  Beginner: 0,
+  Intermediate: 1,
+  Advanced: 2,
+};
+
+// Convert category string/number to number
+const parseCategoryToNumber = (category: string | number): number => {
+  if (typeof category === "number") return category;
+  return CATEGORY_MAP[category] ?? 19; // Default to "Other"
+};
+
+// Convert difficulty string/number to number
+const parseDifficultyToNumber = (difficulty: string | number): number => {
+  if (typeof difficulty === "number") return difficulty;
+  return DIFFICULTY_MAP[difficulty] ?? 0; // Default to "Beginner"
+};
+
 // Utility functions
 const getCategoryName = (category: number): string => {
   const categories = [
@@ -170,7 +227,7 @@ const getCategoryName = (category: number): string => {
     "Design",
     "Business",
     "Marketing",
-    "Data Science",
+    "DataScience",
     "Finance",
     "Healthcare",
     "Language",
@@ -182,7 +239,7 @@ const getCategoryName = (category: number): string => {
     "Education",
     "Psychology",
     "Culinary",
-    "Personal Development",
+    "PersonalDevelopment",
     "Legal",
     "Sports",
     "Other",
@@ -191,7 +248,7 @@ const getCategoryName = (category: number): string => {
 };
 
 const getDifficultyName = (difficulty: number): string => {
-  const difficulties = ["Beginner", "Intermediate", "Advanced", "Expert"];
+  const difficulties = ["Beginner", "Intermediate", "Advanced"];
   return difficulties[difficulty] || "Unknown";
 };
 
@@ -284,8 +341,8 @@ const useUserProfile = (address: string): UserProfileData => {
           thumbnailCID: course.thumbnailCID,
           creator: course.creator as `0x${string}`,
           creatorName: course.creatorName,
-          category: parseInt(course.category),
-          difficulty: parseInt(course.difficulty),
+          category: parseCategoryToNumber(course.category),
+          difficulty: parseDifficultyToNumber(course.difficulty),
           pricePerMonth: BigInt(course.price),
           totalSections: ProfileService.bigIntToNumber(course.sectionsCount),
           isActive: course.isActive && !course.isDeleted,
@@ -307,9 +364,17 @@ const useUserProfile = (address: string): UserProfileData => {
               recipientAddress:
                 certificateData.recipientAddress as `0x${string}`,
               platformName: certificateData.platformName,
-              completedCourses: certificateData.courses.map((c) =>
-                BigInt(c.courseId)
-              ),
+              completedCourses: certificateData.completedCourses.map((c) => ({
+                id: c.id,
+                addedAt: BigInt(c.addedAt),
+                course: {
+                  id: c.course.id,
+                  title: c.course.title,
+                  thumbnailCID: c.course.thumbnailCID,
+                  category: c.course.category,
+                  difficulty: c.course.difficulty,
+                },
+              })),
               totalCoursesCompleted: BigInt(certificateData.totalCourses),
               ipfsCID: certificateData.ipfsCID,
               paymentReceiptHash: "", // Not tracked in current schema
@@ -524,8 +589,13 @@ ProfileHeader.displayName = "ProfileHeader";
 const LearningTab = memo<{ profileData: UserProfileData }>(
   ({ profileData }) => {
     const learningStats = useMemo(() => {
-      // ✅ SMART CONTRACT ALIGNED: Get completed courses from certificate.completedCourses[]
-      const completedCourses: ExtendedCourse[] = []; // TODO: profileData.certificate?.completedCourses.map(id => getCourseFromContract(id)).filter(Boolean) || []
+      // ✅ Using real course data from certificate.completedCourses[]
+      // Extract unique categories from completed courses
+      const completedCourseCategories =
+        profileData.certificate?.completedCourses?.map((cc) =>
+          getCategoryName(parseCategoryToNumber(cc.course.category))
+        ) || [];
+
       return {
         coursesCompleted: profileData.totalCoursesCompleted,
         totalLearningHours: Math.floor(
@@ -533,13 +603,8 @@ const LearningTab = memo<{ profileData: UserProfileData }>(
         ),
         certificatesEarned: profileData.certificate ? 1 : 0,
         averageRating: 4.6,
-        // ❌ REMOVED: activeLicenses - Need Goldsky indexer to track LicenseMinted events
-        // activeLicenses: 0, // CourseLicense.sol doesn't provide array getter
-        skillsAcquired: [
-          ...new Set(
-            completedCourses.map((course) => getCategoryName(course.category))
-          ),
-        ],
+        // ✅ Using real categories from completed courses
+        skillsAcquired: [...new Set(completedCourseCategories)],
       };
     }, [profileData]);
 
@@ -723,65 +788,65 @@ const LearningTab = memo<{ profileData: UserProfileData }>(
           </Card>
         )}
 
-        {(profileData.certificate?.completedCourses?.length ?? 0) > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Completed Courses</CardTitle>
-              <CardDescription>
-                Courses you&apos;ve successfully finished
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* ✅ SMART CONTRACT ALIGNED: Using certificate.completedCourses from CertificateManager.sol */}
-                {(profileData.certificate?.completedCourses || []).map(
-                  (courseId: bigint) => {
-                    // TODO: Replace with actual course data from blockchain
-                    // const course = getCourseFromContract(courseId)
+        {profileData.certificate &&
+          profileData.certificate.completedCourses.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Completed Courses</CardTitle>
+                <CardDescription>
+                  Courses you&apos;ve successfully finished
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* ✅ Using real course data from CertificateCourse entity via Goldsky */}
+                  {profileData.certificate.completedCourses.map(
+                    (completedCourse) => {
+                      const { course } = completedCourse;
+                      const categoryNum = parseCategoryToNumber(
+                        course.category
+                      );
+                      const difficultyNum = parseDifficultyToNumber(
+                        course.difficulty
+                      );
 
-                    // Placeholder course data structure
-                    const course = {
-                      title: `Course #${courseId.toString()}`,
-                      description: "Course data will be loaded from blockchain",
-                      category: 0,
-                      difficulty: 0,
-                    };
-
-                    return (
-                      <div
-                        key={courseId.toString()}
-                        className="flex items-center justify-between p-4 border rounded-lg"
-                      >
-                        <div className="flex-1">
-                          <h4 className="font-medium">{course.title}</h4>
-                          <p className="text-sm text-muted-foreground line-clamp-1">
-                            {course.description}
-                          </p>
-                          <div className="flex items-center space-x-4 mt-2">
-                            <Badge variant="outline">
-                              {getCategoryName(course.category)}
-                            </Badge>
-                            <Badge variant="outline">
-                              {getDifficultyName(course.difficulty)}
-                            </Badge>
-                            <div className="text-sm text-green-600 flex items-center">
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Completed
+                      return (
+                        <div
+                          key={completedCourse.id}
+                          className="flex items-center justify-between p-4 border rounded-lg"
+                        >
+                          <div className="flex-1">
+                            <h4 className="font-medium">{course.title}</h4>
+                            <p className="text-sm text-muted-foreground line-clamp-1">
+                              Course ID: {course.id}
+                            </p>
+                            <div className="flex items-center space-x-4 mt-2">
+                              <Badge variant="outline">
+                                {getCategoryName(categoryNum)}
+                              </Badge>
+                              <Badge variant="outline">
+                                {getDifficultyName(difficultyNum)}
+                              </Badge>
+                              <div className="text-sm text-green-600 flex items-center">
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Completed
+                              </div>
                             </div>
                           </div>
+                          <div className="text-right">
+                            <Progress value={100} className="w-20 mb-1" />
+                            <p className="text-xs text-muted-foreground">
+                              100%
+                            </p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <Progress value={100} className="w-20 mb-1" />
-                          <p className="text-xs text-muted-foreground">100%</p>
-                        </div>
-                      </div>
-                    );
-                  }
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                      );
+                    }
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
       </div>
     );
   }
@@ -995,17 +1060,23 @@ const ActivityTab = memo<{ profileData: UserProfileData }>(
           icon: <Award className="h-4 w-4 text-yellow-500" />,
         });
 
-        // ✅ SMART CONTRACT ALIGNED: Using certificate.completedCourses from CertificateManager.sol
+        // ✅ Using real course data from CertificateCourse entity via Goldsky
         (profileData.certificate.completedCourses || []).forEach(
-          (courseId: bigint, index: number) => {
-            // TODO: Replace with actual course data from blockchain
-            const updatedStr = profileData.certificate!.lastUpdated.toString();
-            const lastUpdatedMs = parseFloat(updatedStr) * 1000;
+          (completedCourse, index: number) => {
+            const { course } = completedCourse;
+            // Use addedAt timestamp if available, otherwise use lastUpdated
+            const addedAtMs = Number(completedCourse.addedAt) * 1000;
+            const lastUpdatedMs =
+              parseFloat(profileData.certificate!.lastUpdated.toString()) *
+              1000;
+            const timestamp =
+              addedAtMs > 0 ? addedAtMs : lastUpdatedMs - index * 86400000;
+
             userActivityList.push({
-              id: `completed-${courseId.toString()}`,
-              title: `Completed Course #${courseId.toString()}`,
-              description: `Finished all sections and updated certificate`,
-              timestamp: lastUpdatedMs - index * 86400000,
+              id: `completed-${completedCourse.id}`,
+              title: `Completed "${course.title}"`,
+              description: `Finished all sections and added to certificate`,
+              timestamp: timestamp,
               icon: <CheckCircle className="h-4 w-4 text-green-500" />,
             });
           }

@@ -21,6 +21,7 @@ import {
 import {
   prepareCreateCourseTransaction,
   prepareBatchAddSectionsTransaction,
+  prepareAddSectionTransaction,
   shouldUseBatchUpload,
 } from "@/services/courseContract.service";
 import { useRouter } from "next/navigation";
@@ -1537,7 +1538,7 @@ export default function CreateCoursePage() {
         pricePerMonth: formData.pricePerMonth,
         category: formData.category,
         difficulty: formData.difficulty,
-        sections: videoCIDs.map((videoCID) => {
+        sections: videoCIDs.map((videoCID, index) => {
           const section = sections.find((s) => s.id === videoCID.sectionId);
           if (!section) {
             throw new Error(
@@ -1552,29 +1553,45 @@ export default function CreateCoursePage() {
             );
           }
 
-          if (contentCID.length === 0) {
+          // ✅ CRITICAL: Ensure duration is a valid integer for smart contract
+          const durationInt = Math.floor(Number(section.duration));
+          if (isNaN(durationInt) || durationInt < 60 || durationInt > 10800) {
             throw new Error(
-              `Invalid content CID for section "${section.title}": CID cannot be empty. The video upload may have failed.`
+              `Section "${section.title}": Invalid duration ${section.duration}. Must be between 60-10800 seconds (1 min - 3 hours).`
             );
           }
 
           console.log(
-            `[Create Course] Section "${section.title}": contentCID="${contentCID}" (length: ${contentCID.length})`
+            `[Create Course] Section ${index + 1} "${section.title}":`,
+            {
+              contentCID: contentCID,
+              contentCIDLength: contentCID.length,
+              duration: durationInt,
+              originalDuration: section.duration,
+            }
           );
 
           return {
-            title: section.title,
+            title: section.title.trim(),
             contentCID: contentCID,
-            duration: section.duration,
+            duration: durationInt, // Use validated integer
           };
         }),
       };
 
-      console.log("✅ Course data prepared for blockchain:", courseData);
+      console.log("✅ Course data prepared for blockchain:");
+      console.log("   - Title:", courseData.title);
       console.log("   - Instructor:", courseData.creatorName);
       console.log("   - Price:", courseData.pricePerMonth, "ETH");
       console.log("   - Sections:", courseData.sections.length, "videos");
-      console.log("   - All contentCIDs validated (min 10 chars each)");
+      console.log("   - Section details:");
+      courseData.sections.forEach((s, i) => {
+        console.log(
+          `     Section ${i + 1}: "${s.title}" | CID: ${
+            s.contentCID
+          } | Duration: ${s.duration}s`
+        );
+      });
 
       // Step 2: Publish to blockchain
       toast.info("Publishing to blockchain...", {
@@ -1789,6 +1806,10 @@ export default function CreateCoursePage() {
                   strategy.strategy
                 );
                 console.log("[Create Course]", strategy.reasoning);
+                console.log(
+                  "[Create Course] Should use batch:",
+                  strategy.shouldBatch
+                );
 
                 // Show strategy to user with gas estimate
                 toast.info("Upload Strategy", {
@@ -1803,174 +1824,372 @@ export default function CreateCoursePage() {
                   courseId.toString()
                 );
 
-                // Use pre-split batches from strategy
-                const batches = strategy.batches;
-
-                console.log(
-                  `[Create Course] Processing ${batches.length} batch(es) for ${courseData.sections.length} sections`
-                );
-
-                // Process batches sequentially with receipt confirmation
-                const successfulBatches: number[] = [];
-                const failedBatches: number[] = [];
-
-                for (let i = 0; i < batches.length; i++) {
-                  const batch = batches[i];
-                  const batchNumber = i + 1;
-
+                // ✅ CRITICAL FIX: Use individual addCourseSection for sequential strategy
+                // This matches how Edit page works (which is confirmed working)
+                if (!strategy.shouldBatch) {
                   console.log(
-                    `[Create Course] Processing batch ${batchNumber}/${batches.length} (${batch.length} sections)`
+                    "[Create Course] Using SEQUENTIAL strategy (addCourseSection one by one)"
                   );
 
-                  toast.info(
-                    `Adding sections batch ${batchNumber}/${batches.length}...`,
-                    {
-                      description: `Adding ${batch.length} sections`,
-                    }
-                  );
+                  let successCount = 0;
+                  const failedSections: string[] = [];
 
-                  try {
-                    // Prepare batch add sections transaction
-                    const batchTransaction = prepareBatchAddSectionsTransaction(
+                  for (let i = 0; i < courseData.sections.length; i++) {
+                    const section = courseData.sections[i];
+                    const sectionNumber = i + 1;
+
+                    console.log(
+                      `[Create Course] Adding section ${sectionNumber}/${courseData.sections.length}: "${section.title}"`
+                    );
+                    console.log(`[Create Course] Section details:`, {
+                      title: section.title,
+                      contentCID: section.contentCID,
+                      contentCIDLength: section.contentCID.length,
+                      duration: section.duration,
+                      durationType: typeof section.duration,
+                    });
+
+                    toast.info(
+                      `Adding section ${sectionNumber}/${courseData.sections.length}...`,
                       {
-                        courseId: courseId,
-                        sections: batch.map((section) => ({
-                          title: section.title,
-                          contentCID: section.contentCID,
-                          duration: section.duration,
-                        })),
+                        description: section.title,
                       }
                     );
 
-                    // Send batch transaction and wait for result
-                    console.log(
-                      `[Create Course] 📤 Sending batch ${batchNumber} transaction...`
-                    );
-                    const batchResult = await new Promise<{
-                      transactionHash: `0x${string}`;
-                    }>((resolve, reject) => {
-                      sendTransaction(batchTransaction, {
-                        onSuccess: (result) => {
-                          console.log(
-                            `[Create Course] ✅ Batch ${batchNumber} transaction sent:`,
-                            result.transactionHash
-                          );
-                          resolve(result);
-                        },
-                        onError: (error) => {
-                          console.error(
-                            `[Create Course] ❌ Batch ${batchNumber} transaction failed:`,
-                            error
-                          );
-                          reject(error);
-                        },
+                    try {
+                      // Validate contentCID before preparing transaction
+                      if (
+                        !section.contentCID ||
+                        section.contentCID.trim().length === 0
+                      ) {
+                        throw new Error(
+                          `Section "${section.title}" has no content CID (playbackId). Video upload may have failed.`
+                        );
+                      }
+
+                      // Prepare individual section transaction (same as Edit page)
+                      const sectionTransaction = prepareAddSectionTransaction({
+                        courseId: courseId,
+                        title: section.title.trim(),
+                        contentCID: section.contentCID.trim(),
+                        duration: Math.floor(Number(section.duration)),
                       });
+
+                      console.log(
+                        `[Create Course] Section ${sectionNumber} transaction prepared`
+                      );
+
+                      // Send transaction and wait for result
+                      console.log(
+                        `[Create Course] 📤 Sending section ${sectionNumber} transaction...`
+                      );
+
+                      const sectionResult = await new Promise<{
+                        transactionHash: `0x${string}`;
+                      }>((resolve, reject) => {
+                        sendTransaction(sectionTransaction, {
+                          onSuccess: (result) => {
+                            console.log(
+                              `[Create Course] ✅ Section ${sectionNumber} transaction sent:`,
+                              result.transactionHash
+                            );
+                            resolve(result);
+                          },
+                          onError: (error) => {
+                            console.error(
+                              `[Create Course] ❌ Section ${sectionNumber} transaction failed:`,
+                              error
+                            );
+                            reject(error);
+                          },
+                        });
+                      });
+
+                      // Wait for confirmation
+                      const sectionReceipt = await waitForReceipt({
+                        client,
+                        chain: mantaPacificTestnet,
+                        transactionHash: sectionResult.transactionHash,
+                      });
+
+                      if (sectionReceipt.status !== "success") {
+                        throw new Error(
+                          `Section ${sectionNumber} transaction reverted on-chain`
+                        );
+                      }
+
+                      console.log(
+                        `[Create Course] ✅ Section ${sectionNumber}/${courseData.sections.length} confirmed on-chain`
+                      );
+
+                      successCount++;
+
+                      toast.success(
+                        `Section ${sectionNumber}/${courseData.sections.length} added!`,
+                        {
+                          description: section.title,
+                        }
+                      );
+
+                      // Small delay between sections
+                      if (i < courseData.sections.length - 1) {
+                        await new Promise((resolve) =>
+                          setTimeout(resolve, 500)
+                        );
+                      }
+                    } catch (sectionError) {
+                      console.error(
+                        `[Create Course] ❌ Section ${sectionNumber} failed:`,
+                        sectionError
+                      );
+                      failedSections.push(section.title);
+
+                      toast.error(`Section "${section.title}" failed`, {
+                        description:
+                          sectionError instanceof Error
+                            ? sectionError.message
+                            : "Transaction failed",
+                      });
+                    }
+                  }
+
+                  // Summary for sequential upload
+                  if (failedSections.length === 0) {
+                    console.log(
+                      `[Create Course] ✅ All ${successCount} sections added successfully!`
+                    );
+                    toast.success("All sections added!", {
+                      description: `${successCount} sections added to your course`,
                     });
+                  } else {
+                    console.log(
+                      `[Create Course] ⚠️ ${successCount} sections added, ${failedSections.length} failed`
+                    );
+                    toast.warning("Some sections failed", {
+                      description: `${successCount} added, ${
+                        failedSections.length
+                      } failed: ${failedSections.join(", ")}`,
+                    });
+                  }
+                } else {
+                  // Use batch strategy for multiple sections
+                  console.log(
+                    "[Create Course] Using BATCH strategy (batchAddSections)"
+                  );
+
+                  // Use pre-split batches from strategy
+                  const batches = strategy.batches;
+
+                  console.log(
+                    `[Create Course] Processing ${batches.length} batch(es) for ${courseData.sections.length} sections`
+                  );
+
+                  // Process batches sequentially with receipt confirmation
+                  const successfulBatches: number[] = [];
+                  const failedBatches: number[] = [];
+
+                  for (let i = 0; i < batches.length; i++) {
+                    const batch = batches[i];
+                    const batchNumber = i + 1;
 
                     console.log(
-                      `[Create Course] Batch ${batchNumber} sent, waiting for confirmation...`
+                      `[Create Course] Processing batch ${batchNumber}/${batches.length} (${batch.length} sections)`
                     );
 
-                    // CRITICAL FIX: Wait for receipt before next batch
-                    const batchReceipt = await waitForReceipt({
-                      client,
-                      chain: mantaPacificTestnet,
-                      transactionHash: batchResult.transactionHash,
+                    toast.info(
+                      `Adding sections batch ${batchNumber}/${batches.length}...`,
+                      {
+                        description: `Adding ${batch.length} sections`,
+                      }
+                    );
+
+                    try {
+                      // ✅ CRITICAL: Log batch details for debugging
+                      console.log(
+                        `[Create Course] Batch ${batchNumber} sections:`,
+                        batch.map((s, idx) => ({
+                          index: idx + 1,
+                          title: s.title,
+                          contentCID: s.contentCID,
+                          contentCIDLength: s.contentCID?.length || 0,
+                          duration: s.duration,
+                          durationType: typeof s.duration,
+                        }))
+                      );
+
+                      // Validate all sections in batch have contentCID
+                      for (let j = 0; j < batch.length; j++) {
+                        const section = batch[j];
+                        if (
+                          !section.contentCID ||
+                          section.contentCID.trim().length === 0
+                        ) {
+                          throw new Error(
+                            `Section "${section.title}" in batch ${batchNumber} has no content CID (playbackId). Video upload may have failed.`
+                          );
+                        }
+                      }
+
+                      // Prepare batch add sections transaction
+                      // ✅ Ensure duration is a number (integer) for BigInt conversion
+                      const batchTransaction =
+                        prepareBatchAddSectionsTransaction({
+                          courseId: courseId,
+                          sections: batch.map((section) => ({
+                            title: section.title.trim(),
+                            contentCID: section.contentCID.trim(),
+                            duration: Math.floor(Number(section.duration)),
+                          })),
+                        });
+
+                      console.log(
+                        `[Create Course] Batch ${batchNumber} transaction prepared successfully`
+                      );
+
+                      // Send batch transaction and wait for result
+                      console.log(
+                        `[Create Course] 📤 Sending batch ${batchNumber} transaction...`
+                      );
+                      const batchResult = await new Promise<{
+                        transactionHash: `0x${string}`;
+                      }>((resolve, reject) => {
+                        sendTransaction(batchTransaction, {
+                          onSuccess: (result) => {
+                            console.log(
+                              `[Create Course] ✅ Batch ${batchNumber} transaction sent:`,
+                              result.transactionHash
+                            );
+                            resolve(result);
+                          },
+                          onError: (error) => {
+                            console.error(
+                              `[Create Course] ❌ Batch ${batchNumber} transaction failed:`,
+                              error
+                            );
+                            reject(error);
+                          },
+                        });
+                      });
+
+                      console.log(
+                        `[Create Course] Batch ${batchNumber} sent, waiting for confirmation...`
+                      );
+
+                      // CRITICAL FIX: Wait for receipt before next batch
+                      const batchReceipt = await waitForReceipt({
+                        client,
+                        chain: mantaPacificTestnet,
+                        transactionHash: batchResult.transactionHash,
+                      });
+
+                      if (batchReceipt.status !== "success") {
+                        throw new Error(
+                          `Batch ${batchNumber} transaction reverted on-chain`
+                        );
+                      }
+
+                      console.log(
+                        `[Create Course] ✅ Batch ${batchNumber}/${batches.length} confirmed on-chain`
+                      );
+
+                      successfulBatches.push(batchNumber);
+
+                      toast.success(
+                        `Batch ${batchNumber}/${batches.length} confirmed!`,
+                        {
+                          description: `${batch.length} sections added`,
+                        }
+                      );
+
+                      // Small delay for UX smoothness
+                      if (i < batches.length - 1) {
+                        await new Promise((resolve) =>
+                          setTimeout(resolve, 500)
+                        );
+                      }
+                    } catch (batchError) {
+                      console.error(
+                        `[Create Course] ❌ Batch ${batchNumber}/${batches.length} failed:`,
+                        batchError
+                      );
+                      failedBatches.push(batchNumber);
+
+                      toast.error(
+                        `Batch ${batchNumber}/${batches.length} failed`,
+                        {
+                          description:
+                            batchError instanceof Error
+                              ? batchError.message
+                              : "Transaction failed",
+                          duration: 5000,
+                        }
+                      );
+
+                      // Continue to next batch instead of stopping
+                      console.log(
+                        `[Create Course] Continuing to next batch despite failure...`
+                      );
+                    }
+                  }
+
+                  // Report final status
+                  if (failedBatches.length > 0) {
+                    // ✅ CRITICAL FIX: Include contentCID from courseData.sections for retry
+                    // Map sections with their contentCID (Livepeer playbackId) for PartialUploadRetry component
+                    const sectionsWithContentCID = sections.map((section) => {
+                      const courseSection = courseData.sections.find(
+                        (cs) => cs.title === section.title
+                      );
+                      return {
+                        ...section,
+                        contentCID: courseSection?.contentCID || "",
+                      };
                     });
 
-                    if (batchReceipt.status !== "success") {
-                      throw new Error(
-                        `Batch ${batchNumber} transaction reverted on-chain`
+                    // Preserve draft with partial upload status
+                    const partialDraft = {
+                      ...formData,
+                      sections: sectionsWithContentCID,
+                      partialUpload: {
+                        courseId: courseId.toString(),
+                        successfulBatches,
+                        failedBatches,
+                        totalBatches: batches.length,
+                        timestamp: Date.now(),
+                      },
+                    };
+
+                    try {
+                      localStorage.setItem(
+                        "course_draft_partial",
+                        JSON.stringify(partialDraft)
+                      );
+                      console.log(
+                        "[Create Course] Draft saved with partial upload status"
+                      );
+                    } catch (storageError) {
+                      console.error(
+                        "[Create Course] Failed to save partial draft:",
+                        storageError
                       );
                     }
 
-                    console.log(
-                      `[Create Course] ✅ Batch ${batchNumber}/${batches.length} confirmed on-chain`
-                    );
-
-                    successfulBatches.push(batchNumber);
-
-                    toast.success(
-                      `Batch ${batchNumber}/${batches.length} confirmed!`,
-                      {
-                        description: `${batch.length} sections added`,
-                      }
-                    );
-
-                    // Small delay for UX smoothness
-                    if (i < batches.length - 1) {
-                      await new Promise((resolve) => setTimeout(resolve, 500));
-                    }
-                  } catch (batchError) {
-                    console.error(
-                      `[Create Course] ❌ Batch ${batchNumber}/${batches.length} failed:`,
-                      batchError
-                    );
-                    failedBatches.push(batchNumber);
-
-                    toast.error(
-                      `Batch ${batchNumber}/${batches.length} failed`,
-                      {
-                        description:
-                          batchError instanceof Error
-                            ? batchError.message
-                            : "Transaction failed",
-                        duration: 5000,
-                      }
-                    );
-
-                    // Continue to next batch instead of stopping
-                    console.log(
-                      `[Create Course] Continuing to next batch despite failure...`
-                    );
-                  }
-                }
-
-                // Report final status
-                if (failedBatches.length > 0) {
-                  // Preserve draft with partial upload status
-                  const partialDraft = {
-                    ...formData,
-                    sections: sections,
-                    partialUpload: {
-                      courseId: courseId.toString(),
-                      successfulBatches,
-                      failedBatches,
-                      totalBatches: batches.length,
-                      timestamp: Date.now(),
-                    },
-                  };
-
-                  try {
-                    localStorage.setItem(
-                      "course_draft_partial",
-                      JSON.stringify(partialDraft)
-                    );
-                    console.log(
-                      "[Create Course] Draft saved with partial upload status"
-                    );
-                  } catch (storageError) {
-                    console.error(
-                      "[Create Course] Failed to save partial draft:",
-                      storageError
+                    throw new Error(
+                      `Partial upload: ${successfulBatches.length}/${
+                        batches.length
+                      } batches successful. Failed batches: ${failedBatches.join(
+                        ", "
+                      )}. Draft saved for retry.`
                     );
                   }
 
-                  throw new Error(
-                    `Partial upload: ${successfulBatches.length}/${
-                      batches.length
-                    } batches successful. Failed batches: ${failedBatches.join(
-                      ", "
-                    )}. Draft saved for retry.`
+                  console.log(
+                    "[Create Course] ✅ All sections added successfully!"
                   );
+                  toast.success("All sections added!", {
+                    description: `${courseData.sections.length} sections added to blockchain`,
+                  });
                 }
-
-                console.log(
-                  "[Create Course] ✅ All sections added successfully!"
-                );
-                toast.success("All sections added!", {
-                  description: `${courseData.sections.length} sections added to blockchain`,
-                });
               }
 
               // Mark as complete
@@ -1993,10 +2212,23 @@ export default function CreateCoursePage() {
                 sectionError
               );
 
+              // ✅ CRITICAL FIX: Include contentCID from courseData.sections for retry
+              const sectionsWithContentCIDForFailure = sections.map(
+                (section) => {
+                  const courseSection = courseData.sections.find(
+                    (cs) => cs.title === section.title
+                  );
+                  return {
+                    ...section,
+                    contentCID: courseSection?.contentCID || "",
+                  };
+                }
+              );
+
               // Preserve draft on section failure
               const failureDraft = {
                 ...formData,
-                sections: sections,
+                sections: sectionsWithContentCIDForFailure,
                 sectionUploadError: {
                   courseId: courseId?.toString() || "unknown",
                   error:

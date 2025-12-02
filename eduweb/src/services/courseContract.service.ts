@@ -475,8 +475,8 @@ export function prepareBatchAddSectionsTransaction(
 ): PreparedTransaction {
   console.log("[Contract Service] ========================================");
   console.log("[Contract Service] Preparing batch add sections transaction...");
-  console.log("[Contract Service] Course ID:", params.courseId);
-  console.log("[Contract Service] Sections:", params.sections.length);
+  console.log("[Contract Service] Course ID:", params.courseId.toString());
+  console.log("[Contract Service] Sections count:", params.sections.length);
 
   if (params.sections.length === 0) {
     throw new Error("At least one section is required");
@@ -493,19 +493,83 @@ export function prepareBatchAddSectionsTransaction(
     throw new Error(`Validation failed: ${validation.error}`);
   }
 
-  const sectionsForBlockchain = params.sections.map((section) => {
-    if (!section.title?.trim()) {
-      throw new Error("Section title cannot be empty");
+  // ✅ CRITICAL FIX: Use object format with proper type conversion
+  // Smart contract expects: SectionData[] where SectionData = { title: string, contentCID: string, duration: uint256 }
+  // Thirdweb SDK v5 supports named object properties for struct arrays
+  const sectionsForBlockchain = params.sections.map((section, index) => {
+    const title = section.title?.trim();
+    const contentCID = section.contentCID?.trim();
+    const duration = section.duration;
+
+    if (!title) {
+      throw new Error(`Section ${index + 1}: Title cannot be empty`);
     }
-    if (!section.contentCID?.trim()) {
-      throw new Error("Section content CID cannot be empty");
+    if (!contentCID) {
+      throw new Error(`Section ${index + 1}: Content CID cannot be empty`);
     }
+
+    // ✅ CRITICAL: Ensure duration is a valid integer for BigInt conversion
+    const durationInt = Math.floor(Number(duration));
+    if (isNaN(durationInt) || durationInt < 60 || durationInt > 10800) {
+      throw new Error(
+        `Section ${
+          index + 1
+        } "${title}": Invalid duration ${duration}. Must be between 60-10800 seconds.`
+      );
+    }
+
+    console.log(`[Contract Service] Section ${index + 1}:`, {
+      title: title.substring(0, 30) + (title.length > 30 ? "..." : ""),
+      contentCID: contentCID,
+      contentCIDLength: contentCID.length,
+      duration: durationInt,
+      durationBigInt: BigInt(durationInt).toString(),
+    });
+
+    // Return as object with BigInt duration
     return {
-      title: section.title.trim(),
-      contentCID: section.contentCID.trim(),
-      duration: BigInt(section.duration),
+      title: title,
+      contentCID: contentCID,
+      duration: BigInt(durationInt),
     };
   });
+
+  console.log("[Contract Service] Sections prepared for blockchain:");
+  console.log(
+    "[Contract Service] Format: Array of objects { title, contentCID, duration }"
+  );
+  console.log(
+    "[Contract Service] Total sections:",
+    sectionsForBlockchain.length
+  );
+
+  // ✅ CRITICAL DEBUG: Log the exact format being sent to the contract
+  console.log("[Contract Service] ========== STRUCT FORMAT DEBUG ==========");
+  console.log(
+    "[Contract Service] sectionsForBlockchain type:",
+    typeof sectionsForBlockchain
+  );
+  console.log(
+    "[Contract Service] sectionsForBlockchain isArray:",
+    Array.isArray(sectionsForBlockchain)
+  );
+  console.log(
+    "[Contract Service] First section sample:",
+    sectionsForBlockchain.length > 0
+      ? JSON.stringify(
+          {
+            title: sectionsForBlockchain[0].title,
+            contentCID: sectionsForBlockchain[0].contentCID,
+            duration: sectionsForBlockchain[0].duration.toString(),
+            durationIsBigInt:
+              typeof sectionsForBlockchain[0].duration === "bigint",
+          },
+          null,
+          2
+        )
+      : "No sections"
+  );
+  console.log("[Contract Service] ==========================================");
 
   const transaction = prepareContractCall({
     contract: courseFactory,
@@ -515,7 +579,17 @@ export function prepareBatchAddSectionsTransaction(
   });
 
   console.log("[Contract Service] ✅ Batch transaction prepared successfully");
-  console.log("[Contract Service] Sections to add:", params.sections.length);
+  console.log("[Contract Service] Course ID:", params.courseId.toString());
+  console.log(
+    "[Contract Service] Sections to add:",
+    sectionsForBlockchain.length
+  );
+  console.log("[Contract Service] Transaction object:", {
+    hasContract: !!transaction,
+    type: typeof transaction,
+  });
+  console.log("[Contract Service] ========================================");
+
   return transaction;
 }
 
