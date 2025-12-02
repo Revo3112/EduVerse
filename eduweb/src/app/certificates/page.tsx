@@ -426,7 +426,42 @@ export default function CertificatePage() {
 
         if (tokenIdParam && addressParam) {
           setVerificationMode(true);
-          const certData = await getCertificateByTokenId(tokenIdParam);
+
+          // Try to get certificate by tokenId first
+          let certData = await getCertificateByTokenId(tokenIdParam);
+
+          // If tokenId is "0" or certificate not found, fallback to address lookup
+          // This handles the case where certificate image was generated before minting
+          // and the QR code contains tokenId=0 as a placeholder
+          if (!certData && (tokenIdParam === "0" || tokenIdParam === "")) {
+            console.log(
+              "[Certificates] TokenId is 0 or empty, falling back to address lookup"
+            );
+            const userCerts = await getUserCertificates(addressParam);
+            if (userCerts && userCerts.length > 0) {
+              // Get the most recent certificate for this address
+              certData = userCerts[0];
+              console.log(
+                "[Certificates] Found certificate by address, tokenId:",
+                certData.tokenId
+              );
+            }
+          }
+
+          // If still not found by tokenId, try address as final fallback
+          if (!certData) {
+            console.log(
+              "[Certificates] Certificate not found by tokenId, trying address lookup"
+            );
+            const userCerts = await getUserCertificates(addressParam);
+            if (userCerts && userCerts.length > 0) {
+              certData = userCerts[0];
+              console.log(
+                "[Certificates] Found certificate by address fallback, tokenId:",
+                certData.tokenId
+              );
+            }
+          }
 
           if (certData) {
             const transformed = transformCertificateData(certData);

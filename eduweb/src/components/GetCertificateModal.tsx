@@ -174,7 +174,9 @@ export function GetCertificateModal({
     setIsLoading(true);
 
     console.log(
-      `[GetCertificateModal] 🎨 Starting ${isFirstCertificate ? "first certificate" : "course addition"}...`
+      `[GetCertificateModal] 🎨 Starting ${
+        isFirstCertificate ? "first certificate" : "course addition"
+      }...`
     );
 
     try {
@@ -190,7 +192,20 @@ export function GetCertificateModal({
           message: "Generating certificate image...",
         });
 
-        console.log("[GetCertificateModal] 🎨 Generating NEW certificate image");
+        console.log(
+          "[GetCertificateModal] 🎨 Generating NEW certificate image"
+        );
+
+        // Use existing tokenId if available (for updates), otherwise use "0" as placeholder
+        // Note: For first certificates, tokenId will be assigned by blockchain during minting
+        // The certificates page has fallback logic to handle tokenId=0 by looking up by address
+        const tokenIdToUse =
+          existingTokenId > BigInt(0) ? existingTokenId.toString() : "0";
+
+        console.log(
+          "[GetCertificateModal] Using tokenId for certificate image:",
+          tokenIdToUse
+        );
 
         const requestBody = {
           studentName: recipientName.trim(),
@@ -200,7 +215,7 @@ export function GetCertificateModal({
           platformName:
             process.env.NEXT_PUBLIC_PLATFORM_NAME || "EduVerse Academy",
           baseRoute: `${process.env.NEXT_PUBLIC_APP_URL}/certificates`,
-          tokenId: "0",
+          tokenId: tokenIdToUse,
           completedCourses: [courseId.toString()],
           isValid: true,
           lifetimeFlag: true,
@@ -244,7 +259,10 @@ export function GetCertificateModal({
         }
 
         if (!cid || cid.trim() === "" || cid === "pending") {
-          console.error("[GetCertificateModal] ❌ CID is empty or invalid:", cid);
+          console.error(
+            "[GetCertificateModal] ❌ CID is empty or invalid:",
+            cid
+          );
           throw new Error("Certificate CID is missing or invalid");
         }
 
@@ -500,8 +518,9 @@ export function GetCertificateModal({
               <div
                 className="bg-primary h-2 rounded-full transition-all duration-300"
                 style={{
-                  width: `${(progressState.current / progressState.total) * 100
-                    }%`,
+                  width: `${
+                    (progressState.current / progressState.total) * 100
+                  }%`,
                 }}
               />
             </div>
@@ -524,8 +543,9 @@ export function GetCertificateModal({
               <div
                 className="bg-primary h-2 rounded-full transition-all duration-300"
                 style={{
-                  width: `${(progressState.current / progressState.total) * 100
-                    }%`,
+                  width: `${
+                    (progressState.current / progressState.total) * 100
+                  }%`,
                 }}
               />
             </div>
