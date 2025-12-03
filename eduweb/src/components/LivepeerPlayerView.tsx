@@ -57,8 +57,6 @@ export function LivepeerPlayerView({
   const [src, setSrc] = useState<Src[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [playbackInfo, setPlaybackInfo] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingCheckCount, setProcessingCheckCount] = useState(0);
 
@@ -66,8 +64,6 @@ export function LivepeerPlayerView({
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [hoverTime, setHoverTime] = useState<number | null>(null); // For progress bar hover tooltip
@@ -109,8 +105,7 @@ export function LivepeerPlayerView({
         // Processing state is determined by missing HLS renditions
         const processing =
           result.playbackInfo?.meta?.source?.some(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (s: any) => s.hrn === "HLS" && !s.url
+            (s: { hrn?: string; url?: string }) => s.hrn === "HLS" && !s.url
           ) ?? false;
 
         setIsProcessing(processing);
@@ -122,7 +117,6 @@ export function LivepeerPlayerView({
 
         // Set source (already in correct Src[] format from getSrc())
         setSrc(result.src);
-        setPlaybackInfo(result.playbackInfo);
 
         // Parse available quality options from playback info
         const renditions = getVideoRenditions(result.playbackInfo);
@@ -183,8 +177,7 @@ export function LivepeerPlayerView({
           // Check if HLS renditions are now available
           const stillProcessing =
             result.playbackInfo?.meta?.source?.some(
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (s: any) => s.hrn === "HLS" && !s.url
+              (s: { hrn?: string; url?: string }) => s.hrn === "HLS" && !s.url
             ) ?? false;
 
           if (!stillProcessing) {
@@ -196,7 +189,6 @@ export function LivepeerPlayerView({
             // Update with new transcoded renditions
             const renditions = getVideoRenditions(result.playbackInfo);
             setAvailableQualities(renditions);
-            setPlaybackInfo(result.playbackInfo);
             setSrc(result.src);
 
             // Switch to HLS if now available
@@ -245,23 +237,16 @@ export function LivepeerPlayerView({
     const handlePlay = () => setPlaying(true);
     const handlePause = () => setPlaying(false);
 
-    const handleVolumeChange = () => {
-      setVolume(video.volume);
-      setMuted(video.muted);
-    };
-
     video.addEventListener("canplay", handleCanPlay);
     video.addEventListener("timeupdate", handleTimeUpdate);
     video.addEventListener("play", handlePlay);
     video.addEventListener("pause", handlePause);
-    video.addEventListener("volumechange", handleVolumeChange);
 
     return () => {
       video.removeEventListener("canplay", handleCanPlay);
       video.removeEventListener("timeupdate", handleTimeUpdate);
       video.removeEventListener("play", handlePlay);
       video.removeEventListener("pause", handlePause);
-      video.removeEventListener("volumechange", handleVolumeChange);
     };
   }, [onProgressUpdate, onComplete]);
 
@@ -273,9 +258,6 @@ export function LivepeerPlayerView({
       .toString()
       .padStart(2, "0")}`;
   };
-
-  // Progress bar percentage for custom displays
-  const progressPercent = duration ? (time / duration) * 100 : 0;
 
   // Seek to specific time
   const seekTo = (seconds: number) => {

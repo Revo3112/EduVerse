@@ -266,8 +266,9 @@ export interface EduVerseAnalyticsMetrics {
   totalCertificateRevenue: string;
 
   // Economics
-  totalPlatformRevenue: string;
-  totalCreatorPayouts: string;
+  totalPlatformRevenue: string; // Grand total of all revenue
+  platformFees: string; // 10% platform fee
+  totalCreatorPayouts: string; // 90% creator share
   averageCoursePrice: string;
 }
 
@@ -321,6 +322,7 @@ export function useAnalyticsMetrics(options: UseAnalyticsOptions = {}): {
         totalCertificateRevenue:
           analytics.certificates.totalCertificateRevenueEth,
         totalPlatformRevenue: analytics.platform.totalRevenueEth,
+        platformFees: analytics.platform.platformFeesEth,
         totalCreatorPayouts: analytics.platform.creatorRevenueEth,
         averageCoursePrice: analytics.courses.averagePrice,
       }

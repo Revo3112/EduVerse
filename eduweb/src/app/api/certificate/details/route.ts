@@ -8,7 +8,7 @@ interface CertificateCourse {
   txHash: string;
 }
 
-interface Certificate {
+interface CertificateData {
   tokenId: string;
   platformName: string;
   recipientName: string;
@@ -22,7 +22,9 @@ interface Certificate {
   completedCourses: CertificateCourse[];
 }
 
-async function getCertificateFromGoldsky(tokenId: string) {
+async function getCertificateFromGoldsky(
+  tokenId: string
+): Promise<CertificateData | null> {
   const GOLDSKY_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT;
 
   if (!GOLDSKY_ENDPOINT) {

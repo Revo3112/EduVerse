@@ -460,7 +460,7 @@ export function useCertificate(
         setIsMinting(false);
       }
     },
-    [account, checkEligibility, sendTransaction, refreshData]
+    [account, checkEligibility, sendTransaction, refreshData, tokenId]
   );
 
   /**

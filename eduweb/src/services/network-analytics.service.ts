@@ -1,6 +1,10 @@
 /**
  * Network Analytics Service
  * Provides insights into blockchain network usage and performance for EduVerse
+ *
+ * NOTE: This service queries ONLY fields that exist in the subgraph schema.
+ * Gas-related fields (totalGasUsed, totalGasCost, averageGasPrice) are NOT
+ * tracked in the subgraph as The Graph doesn't have access to gas data.
  */
 
 import { graphqlClient as goldskyClient } from "@/lib/graphql-client";
@@ -13,9 +17,6 @@ import { gql } from "graphql-request";
 export interface NetworkStats {
   // Network metrics
   totalTransactions: number;
-  totalGasUsed: string;
-  totalGasCost: string; // in ETH
-  averageGasPrice: string; // in gwei
   averageBlockTime: number; // seconds
   lastBlockNumber: number;
   lastBlockTimestamp: number;
@@ -34,51 +35,21 @@ export interface NetworkStats {
 export interface DailyStats {
   date: string;
   transactionCount: number;
-  gasUsed: string;
-  gasCost: string;
-  averageGasPrice: string;
   blockCount: number;
-  totalBlockTime: number;
   courseTransactions: number;
   licenseTransactions: number;
   certificateTransactions: number;
   progressTransactions: number;
+  adminTransactions: number;
   successfulTransactions: number;
   failedTransactions: number;
-  totalValueTransferred: string;
-  uniqueUsers: number;
-}
-
-export interface TransactionRecord {
-  hash: string;
-  timestamp: number;
-  from: string;
-  to: string;
-  functionName: string;
-  eventType: string;
-  eventAction: string;
-  gasUsed: string;
-  gasPrice: string;
-  value: string;
-  success: boolean;
-  errorMessage?: string;
+  startBlock: number;
+  endBlock: number;
 }
 
 export interface NetworkAnalytics {
   currentStats: NetworkStats;
   dailyStats: DailyStats[];
-  recentTransactions: TransactionRecord[];
-}
-
-export interface TransactionHistoryResponse {
-  transactionRecords: TransactionRecord[];
-  _meta: {
-    block: {
-      number: string;
-      timestamp: string;
-    } | null;
-    hasIndexingErrors: boolean;
-  };
 }
 
 // ============================================================================
@@ -99,9 +70,6 @@ const GET_NETWORK_ANALYTICS = gql`
   query GetNetworkAnalytics {
     networkStats(id: "network") {
       totalTransactions
-      totalGasUsed
-      totalGasCost
-      averageGasPrice
       averageBlockTime
       lastBlockNumber
       lastBlockTimestamp
@@ -115,37 +83,24 @@ const GET_NETWORK_ANALYTICS = gql`
       certificateManagerInteractions
     }
 
-    dailyNetworkStats(first: 30, orderBy: date, orderDirection: desc) {
+    dailyNetworkStats_collection(
+      first: 30
+      orderBy: date
+      orderDirection: desc
+    ) {
+      id
       date
       transactionCount
-      gasUsed
-      gasCost
-      averageGasPrice
       blockCount
-      totalBlockTime
       courseTransactions
       licenseTransactions
       certificateTransactions
       progressTransactions
+      adminTransactions
       successfulTransactions
       failedTransactions
-      totalValueTransferred
-      uniqueUsers
-    }
-
-    transactionRecords(first: 100, orderBy: timestamp, orderDirection: desc) {
-      hash
-      timestamp
-      from
-      to
-      functionName
-      eventType
-      eventAction
-      gasUsed
-      gasPrice
-      value
-      success
-      errorMessage
+      startBlock
+      endBlock
     }
   }
 `;
@@ -167,13 +122,15 @@ export async function getNetworkAnalytics(): Promise<NetworkAnalytics> {
   }
 
   try {
-    const data = await goldskyClient.request(GET_NETWORK_ANALYTICS);
+    const data = await goldskyClient.request<{
+      networkStats: Record<string, string | number> | null;
+      dailyNetworkStats_collection: Record<string, string | number>[];
+    }>(GET_NETWORK_ANALYTICS);
 
-    const transformed = {
-      currentStats: transformNetworkStats(data.networkStats),
-      dailyStats: data.dailyNetworkStats.map(transformDailyStats),
-      recentTransactions: data.transactionRecords.map(
-        transformTransactionRecord
+    const transformed: NetworkAnalytics = {
+      currentStats: transformNetworkStats(data.networkStats || {}),
+      dailyStats: (data.dailyNetworkStats_collection || []).map(
+        transformDailyStats
       ),
     };
 
@@ -205,35 +162,6 @@ export async function getNetworkAnalytics(): Promise<NetworkAnalytics> {
   }
 }
 
-/**
- * Get paginated transaction history
- * TODO: Implement actual GraphQL query to TransactionRecord entity
- * Currently returns empty data as TransactionRecord entity needs proper event handlers
- */
-export async function getTransactionHistory(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _params: {
-    first: number;
-    skip: number;
-    orderBy: string;
-    orderDirection: string;
-  }
-): Promise<TransactionHistoryResponse> {
-  // Stub implementation - return empty data
-  // In future, this should query the TransactionRecord entity from the subgraph
-  console.warn(
-    "getTransactionHistory is not yet implemented with actual subgraph data"
-  );
-
-  return {
-    transactionRecords: [],
-    _meta: {
-      block: null,
-      hasIndexingErrors: false,
-    },
-  };
-}
-
 // ============================================================================
 // DATA TRANSFORMATION HELPERS
 // ============================================================================
@@ -242,86 +170,49 @@ function transformNetworkStats(
   raw: Record<string, string | number>
 ): NetworkStats {
   return {
-    totalTransactions: parseInt(String(raw.totalTransactions)),
-    totalGasUsed: String(raw.totalGasUsed),
-    totalGasCost: String(raw.totalGasCost),
-    averageGasPrice: String(raw.averageGasPrice),
-    averageBlockTime: parseFloat(String(raw.averageBlockTime)),
-    lastBlockNumber: parseInt(String(raw.lastBlockNumber)),
-    lastBlockTimestamp: parseInt(String(raw.lastBlockTimestamp)),
-    totalCourseCreations: parseInt(String(raw.totalCourseCreations)),
-    totalLicenseMints: parseInt(String(raw.totalLicenseMints)),
-    totalCertificateMints: parseInt(String(raw.totalCertificateMints)),
-    totalProgressUpdates: parseInt(String(raw.totalProgressUpdates)),
-    courseFactoryInteractions: parseInt(String(raw.courseFactoryInteractions)),
-    courseLicenseInteractions: parseInt(String(raw.courseLicenseInteractions)),
+    totalTransactions: parseInt(String(raw.totalTransactions || 0)),
+    averageBlockTime: parseFloat(String(raw.averageBlockTime || 0)),
+    lastBlockNumber: parseInt(String(raw.lastBlockNumber || 0)),
+    lastBlockTimestamp: parseInt(String(raw.lastBlockTimestamp || 0)),
+    totalCourseCreations: parseInt(String(raw.totalCourseCreations || 0)),
+    totalLicenseMints: parseInt(String(raw.totalLicenseMints || 0)),
+    totalCertificateMints: parseInt(String(raw.totalCertificateMints || 0)),
+    totalProgressUpdates: parseInt(String(raw.totalProgressUpdates || 0)),
+    courseFactoryInteractions: parseInt(
+      String(raw.courseFactoryInteractions || 0)
+    ),
+    courseLicenseInteractions: parseInt(
+      String(raw.courseLicenseInteractions || 0)
+    ),
     progressTrackerInteractions: parseInt(
-      String(raw.progressTrackerInteractions)
+      String(raw.progressTrackerInteractions || 0)
     ),
     certificateManagerInteractions: parseInt(
-      String(raw.certificateManagerInteractions)
+      String(raw.certificateManagerInteractions || 0)
     ),
   };
 }
 
 function transformDailyStats(raw: Record<string, string | number>): DailyStats {
   return {
-    date: String(raw.date),
-    transactionCount: parseInt(String(raw.transactionCount)),
-    gasUsed: String(raw.gasUsed),
-    gasCost: String(raw.gasCost),
-    averageGasPrice: String(raw.averageGasPrice),
-    blockCount: parseInt(String(raw.blockCount)),
-    totalBlockTime: parseFloat(String(raw.totalBlockTime)),
-    courseTransactions: parseInt(String(raw.courseTransactions)),
-    licenseTransactions: parseInt(String(raw.licenseTransactions)),
-    certificateTransactions: parseInt(String(raw.certificateTransactions)),
-    progressTransactions: parseInt(String(raw.progressTransactions)),
-    successfulTransactions: parseInt(String(raw.successfulTransactions)),
-    failedTransactions: parseInt(String(raw.failedTransactions)),
-    totalValueTransferred: String(raw.totalValueTransferred),
-    uniqueUsers: parseInt(String(raw.uniqueUsers)),
-  };
-}
-
-function transformTransactionRecord(
-  raw: Record<string, string | number | boolean>
-): TransactionRecord {
-  return {
-    hash: String(raw.hash),
-    timestamp: parseInt(String(raw.timestamp)),
-    from: String(raw.from),
-    to: String(raw.to),
-    functionName: String(raw.functionName),
-    eventType: String(raw.eventType),
-    eventAction: String(raw.eventAction),
-    gasUsed: String(raw.gasUsed),
-    gasPrice: String(raw.gasPrice),
-    value: String(raw.value),
-    success: Boolean(raw.success),
-    errorMessage: raw.errorMessage ? String(raw.errorMessage) : undefined,
+    date: String(raw.date || ""),
+    transactionCount: parseInt(String(raw.transactionCount || 0)),
+    blockCount: parseInt(String(raw.blockCount || 0)),
+    courseTransactions: parseInt(String(raw.courseTransactions || 0)),
+    licenseTransactions: parseInt(String(raw.licenseTransactions || 0)),
+    certificateTransactions: parseInt(String(raw.certificateTransactions || 0)),
+    progressTransactions: parseInt(String(raw.progressTransactions || 0)),
+    adminTransactions: parseInt(String(raw.adminTransactions || 0)),
+    successfulTransactions: parseInt(String(raw.successfulTransactions || 0)),
+    failedTransactions: parseInt(String(raw.failedTransactions || 0)),
+    startBlock: parseInt(String(raw.startBlock || 0)),
+    endBlock: parseInt(String(raw.endBlock || 0)),
   };
 }
 
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
-
-/**
- * Format gas price from wei to gwei
- */
-export function formatGasPrice(priceInWei: string): string {
-  const gwei = parseFloat(priceInWei) / 1e9;
-  return gwei.toFixed(2);
-}
-
-/**
- * Format transaction value from wei to ETH
- */
-export function formatEthValue(valueInWei: string): string {
-  const eth = parseFloat(valueInWei) / 1e18;
-  return eth.toFixed(6);
-}
 
 /**
  * Calculate success rate from transaction counts

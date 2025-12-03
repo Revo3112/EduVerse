@@ -363,29 +363,38 @@ function weiToEth(wei: string): string {
  * Calculates metrics by aggregating Course, Enrollment, Certificate, UserProfile
  */
 export async function getPlatformAnalytics(): Promise<PlatformAnalyticsData> {
+  // Query PlatformStats entity directly from Goldsky indexer for accurate real-time data
+  // This uses the pre-calculated values from addPlatformRevenue() in the subgraph
   const query = `
     query GetPlatformAnalytics {
-      courses(first: 1000) {
+      platformStats(id: "platform") {
         id
+        totalUsers
+        totalCourses
+        totalEnrollments
+        totalCertificates
         totalRevenue
         totalRevenueEth
+        platformFees
+        platformFeesEth
+        creatorRevenue
+        creatorRevenueEth
+        averageCoursePrice
+        averageCompletionRate
         averageRating
-        totalRatings
-        completedStudents
-        totalEnrollments
+        dailyActiveUsers
+        monthlyActiveUsers
+        lastUpdateTimestamp
       }
       userProfiles(first: 1000) {
         id
         lastActivityAt
       }
-      enrollments(first: 1000) {
+      courses(first: 1000) {
         id
-        totalSpent
-      }
-      certificates(first: 1000) {
-        id
-        totalRevenue
-        totalRevenueEth
+        priceInEth
+        averageRating
+        totalRatings
       }
     }
   `;
@@ -393,89 +402,91 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalyticsData> {
   try {
     const data = await fetchGraphQL(query, {}, "getPlatformAnalytics");
 
-    const courses: GraphQLCourse[] = data.courses || [];
+    const platformStats = data.platformStats;
     const users: GraphQLUserProfile[] = data.userProfiles || [];
-    const enrollments: GraphQLEnrollment[] = data.enrollments || [];
-    const certificates: GraphQLCertificate[] = data.certificates || [];
+    const courses: GraphQLCourse[] = data.courses || [];
 
-    // Calculate total revenue from courses
-    const courseRevenue = courses.reduce(
-      (sum: bigint, c: GraphQLCourse) => sum + BigInt(c.totalRevenue || "0"),
-      BigInt(0)
+    // If PlatformStats entity exists, use its accurate data from the indexer
+    if (platformStats) {
+      // Calculate active users from user profiles (more accurate real-time calculation)
+      const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
+      const dailyActive = users.filter(
+        (u: GraphQLUserProfile) => parseBigIntSafe(u.lastActivityAt) > oneDayAgo
+      ).length;
+
+      const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 2592000;
+      const monthlyActive = users.filter(
+        (u: GraphQLUserProfile) =>
+          parseBigIntSafe(u.lastActivityAt) > thirtyDaysAgo
+      ).length;
+
+      // Calculate average course price from courses with prices
+      const coursesWithPrice = courses.filter(
+        (c: GraphQLCourse) => parseFloat(c.priceInEth || "0") > 0
+      );
+      const avgPrice =
+        coursesWithPrice.length > 0
+          ? (
+              coursesWithPrice.reduce(
+                (sum: number, c: GraphQLCourse) =>
+                  sum + parseFloat(c.priceInEth || "0"),
+                0
+              ) / coursesWithPrice.length
+            ).toFixed(6)
+          : platformStats.averageCoursePrice || "0";
+
+      // Calculate average rating from courses with ratings
+      const coursesWithRatings = courses.filter(
+        (c: GraphQLCourse) => parseBigIntSafe(c.totalRatings) > 0
+      );
+      const avgRating =
+        coursesWithRatings.length > 0
+          ? (
+              coursesWithRatings.reduce(
+                (sum: number, c: GraphQLCourse) =>
+                  sum + parseFloat(c.averageRating || "0"),
+                0
+              ) / coursesWithRatings.length
+            ).toFixed(2)
+          : platformStats.averageRating || "0";
+
+      return {
+        totalUsers: parseBigIntSafe(platformStats.totalUsers) || users.length,
+        totalCourses:
+          parseBigIntSafe(platformStats.totalCourses) || courses.length,
+        totalEnrollments: parseBigIntSafe(platformStats.totalEnrollments),
+        totalCertificates: parseBigIntSafe(platformStats.totalCertificates),
+        // Use exact values from indexer - these are calculated per-transaction
+        totalRevenue: platformStats.totalRevenue || "0",
+        totalRevenueEth: platformStats.totalRevenueEth || "0",
+        platformFees: platformStats.platformFees || "0",
+        platformFeesEth: platformStats.platformFeesEth || "0",
+        creatorRevenue: platformStats.creatorRevenue || "0",
+        creatorRevenueEth: platformStats.creatorRevenueEth || "0",
+        averageCoursePrice: avgPrice,
+        averageCompletionRate: platformStats.averageCompletionRate || "0",
+        averageRating: avgRating,
+        dailyActiveUsers:
+          dailyActive || parseBigIntSafe(platformStats.dailyActiveUsers),
+        monthlyActiveUsers:
+          monthlyActive || parseBigIntSafe(platformStats.monthlyActiveUsers),
+        lastUpdateTimestamp:
+          parseBigIntSafe(platformStats.lastUpdateTimestamp) ||
+          Math.floor(Date.now() / 1000),
+      };
+    }
+
+    // Fallback: If PlatformStats doesn't exist yet, calculate from entities
+    console.warn(
+      "[Goldsky Analytics] PlatformStats entity not found, falling back to entity calculation"
     );
 
-    // Calculate total revenue from certificates
-    const certRevenue = certificates.reduce(
-      (sum: bigint, c: GraphQLCertificate) =>
-        sum + BigInt(c.totalRevenue || "0"),
-      BigInt(0)
-    );
-
-    const totalRevenue = courseRevenue + certRevenue;
-    const totalRevenueStr = totalRevenue.toString();
-    const totalRevenueEth = weiToEth(totalRevenueStr);
-
-    // Calculate platform fees (10%)
-    const platformFees = calculatePlatformFee(totalRevenueStr);
-    const platformFeesEth = weiToEth(platformFees);
-
-    // Calculate creator revenue (90%)
-    const creatorRevenue = (totalRevenue - BigInt(platformFees)).toString();
-    const creatorRevenueEth = weiToEth(creatorRevenue);
-
-    // Calculate average course price
-    const coursesWithPrice = courses.filter(
-      (c: GraphQLCourse) => parseFloat(c.totalRevenueEth || "0") > 0
-    );
-    const avgPrice =
-      coursesWithPrice.length > 0
-        ? (
-            coursesWithPrice.reduce(
-              (sum: number, c: GraphQLCourse) =>
-                sum + parseFloat(c.totalRevenueEth || "0"),
-              0
-            ) / coursesWithPrice.length
-          ).toFixed(6)
-        : "0";
-
-    // Calculate average rating
-    const coursesWithRatings = courses.filter(
-      (c: GraphQLCourse) => parseBigIntSafe(c.totalRatings) > 0
-    );
-    const avgRating =
-      coursesWithRatings.length > 0
-        ? (
-            coursesWithRatings.reduce(
-              (sum: number, c: GraphQLCourse) =>
-                sum + parseFloat(c.averageRating || "0"),
-              0
-            ) / coursesWithRatings.length
-          ).toFixed(2)
-        : "0";
-
-    // Calculate completion rate
-    const totalCompletions = courses.reduce(
-      (sum: number, c: GraphQLCourse) =>
-        sum + parseBigIntSafe(c.completedStudents),
-      0
-    );
-    const totalEnrollmentsCount = courses.reduce(
-      (sum: number, c: GraphQLCourse) =>
-        sum + parseBigIntSafe(c.totalEnrollments),
-      0
-    );
-    const completionRate =
-      totalEnrollmentsCount > 0
-        ? ((totalCompletions / totalEnrollmentsCount) * 100).toFixed(2)
-        : "0";
-
-    // Calculate active users (last 24 hours)
+    // Calculate active users
     const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
     const dailyActive = users.filter(
       (u: GraphQLUserProfile) => parseBigIntSafe(u.lastActivityAt) > oneDayAgo
     ).length;
 
-    // Calculate monthly active users (last 30 days)
     const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 2592000;
     const monthlyActive = users.filter(
       (u: GraphQLUserProfile) =>
@@ -485,17 +496,17 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalyticsData> {
     return {
       totalUsers: users.length,
       totalCourses: courses.length,
-      totalEnrollments: enrollments.length,
-      totalCertificates: certificates.length,
-      totalRevenue: totalRevenueStr,
-      totalRevenueEth,
-      platformFees,
-      platformFeesEth,
-      creatorRevenue,
-      creatorRevenueEth,
-      averageCoursePrice: avgPrice,
-      averageCompletionRate: completionRate,
-      averageRating: avgRating,
+      totalEnrollments: 0,
+      totalCertificates: 0,
+      totalRevenue: "0",
+      totalRevenueEth: "0",
+      platformFees: "0",
+      platformFeesEth: "0",
+      creatorRevenue: "0",
+      creatorRevenueEth: "0",
+      averageCoursePrice: "0",
+      averageCompletionRate: "0",
+      averageRating: "0",
       dailyActiveUsers: dailyActive,
       monthlyActiveUsers: monthlyActive,
       lastUpdateTimestamp: Math.floor(Date.now() / 1000),
@@ -857,6 +868,8 @@ export async function getLicenseAnalytics(): Promise<LicenseAnalyticsData> {
         totalRenewals
         pricePaid
         pricePaidEth
+        totalSpent
+        totalSpentEth
       }
     }
   `;

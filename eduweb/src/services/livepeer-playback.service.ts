@@ -10,12 +10,34 @@
 
 import { livepeerClient } from "@/lib/livepeer";
 import {
-    getBestQualityMP4,
-    getVideoRenditions,
-    isVideoProcessing,
-    parsePlaybackSource,
-    type VideoRendition,
+  getBestQualityMP4,
+  getVideoRenditions,
+  isVideoProcessing,
+  parsePlaybackSource,
+  type VideoRendition,
 } from "@/lib/livepeer-helpers";
+
+/**
+ * Playback source type from Livepeer SDK
+ */
+type PlaybackSource = ReturnType<typeof parsePlaybackSource>;
+
+/**
+ * Raw playback info structure from Livepeer API
+ */
+interface RawPlaybackInfo {
+  type?: string;
+  meta?: {
+    source?: Array<{
+      hrn?: string;
+      url?: string;
+      height?: number;
+      width?: number;
+      bitrate?: number;
+    }>;
+  };
+  playbackInfo?: unknown;
+}
 
 /**
  * Playback information result
@@ -25,8 +47,7 @@ export interface PlaybackInfoResult {
   /** Playback ID */
   playbackId: string;
   /** Parsed source array for Player.Root src prop */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  src: any | null;
+  src: PlaybackSource | null;
   /** Available video renditions for quality selector */
   renditions: VideoRendition[];
   /** Whether video is still processing/transcoding */
@@ -36,8 +57,7 @@ export interface PlaybackInfoResult {
   /** Video type: "live", "vod", or "recording" */
   type: string;
   /** Raw playback info from API (for advanced usage) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  raw: any;
+  raw: RawPlaybackInfo;
 }
 
 /**
@@ -138,8 +158,9 @@ export async function getPlaybackInfo(
  * <Player.Root src={src} />
  * ```
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getPlaybackSource(playbackId: string): Promise<any | null> {
+export async function getPlaybackSource(
+  playbackId: string
+): Promise<PlaybackSource | null> {
   try {
     const response = await livepeerClient.playback.get(playbackId);
     return parsePlaybackSource(response);
@@ -207,11 +228,20 @@ export async function getVideoMetadata(playbackId: string): Promise<{
     }
 
     // Get metadata from highest quality source
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const highestQuality = sources.reduce((best: any, current: any) => {
-      if (!best) return current;
-      return (current.height || 0) > (best.height || 0) ? current : best;
-    }, null);
+    interface SourceMeta {
+      duration?: number;
+      width?: number;
+      height?: number;
+      bitrate?: number;
+      type?: string;
+    }
+    const highestQuality = sources.reduce(
+      (best: SourceMeta | null, current: SourceMeta) => {
+        if (!best) return current;
+        return (current.height || 0) > (best.height || 0) ? current : best;
+      },
+      null as SourceMeta | null
+    );
 
     return {
       duration: highestQuality?.duration,
@@ -265,7 +295,9 @@ export function getEmbedUrl(
   }
 
   const queryString = params.toString();
-  return `https://lvpr.tv?v=${playbackId}${queryString ? `&${queryString}` : ""}`;
+  return `https://lvpr.tv?v=${playbackId}${
+    queryString ? `&${queryString}` : ""
+  }`;
 }
 
 /**

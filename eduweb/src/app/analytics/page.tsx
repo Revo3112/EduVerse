@@ -21,6 +21,10 @@ import {
   type BlockchainTransactionEvent,
 } from "@/hooks/useRecentActivities";
 import {
+  useBlockchainAnalytics,
+  useGasPrice,
+} from "@/hooks/useBlockchainAnalytics";
+import {
   Activity,
   AlertTriangle,
   ArrowUpDown,
@@ -47,6 +51,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { TransactionTypeChart } from "@/components/analytics/TransactionTypeChart";
+import { LearningEngagementStats } from "@/components/analytics/LearningEngagementStats";
+import { NetworkPerformanceStats } from "@/components/analytics/NetworkPerformanceStats";
+import { ContractActivityAnalysis } from "@/components/analytics/ContractActivityAnalysis";
 
 // ==================== EXACT SMART CONTRACT TYPES ====================
 
@@ -408,7 +416,7 @@ const PLATFORM_FEE_BASIS_POINTS = {
 
 // ==================== ANALYTICS METRICS ====================
 
-interface EduVerseAnalyticsMetrics {
+export interface EduVerseAnalyticsMetrics {
   totalTransactions: number;
   totalCourseCreations: number;
   totalLicenseMints: number;
@@ -438,8 +446,9 @@ interface EduVerseAnalyticsMetrics {
   totalCourseAdditions: number;
   certificateUpdates: number;
   totalCertificateRevenue: string;
-  totalPlatformRevenue: string;
-  totalCreatorPayouts: string;
+  totalPlatformRevenue: string; // Grand total of all revenue
+  platformFees: string; // Platform fees (2% license, 10% cert mint, 2% cert add)
+  totalCreatorPayouts: string; // Creator share (98% license, 90% cert mint, 98% cert add)
   averageCoursePrice: string;
 }
 
@@ -746,7 +755,7 @@ const _generateMockBlockchainTransaction = (): Record<string, unknown> => {
     from: generateRealisticAddress(),
     to:
       DEPLOYED_CONTRACTS[
-        selectedType.contract as keyof typeof DEPLOYED_CONTRACTS
+      selectedType.contract as keyof typeof DEPLOYED_CONTRACTS
       ] || generateRealisticAddress(),
     value: getTransactionValue(selectedType.type),
 
@@ -785,7 +794,7 @@ const generateEventData = (transactionType: string): TransactionEventData => {
             .name,
         title:
           WEB3_COURSE_TITLES[
-            Math.floor(Math.random() * WEB3_COURSE_TITLES.length)
+          Math.floor(Math.random() * WEB3_COURSE_TITLES.length)
           ],
         category: Math.floor(Math.random() * 20) as CourseCategory,
         difficulty: Math.floor(Math.random() * 3) as CourseDifficulty,
@@ -832,9 +841,8 @@ const generateEventData = (transactionType: string): TransactionEventData => {
       return {
         courseId,
         sectionId: Math.floor(Math.random() * 100),
-        title: `Section ${
-          Math.floor(Math.random() * 50) + 1
-        }: Advanced Concepts`,
+        title: `Section ${Math.floor(Math.random() * 50) + 1
+          }: Advanced Concepts`,
       } as SectionAddedEventData;
 
     case "section_updated":
@@ -949,9 +957,8 @@ const generateEventData = (transactionType: string): TransactionEventData => {
         courseId,
         fromIndex: Math.floor(Math.random() * 10),
         toIndex: Math.floor(Math.random() * 10),
-        sectionTitle: `Section ${
-          Math.floor(Math.random() * 50) + 1
-        }: Moved Section`,
+        sectionTitle: `Section ${Math.floor(Math.random() * 50) + 1
+          }: Moved Section`,
       } as SectionMovedEventData;
 
     case "rating_deleted":
@@ -1220,7 +1227,8 @@ const getContractName = (eventType: string): string => {
     type.includes("SECTION_UPDATED") ||
     type.includes("SECTION_DELETED") ||
     type.includes("SECTION_MOVED") ||
-    type.includes("SECTION_SWAPPED") ||
+    type.includes("SECTIONS_SWAPPED") ||
+    type.includes("SECTIONS_BATCH_REORDERED") ||
     type.includes("BATCH_SECTIONS") ||
     type.includes("RATING") ||
     type.includes("BLACKLIST")
@@ -1422,7 +1430,7 @@ MetricCard.displayName = "MetricCard";
  * NEXT STEP: Replace mock data dengan actual Web3 event listeners
  */
 export default function AnalyticsPage() {
-  // Fetch real analytics data from Goldsky
+  // Fetch real analytics data from Goldsky (subgraph)
   const {
     metrics: goldskyMetrics,
     isLoading: metricsLoading,
@@ -1437,6 +1445,32 @@ export default function AnalyticsPage() {
     debug: false,
   });
 
+  // Fetch REAL blockchain data directly from Manta Pacific RPC
+  // EduVerse contracts deployed at block ~5,418,109
+  // Using 250k block range to capture ALL historical transactions
+  const {
+    currentBlockNumber,
+    currentGasPriceGwei,
+    recentBlocks,
+    contractStats: blockchainContractStats,
+    totalGasCostEth,
+    isLoading: blockchainLoading,
+    isMonitoring,
+    startMonitoring,
+    stopMonitoring,
+  } = useBlockchainAnalytics({
+    fetchOnMount: true,
+    autoRefresh: true,
+    refreshInterval: 60000, // 60s refresh (larger range = slower fetch)
+    enableMonitoring: false,
+    blockRange: 250000, // ~250k blocks covers all EduVerse history since deployment
+    debug: false,
+  });
+
+  // Lightweight gas price hook for real-time gas updates
+  const { gasPriceGwei: liveGasPrice, blockNumber: liveBlockNumber } =
+    useGasPrice(10000);
+
   // Fetch recent activities/transactions
   const {
     transactions,
@@ -1448,7 +1482,7 @@ export default function AnalyticsPage() {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     loadMore: _loadMore,
   } = useRecentActivitiesAsTransactions({
-    initialLimit: 50,
+    initialLimit: 200, // Limit to last 200 EduVerse transactions
     autoRefresh: true,
     refreshInterval: 15000, // Refresh every 15 seconds
     debug: false,
@@ -1490,6 +1524,7 @@ export default function AnalyticsPage() {
         certificateUpdates: 0,
         totalCertificateRevenue: "0.000000",
         totalPlatformRevenue: "0.000000",
+        platformFees: "0.000000",
         totalCreatorPayouts: "0.000000",
         averageCoursePrice: "0.000000",
       }
@@ -1560,21 +1595,26 @@ export default function AnalyticsPage() {
   }, [transactions]);
 
   const certificateInsights = useMemo(() => {
-    const certTxs = transactions.filter(
-      (tx) =>
-        tx.eventType === "certificate_minted" ||
-        tx.eventType === "course_added_to_certificate" ||
-        tx.eventType === "certificate_updated"
-    );
+    // Normalize event type to uppercase for comparison (Goldsky uses UPPERCASE)
+    const normalizeType = (type: string) => type.toUpperCase();
+
+    const certTxs = transactions.filter((tx) => {
+      const type = normalizeType(tx.eventType);
+      return (
+        type === "CERTIFICATE_MINTED" ||
+        type === "COURSE_ADDED_TO_CERTIFICATE" ||
+        type === "CERTIFICATE_UPDATED"
+      );
+    });
 
     const newCerts = certTxs.filter(
-      (tx) => tx.eventType === "certificate_minted"
+      (tx) => normalizeType(tx.eventType) === "CERTIFICATE_MINTED"
     ).length;
     const courseAdditions = certTxs.filter(
-      (tx) => tx.eventType === "course_added_to_certificate"
+      (tx) => normalizeType(tx.eventType) === "COURSE_ADDED_TO_CERTIFICATE"
     ).length;
     const updates = certTxs.filter(
-      (tx) => tx.eventType === "certificate_updated"
+      (tx) => normalizeType(tx.eventType) === "CERTIFICATE_UPDATED"
     ).length;
 
     return {
@@ -1597,10 +1637,10 @@ export default function AnalyticsPage() {
         percentage:
           metrics.totalTransactions > 0
             ? (
-                (metrics.courseFactoryInteractions /
-                  metrics.totalTransactions) *
-                100
-              ).toFixed(1)
+              (metrics.courseFactoryInteractions /
+                metrics.totalTransactions) *
+              100
+            ).toFixed(1)
             : "0",
       },
       {
@@ -1609,10 +1649,10 @@ export default function AnalyticsPage() {
         percentage:
           metrics.totalTransactions > 0
             ? (
-                (metrics.courseLicenseInteractions /
-                  metrics.totalTransactions) *
-                100
-              ).toFixed(1)
+              (metrics.courseLicenseInteractions /
+                metrics.totalTransactions) *
+              100
+            ).toFixed(1)
             : "0",
       },
       {
@@ -1621,10 +1661,10 @@ export default function AnalyticsPage() {
         percentage:
           metrics.totalTransactions > 0
             ? (
-                (metrics.progressTrackerInteractions /
-                  metrics.totalTransactions) *
-                100
-              ).toFixed(1)
+              (metrics.progressTrackerInteractions /
+                metrics.totalTransactions) *
+              100
+            ).toFixed(1)
             : "0",
       },
       {
@@ -1633,10 +1673,10 @@ export default function AnalyticsPage() {
         percentage:
           metrics.totalTransactions > 0
             ? (
-                (metrics.certificateManagerInteractions /
-                  metrics.totalTransactions) *
-                100
-              ).toFixed(1)
+              (metrics.certificateManagerInteractions /
+                metrics.totalTransactions) *
+              100
+            ).toFixed(1)
             : "0",
       },
     ];
@@ -1715,26 +1755,66 @@ export default function AnalyticsPage() {
             </p>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <Badge
-              variant={isLive ? "default" : "secondary"}
-              className={isLive ? "animate-pulse" : ""}
-            >
-              <div
-                className={cn(
-                  "w-2 h-2 rounded-full mr-2",
-                  isLive ? "bg-green-500" : "bg-gray-500"
-                )}
-              />
-              {isLive ? "Live Monitoring" : "Paused"}
-            </Badge>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsLive(!isLive)}
-            >
-              {isLive ? "Pause" : "Resume"}
-            </Button>
+          <div className="flex items-center space-x-4">
+            {/* Real-time Blockchain Stats */}
+            <div className="flex items-center space-x-3 text-sm">
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <span className="text-muted-foreground">Block:</span>
+                <span className="font-mono font-medium">
+                  #{liveBlockNumber.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className="text-muted-foreground">Gas:</span>
+                <span className="font-mono font-medium text-orange-500">
+                  {liveGasPrice} Gwei
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Badge
+                variant={isLive ? "default" : "secondary"}
+                className={isLive ? "animate-pulse" : ""}
+              >
+                <div
+                  className={cn(
+                    "w-2 h-2 rounded-full mr-2",
+                    isLive ? "bg-green-500" : "bg-gray-500"
+                  )}
+                />
+                {isLive ? "Live Monitoring" : "Paused"}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsLive(!isLive)}
+              >
+                {isLive ? "Pause" : "Resume"}
+              </Button>
+              {!isMonitoring ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={startMonitoring}
+                  className="text-green-600"
+                >
+                  <Activity className="h-3 w-3 mr-1" />
+                  Start Monitor
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={stopMonitoring}
+                  className="text-red-600"
+                >
+                  <Activity className="h-3 w-3 mr-1" />
+                  Stop Monitor
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1783,14 +1863,14 @@ export default function AnalyticsPage() {
               metrics.certificateManagerInteractions
             ).toLocaleString()}`}
             icon={<TrendingUp className="h-4 w-4 text-orange-500" />}
-            subtitle={`${metrics.averageBlockTime.toFixed(1)}s avg block time`}
+            subtitle={`Block #${currentBlockNumber.toLocaleString()}`}
           />
 
           <MetricCard
             title="Platform Revenue"
             value={`${metrics.totalPlatformRevenue} ETH`}
             icon={<Wallet className="h-4 w-4 text-green-500" />}
-            subtitle="10% platform fee"
+            subtitle="2-10% platform fee"
           />
 
           <MetricCard
@@ -1800,6 +1880,112 @@ export default function AnalyticsPage() {
             subtitle="Students with recent activity"
           />
         </div>
+
+        {/* Real Blockchain Network Stats */}
+        <Card className="border-blue-200 bg-blue-50/30 dark:bg-blue-950/20">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Activity className="h-5 w-5 text-blue-500" />
+                <CardTitle className="text-lg">
+                  Live Blockchain Data (Manta Pacific)
+                </CardTitle>
+              </div>
+              <Badge variant="outline" className="text-blue-600">
+                Real-time from RPC
+              </Badge>
+            </div>
+            <CardDescription>
+              Data fetched directly from blockchain via Thirdweb RPC - not from
+              subgraph
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="text-center p-3 bg-white dark:bg-gray-900 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">
+                  Current Block
+                </p>
+                <p className="text-lg font-mono font-bold text-blue-600">
+                  #{currentBlockNumber.toLocaleString()}
+                </p>
+              </div>
+              <div className="text-center p-3 bg-white dark:bg-gray-900 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">Gas Price</p>
+                <p className="text-lg font-mono font-bold text-orange-500">
+                  {currentGasPriceGwei} Gwei
+                </p>
+              </div>
+              <div className="text-center p-3 bg-white dark:bg-gray-900 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">
+                  Total Gas Cost
+                </p>
+                <p className="text-lg font-mono font-bold text-green-600">
+                  {parseFloat(totalGasCostEth).toFixed(6)} ETH
+                </p>
+              </div>
+              <div className="text-center p-3 bg-white dark:bg-gray-900 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">
+                  CourseFactory Txs
+                </p>
+                <p className="text-lg font-mono font-bold">
+                  {blockchainContractStats.courseFactory.transactions}
+                </p>
+              </div>
+              <div className="text-center p-3 bg-white dark:bg-gray-900 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">
+                  CourseLicense Txs
+                </p>
+                <p className="text-lg font-mono font-bold">
+                  {blockchainContractStats.courseLicense.transactions}
+                </p>
+              </div>
+              <div className="text-center p-3 bg-white dark:bg-gray-900 rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">
+                  Recent Blocks
+                </p>
+                <p className="text-lg font-mono font-bold text-purple-600">
+                  {recentBlocks.length}
+                </p>
+              </div>
+            </div>
+
+            {/* Recent Blocks List */}
+            {recentBlocks.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">Recent Blocks</p>
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                    All Manta Pacific txs
+                  </span>
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {recentBlocks.slice(0, 5).map((block) => (
+                    <div
+                      key={block.number}
+                      className="flex-shrink-0 p-2 bg-white dark:bg-gray-900 rounded border text-xs"
+                    >
+                      <div className="font-mono font-bold">#{block.number}</div>
+                      <div className="text-muted-foreground">
+                        {block.transactionCount} txs
+                      </div>
+                      <div className="text-muted-foreground">
+                        Gas: {(parseInt(block.gasUsed) / 1e6).toFixed(2)}M
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {blockchainLoading && (
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                <RefreshCw className="h-4 w-4 animate-spin inline mr-2" />
+                Loading blockchain data...
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Educational Platform Metrics */}
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
@@ -1859,21 +2045,29 @@ export default function AnalyticsPage() {
 
           {/* Live Transaction Feed - FIXED SCROLL */}
           <TabsContent value="live-feed" className="space-y-4">
-            <div className="flex flex-col lg:flex-row gap-6">
+            <div className="flex flex-col lg:flex-row gap-6 lg:h-[600px]">
               {/* Kolom Kiri: Live Blockchain Events (2/3 Lebar) */}
               <div className="w-full lg:w-2/3">
-                <Card className="flex flex-col h-[600px]">
+                <Card className="flex flex-col h-[600px] lg:h-full">
                   <CardHeader className="flex-shrink-0">
                     <CardTitle className="flex items-center justify-between">
                       <div className="flex items-center">
                         <Activity className="h-5 w-5 mr-2" />
                         Live Blockchain Events
                       </div>
-                      <Badge variant="secondary">Last 200 transactions</Badge>
+                      <Badge variant="secondary">Last 200 EduVerse txs</Badge>
                     </CardTitle>
                     <CardDescription>
-                      Real-time events from EduVerse smart contracts on Manta
-                      Pacific
+                      Events from EduVerse smart contracts only (not all Manta
+                      Pacific transactions). View all history on{" "}
+                      <a
+                        href="https://pacific-explorer.sepolia-testnet.manta.network"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Block Explorer
+                      </a>
                     </CardDescription>
                   </CardHeader>
                   <CardContent
@@ -1898,15 +2092,15 @@ export default function AnalyticsPage() {
               </div>
 
               {/* Kolom Kanan: Dua Card (1/3 Lebar) */}
-              <div className="w-full lg:w-1/3 flex flex-col gap-6">
-                <Card className="flex-1 flex flex-col">
+              <div className="w-full lg:w-1/3 flex flex-col gap-6 h-full">
+                <Card className="flex flex-col shrink-0">
                   <CardHeader className="flex-shrink-0">
                     <CardTitle>Contract Activity</CardTitle>
                     <CardDescription>
                       Transaction distribution by contract
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="flex-1 overflow-y-auto min-h-0">
+                  <CardContent className="overflow-y-auto min-h-0">
                     <div className="space-y-3">
                       {contractActivity.map(({ contract, count }) => (
                         <div
@@ -1923,29 +2117,13 @@ export default function AnalyticsPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="flex-1 flex flex-col">
+                <Card className="flex-1 flex flex-col min-h-0">
                   <CardHeader className="flex-shrink-0">
                     <CardTitle>Transaction Types</CardTitle>
                     <CardDescription>Most frequent activities</CardDescription>
                   </CardHeader>
-                  <CardContent className="flex-1 overflow-y-auto p-6 min-h-0">
-                    <div className="space-y-3 pr-2">
-                      {transactionTypeDistribution.map(
-                        ({ type, count, percentage }) => (
-                          <div key={type} className="space-y-2">
-                            <div className="flex justify-between items-center text-sm">
-                              <span className="capitalize truncate font-medium">
-                                {type.replace(/_/g, " ")}
-                              </span>
-                              <span className="text-muted-foreground ml-2 flex-shrink-0">
-                                {count}
-                              </span>
-                            </div>
-                            <Progress value={percentage} className="h-2" />
-                          </div>
-                        )
-                      )}
-                    </div>
+                  <CardContent className="flex-1 overflow-hidden p-6 min-h-0">
+                    <TransactionTypeChart data={transactionTypeDistribution} />
                   </CardContent>
                 </Card>
               </div>
@@ -1963,21 +2141,9 @@ export default function AnalyticsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {contractInteractionsReport.map(
-                    ({ contract, totalTransactions, percentage }) => (
-                      <div key={contract} className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">{contract}</span>
-                          <Badge variant="secondary">
-                            {percentage}% of total
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {totalTransactions.toLocaleString()} transactions
-                        </div>
-                      </div>
-                    )
-                  )}
+                  <ContractActivityAnalysis
+                    contractInteractionsReport={contractInteractionsReport}
+                  />
                 </CardContent>
               </Card>
 
@@ -2094,63 +2260,8 @@ export default function AnalyticsPage() {
                     Student progress and completion rates
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-purple-600">
-                        {metrics.totalSectionsCompleted}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Sections Completed
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600">
-                        {metrics.totalCoursesCompleted}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Courses Finished
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Course Completion Rate</span>
-                      <span>
-                        {metrics.totalSectionsCompleted > 0
-                          ? (
-                              (metrics.totalCoursesCompleted /
-                                metrics.totalSectionsCompleted) *
-                              100
-                            ).toFixed(1)
-                          : 0}
-                        %
-                      </span>
-                    </div>
-                    <Progress
-                      value={
-                        metrics.totalSectionsCompleted > 0
-                          ? (metrics.totalCoursesCompleted /
-                              metrics.totalSectionsCompleted) *
-                            100
-                          : 0
-                      }
-                      className="h-2"
-                    />
-                  </div>
-
-                  <div className="pt-2 border-t">
-                    <div className="flex justify-between text-sm">
-                      <span>Average Platform Rating</span>
-                      <div className="flex items-center space-x-1">
-                        <Star className="h-4 w-4 text-yellow-500" />
-                        <span>
-                          {metrics.averagePlatformRating.toFixed(1)}/5.0
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                <CardContent className="h-[300px]">
+                  <LearningEngagementStats metrics={metrics} />
                 </CardContent>
               </Card>
             </div>
@@ -2161,7 +2272,7 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <MetricCard
                 title="Certificate Holders"
-                value={certificateInsights.newCertificates.toString()}
+                value={metrics.totalCertificateHolders.toString()}
                 change="Revolutionary 'One Per User' model"
                 icon={<Award className="h-4 w-4 text-yellow-500" />}
                 subtitle="Unique users with certificates"
@@ -2169,7 +2280,7 @@ export default function AnalyticsPage() {
 
               <MetricCard
                 title="Course Additions"
-                value={certificateInsights.courseAdditions.toString()}
+                value={metrics.totalCourseAdditions.toString()}
                 change="Courses added to existing certificates"
                 icon={<FileText className="h-4 w-4 text-blue-500" />}
                 subtitle="Growing learning journeys"
@@ -2177,7 +2288,7 @@ export default function AnalyticsPage() {
 
               <MetricCard
                 title="Certificate Updates"
-                value={certificateInsights.updates.toString()}
+                value={metrics.certificateUpdates.toString()}
                 change="Image/metadata updates"
                 icon={<Edit className="h-4 w-4 text-green-500" />}
                 subtitle="Certificate customizations"
@@ -2214,8 +2325,8 @@ export default function AnalyticsPage() {
                       <h4 className="font-medium text-sm mb-2">Economics:</h4>
                       <ul className="text-sm text-muted-foreground space-y-1">
                         <li>• Payment required for each action</li>
-                        <li>• 90% goes to course creator</li>
-                        <li>• 10% platform fee</li>
+                        <li>• First cert: 90% creator, 10% platform</li>
+                        <li>• Add course: 98% creator, 2% platform</li>
                         <li>• Max certificate price: 0.002 ETH</li>
                         <li>• Replay protection via payment hashes</li>
                       </ul>
@@ -2261,29 +2372,50 @@ export default function AnalyticsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Total Platform Revenue</span>
-                      <span className="font-mono text-sm">
+                    {/* Total Revenue (Grand Total) */}
+                    <div className="flex justify-between items-center pb-2 border-b">
+                      <span className="text-sm font-medium">
+                        Total Revenue (All Sources)
+                      </span>
+                      <span className="font-mono text-sm font-bold">
                         {metrics.totalPlatformRevenue} ETH
                       </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Creator Payouts</span>
-                      <span className="font-mono text-sm">
-                        {metrics.totalCreatorPayouts} ETH
-                      </span>
+
+                    {/* Revenue Sources */}
+                    <div className="pl-2 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">
+                          └ License Revenue
+                        </span>
+                        <span className="font-mono text-sm">
+                          {metrics.totalLicenseRevenue} ETH
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">
+                          └ Certificate Revenue
+                        </span>
+                        <span className="font-mono text-sm">
+                          {metrics.totalCertificateRevenue} ETH
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">License Revenue</span>
-                      <span className="font-mono text-sm">
-                        {metrics.totalLicenseRevenue} ETH
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Certificate Revenue</span>
-                      <span className="font-mono text-sm">
-                        {metrics.totalCertificateRevenue} ETH
-                      </span>
+
+                    {/* Revenue Distribution */}
+                    <div className="pt-2 border-t space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm">Platform Fees (10%)</span>
+                        <span className="font-mono text-sm text-orange-600">
+                          {metrics.platformFees} ETH
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm">Creator Payouts (90%)</span>
+                        <span className="font-mono text-sm text-green-600">
+                          {metrics.totalCreatorPayouts} ETH
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -2295,7 +2427,9 @@ export default function AnalyticsPage() {
                       <p className="text-2xl font-bold">
                         {metrics.averageCoursePrice} ETH
                       </p>
-                      <p className="text-xs text-muted-foreground">per month</p>
+                      <p className="text-xs text-muted-foreground">
+                        per enrollment
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -2312,19 +2446,28 @@ export default function AnalyticsPage() {
                   <div className="space-y-3">
                     <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
                       <h4 className="font-medium text-sm text-blue-900 dark:text-blue-100 mb-1">
-                        License Fees
+                        License Fees (Mint & Renew)
                       </h4>
                       <p className="text-xs text-blue-700 dark:text-blue-300">
-                        90% Creator • 10% Platform • Max: 1 ETH/month
+                        98% Creator • 2% Platform • Max: 1 ETH/month
                       </p>
                     </div>
 
                     <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
                       <h4 className="font-medium text-sm text-yellow-900 dark:text-yellow-100 mb-1">
-                        Certificate Fees
+                        Certificate Mint (First Course)
                       </h4>
                       <p className="text-xs text-yellow-700 dark:text-yellow-300">
                         90% Creator • 10% Platform • Max: 0.002 ETH
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-purple-50 dark:bg-purple-950 rounded-lg">
+                      <h4 className="font-medium text-sm text-purple-900 dark:text-purple-100 mb-1">
+                        Certificate Course Addition
+                      </h4>
+                      <p className="text-xs text-purple-700 dark:text-purple-300">
+                        98% Creator • 2% Platform
                       </p>
                     </div>
 
@@ -2353,12 +2496,18 @@ export default function AnalyticsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="text-center p-4 border rounded-lg">
                     <div className="text-2xl font-bold text-green-600">
-                      {(
-                        (parseFloat(metrics.totalCreatorPayouts) /
-                          (parseFloat(metrics.totalPlatformRevenue) +
-                            parseFloat(metrics.totalCreatorPayouts))) *
-                        100
-                      ).toFixed(1)}
+                      {(() => {
+                        const totalRevenue =
+                          parseFloat(metrics.totalPlatformRevenue) || 0;
+                        const creatorPayouts =
+                          parseFloat(metrics.totalCreatorPayouts) || 0;
+                        // Creator share should be creatorPayouts / totalRevenue (90% expected)
+                        // totalPlatformRevenue is the grand total, creatorPayouts is 90% of it
+                        if (totalRevenue === 0) return "0.0";
+                        return ((creatorPayouts / totalRevenue) * 100).toFixed(
+                          1
+                        );
+                      })()}
                       %
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -2367,20 +2516,27 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <div className="text-2xl font-bold text-blue-600">
-                      {metrics.totalLicensesMinted +
-                        metrics.totalCertificateHolders}
+                      {metrics.totalLicensesMinted}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Paying Users
                     </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      (License holders)
+                    </p>
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <div className="text-2xl font-bold text-purple-600">
-                      {(
-                        (parseFloat(metrics.totalLicenseRevenue) +
-                          parseFloat(metrics.totalCertificateRevenue)) /
-                        Math.max(metrics.uniqueAddresses, 1)
-                      ).toFixed(4)}
+                      {(() => {
+                        const totalLicenseRev =
+                          parseFloat(metrics.totalLicenseRevenue) || 0;
+                        const totalCertRev =
+                          parseFloat(metrics.totalCertificateRevenue) || 0;
+                        const totalRevenue = totalLicenseRev + totalCertRev;
+                        // Use paying users (license holders) as denominator for accurate ARPU
+                        const payingUsers = metrics.totalLicensesMinted || 1;
+                        return (totalRevenue / payingUsers).toFixed(4);
+                      })()}
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Revenue/User (ETH)
@@ -2388,13 +2544,14 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <div className="text-2xl font-bold text-orange-600">
-                      {metrics.totalLicensesRenewed > 0
+                      {metrics.totalLicensesMinted > 0 &&
+                        metrics.totalLicensesRenewed > 0
                         ? (
-                            (metrics.totalLicensesRenewed /
-                              metrics.totalLicensesMinted) *
-                            100
-                          ).toFixed(1)
-                        : 0}
+                          (metrics.totalLicensesRenewed /
+                            metrics.totalLicensesMinted) *
+                          100
+                        ).toFixed(1)
+                        : "0.0"}
                       %
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -2416,55 +2573,11 @@ export default function AnalyticsPage() {
                     Manta Pacific blockchain metrics
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center">
-                      <div className="text-3xl font-bold">
-                        {metrics.averageBlockTime.toFixed(1)}s
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Average Block Time
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-3xl font-bold">
-                        {metrics.totalTransactions.toLocaleString()}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Total Transactions
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Transaction Distribution</span>
-                      <span>4 Contracts</span>
-                    </div>
-                    <div className="space-y-1">
-                      {contractInteractionsReport.map((item) => (
-                        <div
-                          key={item.contract}
-                          className="flex justify-between text-xs"
-                        >
-                          <span>{item.contract}</span>
-                          <span className="font-mono">{item.percentage}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t text-center">
-                    <div className="text-lg font-bold">
-                      {metrics.totalCourseCreations +
-                        metrics.totalLicenseMints +
-                        metrics.totalCertificateMints +
-                        metrics.totalProgressUpdates}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Key Events Tracked
-                    </p>
-                  </div>
+                <CardContent className="h-full">
+                  <NetworkPerformanceStats
+                    metrics={metrics}
+                    contractInteractionsReport={contractInteractionsReport}
+                  />
                 </CardContent>
               </Card>
 
@@ -2521,8 +2634,8 @@ export default function AnalyticsPage() {
                             status === "Revolutionary"
                               ? "default"
                               : status === "Excellent"
-                              ? "default"
-                              : "secondary"
+                                ? "default"
+                                : "secondary"
                           }
                         >
                           {status}

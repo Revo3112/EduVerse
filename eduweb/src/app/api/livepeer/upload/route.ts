@@ -13,8 +13,24 @@
  * @see https://docs.livepeer.org/api-reference/asset/upload
  */
 
-import { livepeerClient } from "@/lib/livepeer";
+import { livepeerClient, type Asset, type Task } from "@/lib/livepeer";
 import { NextRequest, NextResponse } from "next/server";
+
+/**
+ * Upload response data structure from Livepeer SDK
+ */
+interface UploadResponseData {
+  tusEndpoint?: string;
+  url?: string;
+  asset?: Asset;
+  task?: Task;
+  data?: {
+    tusEndpoint?: string;
+    url?: string;
+    asset?: Asset;
+    task?: Task;
+  };
+}
 
 /**
  * Request body schema
@@ -47,8 +63,18 @@ export async function POST(request: NextRequest) {
     console.log(`[API Upload] Requesting upload URL for: ${name}`);
     console.log(`[API Upload] IPFS enabled: ${enableIPFS}`);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const createPayload: any = {
+    const createPayload: {
+      name: string;
+      staticMp4: boolean;
+      profiles: Array<{
+        name: string;
+        bitrate: number;
+        fps: number;
+        width: number;
+        height: number;
+      }>;
+      storage?: { ipfs: boolean };
+    } = {
       name,
       staticMp4,
       profiles: [
@@ -88,11 +114,11 @@ export async function POST(request: NextRequest) {
       console.log(`[API Upload] Adding IPFS storage to asset creation`);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await livepeerClient.asset.create(createPayload);
+    const response = await livepeerClient.asset.create(createPayload);
 
     // Handle different response structures (SDK might wrap in .data)
-    const data = response.data || response;
+    const responseData = response as unknown as UploadResponseData;
+    const data = responseData.data || responseData;
 
     if (!data || !data.asset) {
       console.error("[API Upload] Invalid response structure");

@@ -1,6 +1,6 @@
 {
   "name": "eduverse-subgraph",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "EduVerse LMS Blockchain Indexer - Optimized 3-entity schema for Goldsky",
   "repository": {
     "type": "git",
@@ -11,9 +11,9 @@
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy:goldsky": "goldsky subgraph deploy eduverse-manta-pacific-sepolia/1.5.0 --path .",
+    "deploy:goldsky": "goldsky subgraph deploy eduverse/1.5.1 --path .",
     "deploy:studio": "graph deploy --studio eduverse-manta-pacific",
-    "deploy:dev": "goldsky subgraph deploy eduverse-manta-pacific-sepolia-dev/1.5.0 --path .",
+    "deploy:dev": "goldsky subgraph deploy eduverse-dev/1.5.1 --path .",
     "create-local": "graph create --node http://localhost:8020/ eduverse",
     "remove-local": "graph remove --node http://localhost:8020/ eduverse",
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 eduverse",

@@ -41,8 +41,9 @@ const ZERO_BI = BigInt.fromI32(0);
 const ONE_BI = BigInt.fromI32(1);
 const ZERO_BD = BigDecimal.fromString("0");
 const WEI_TO_ETH = BigDecimal.fromString("1000000000000000000");
-const PLATFORM_FEE_PERCENTAGE = BigInt.fromI32(10);
-const BASIS_POINTS = BigInt.fromI32(100);
+// Match smart contract: platformFeePercentage = 200 (2%) with basis 10000
+const PLATFORM_FEE_PERCENTAGE = BigInt.fromI32(200);
+const BASIS_POINTS = BigInt.fromI32(10000);
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const COURSE_LICENSE_NAME = "CourseLicense";
 
@@ -114,6 +115,7 @@ function createAdminConfigEvent(
 
 /**
  * Calculate platform fee (2% of price)
+ * Matches CourseLicense.sol: platformFee = (totalPrice * 200) / 10000
  */
 function calculatePlatformFee(price: BigInt): BigInt {
   return price.times(PLATFORM_FEE_PERCENTAGE).div(BASIS_POINTS);
@@ -121,6 +123,7 @@ function calculatePlatformFee(price: BigInt): BigInt {
 
 /**
  * Calculate creator revenue (98% of price)
+ * Matches CourseLicense.sol: creatorPayment = totalPrice - platformFee
  */
 function calculateCreatorRevenue(price: BigInt): BigInt {
   let platformFee = calculatePlatformFee(price);

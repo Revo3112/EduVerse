@@ -174,7 +174,7 @@ export const ANALYTICS_CATEGORY_BREAKDOWN = `
 
 export const ANALYTICS_DAILY_STATS = `
   query GetDailyStats($dates: [String!]) {
-    dailyNetworkStats(
+    dailyNetworkStats_collection(
       where: { date_in: $dates }
       orderBy: date
       orderDirection: desc

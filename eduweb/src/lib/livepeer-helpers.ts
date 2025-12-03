@@ -48,8 +48,9 @@ export interface VideoRendition {
  * </Player.Root>
  * ```
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function parsePlaybackSource(playbackInfo: any): any | null {
+export function parsePlaybackSource(
+  playbackInfo: { playbackInfo?: unknown } | null
+): ReturnType<typeof livepeerGetSrc> | null {
   if (!playbackInfo?.playbackInfo) {
     console.error("Invalid playback info structure:", playbackInfo);
     return null;
@@ -79,10 +80,32 @@ export function parsePlaybackSource(playbackInfo: any): any | null {
  * ))}
  * ```
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getVideoRenditions(playbackInfo: any): VideoRendition[] {
+
+interface PlaybackSource {
+  hrn?: string;
+  url?: string;
+  height?: number;
+  width?: number;
+  bitrate?: number;
+}
+
+interface PlaybackMeta {
+  meta?: {
+    source?: PlaybackSource[];
+  };
+  playbackInfo?: {
+    meta?: {
+      source?: PlaybackSource[];
+    };
+  };
+}
+
+export function getVideoRenditions(
+  playbackInfo: PlaybackMeta
+): VideoRendition[] {
   // Support both direct playbackInfo (from getSrc) and nested format (from old API)
-  const sources = playbackInfo?.meta?.source || playbackInfo?.playbackInfo?.meta?.source;
+  const sources =
+    playbackInfo?.meta?.source || playbackInfo?.playbackInfo?.meta?.source;
 
   if (!Array.isArray(sources) || sources.length === 0) {
     console.warn("[getVideoRenditions] No sources found:", playbackInfo);
@@ -92,8 +115,7 @@ export function getVideoRenditions(playbackInfo: any): VideoRendition[] {
   const renditions: VideoRendition[] = [];
 
   // Process MP4 renditions
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mp4Sources = sources.filter((s: any) => s.hrn === "MP4");
+  const mp4Sources = sources.filter((s: PlaybackSource) => s.hrn === "MP4");
   for (const source of mp4Sources) {
     if (source.height && source.url) {
       renditions.push({
@@ -108,8 +130,7 @@ export function getVideoRenditions(playbackInfo: any): VideoRendition[] {
   }
 
   // Process HLS rendition (adaptive streaming)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hlsSource = sources.find((s: any) => s.hrn === "HLS (TS)");
+  const hlsSource = sources.find((s: PlaybackSource) => s.hrn === "HLS (TS)");
   if (hlsSource?.url) {
     renditions.push({
       label: "Auto (HLS)",
@@ -131,10 +152,10 @@ export function getVideoRenditions(playbackInfo: any): VideoRendition[] {
  * @param playbackInfo - Raw playback info from livepeer.playback.get()
  * @returns True if video is still processing, false if ready
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function isVideoProcessing(playbackInfo: any): boolean {
+export function isVideoProcessing(playbackInfo: PlaybackMeta): boolean {
   // Support both direct playbackInfo and nested format
-  const sources = playbackInfo?.meta?.source || playbackInfo?.playbackInfo?.meta?.source;
+  const sources =
+    playbackInfo?.meta?.source || playbackInfo?.playbackInfo?.meta?.source;
 
   // No sources means still processing
   if (!Array.isArray(sources) || sources.length === 0) {
@@ -144,8 +165,7 @@ export function isVideoProcessing(playbackInfo: any): boolean {
   // Only source playback available means transcoding in progress
   // Transcoded renditions will include MP4 or HLS
   const hasTranscodedRenditions = sources.some(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (s: any) => s.hrn === "MP4" || s.hrn === "HLS (TS)"
+    (s: PlaybackSource) => s.hrn === "MP4" || s.hrn === "HLS (TS)"
   );
 
   return !hasTranscodedRenditions;
@@ -157,8 +177,7 @@ export function isVideoProcessing(playbackInfo: any): boolean {
  * @param playbackInfo - Raw playback info from livepeer.playback.get()
  * @returns URL of highest quality MP4 rendition, or null if none available
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getBestQualityMP4(playbackInfo: any): string | null {
+export function getBestQualityMP4(playbackInfo: PlaybackMeta): string | null {
   const renditions = getVideoRenditions(playbackInfo);
   const mp4Renditions = renditions.filter((r) => r.type === "MP4");
 
@@ -228,8 +247,8 @@ export function isLivepeerPlaybackId(contentId: string): boolean {
   if (!contentId) return false;
 
   // IPFS CIDs start with known prefixes and are typically 46+ characters
-  const ipfsPrefixes = ['Qm', 'bafy', 'bafk', 'bafybe', 'zdj'];
-  const isIpfs = ipfsPrefixes.some(prefix => contentId.startsWith(prefix));
+  const ipfsPrefixes = ["Qm", "bafy", "bafk", "bafybe", "zdj"];
+  const isIpfs = ipfsPrefixes.some((prefix) => contentId.startsWith(prefix));
 
   if (isIpfs) return false;
 

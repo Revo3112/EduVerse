@@ -66,7 +66,7 @@ export function GetCertificateModal({
   const [actualPrice, setActualPrice] = useState<bigint>(BigInt(0));
   const [priceLoading, setPriceLoading] = useState(true);
   const [existingTokenId, setExistingTokenId] = useState<bigint>(BigInt(0));
-  const [existingCourses, setExistingCourses] = useState<bigint[]>([]);
+  const [, setExistingCourses] = useState<bigint[]>([]);
   const [isFirstCertificate, setIsFirstCertificate] = useState(true);
   const [courseAlreadyInCertificate, setCourseAlreadyInCertificate] =
     useState(false);

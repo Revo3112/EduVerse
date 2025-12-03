@@ -266,6 +266,7 @@ function EditCourseContent() {
     if (activeAccount?.address) {
       loadCourseData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, activeAccount?.address]);
 
   async function loadCourseData() {

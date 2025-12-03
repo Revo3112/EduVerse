@@ -11,6 +11,18 @@
 import { livepeerClient, type Asset, type Task } from "@/lib/livepeer";
 
 /**
+ * Livepeer SDK response structure for createViaUrl
+ */
+interface UploadViaUrlResponse {
+  asset?: Asset;
+  task?: Task;
+  data?: {
+    asset?: Asset;
+    task?: Task;
+  };
+}
+
+/**
  * Upload result containing asset and task information
  */
 export interface LivepeerUploadResult {
@@ -74,9 +86,7 @@ export async function uploadVideoFromURL(
   try {
     console.log(`[Livepeer Upload] Starting upload from URL: ${url}`);
 
-    // SDK response structure may vary, using any for flexibility
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await livepeerClient.asset.createViaUrl({
+    const rawResponse = await livepeerClient.asset.createViaUrl({
       url,
       name,
       // Enable static MP4 for short videos (<2min) for instant playback
@@ -89,21 +99,25 @@ export async function uploadVideoFromURL(
       }),
     });
 
-    if (!response.asset || !response.task) {
+    // Handle different response structures from SDK
+    const response = rawResponse as unknown as UploadViaUrlResponse;
+    const data = response.data || response;
+
+    if (!data.asset || !data.task) {
       throw new Error("Invalid response from Livepeer API");
     }
 
     const result: LivepeerUploadResult = {
-      asset: response.asset,
-      task: response.task,
-      playbackId: response.asset.playbackId || "",
-      ipfsCid: response.asset.storage?.ipfs?.cid,
+      asset: data.asset,
+      task: data.task,
+      playbackId: data.asset.playbackId || "",
+      ipfsCid: data.asset.storage?.ipfs?.nftMetadata?.cid,
     };
 
     console.log(`[Livepeer Upload] Upload initiated successfully`);
-    console.log(`  - Asset ID: ${response.asset.id}`);
+    console.log(`  - Asset ID: ${data.asset.id}`);
     console.log(`  - Playback ID: ${result.playbackId}`);
-    console.log(`  - Task ID: ${response.task.id}`);
+    console.log(`  - Task ID: ${data.task.id}`);
     if (result.ipfsCid) {
       console.log(`  - IPFS CID: ${result.ipfsCid}`);
     }
@@ -141,9 +155,12 @@ export async function enableIPFSStorage(
     console.log(`[Livepeer IPFS] Enabling IPFS storage for asset: ${assetId}`);
 
     // First, check if asset is ready
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const assetResponse: any = await livepeerClient.asset.get(assetId);
-    const asset = assetResponse.asset || assetResponse;
+    const assetResponse = await livepeerClient.asset.get(assetId);
+    const responseData = assetResponse as unknown as { asset?: Asset } | Asset;
+    const asset =
+      "asset" in responseData && responseData.asset
+        ? responseData.asset
+        : (responseData as Asset);
 
     if (!asset) {
       throw new Error(`Asset not found: ${assetId}`);
@@ -152,7 +169,7 @@ export async function enableIPFSStorage(
     const phase = asset.status?.phase;
     console.log(`[Livepeer IPFS] Asset status: ${phase}`);
 
-    if (phase !== 'ready') {
+    if (phase !== "ready") {
       throw new Error(
         `Asset is not ready for IPFS storage. Current status: ${phase}. Please wait for processing to complete.`
       );
@@ -176,17 +193,21 @@ export async function enableIPFSStorage(
     const pollInterval = 3000; // 3 seconds
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pollResponse: any = await livepeerClient.asset.get(assetId);
-      const polledAsset = pollResponse.asset || pollResponse;
+      const pollResponse = await livepeerClient.asset.get(assetId);
+      const pollData = pollResponse as unknown as { asset?: Asset } | Asset;
+      const polledAsset =
+        "asset" in pollData && pollData.asset
+          ? pollData.asset
+          : (pollData as Asset);
 
-      if (polledAsset.storage?.ipfs?.cid) {
+      const ipfsCid = polledAsset.storage?.ipfs?.nftMetadata?.cid;
+      if (ipfsCid) {
         const result: IPFSStorageResult = {
-          cid: polledAsset.storage.ipfs.cid,
+          cid: ipfsCid,
           gatewayUrl:
-            polledAsset.storage.ipfs.gatewayUrl ||
-            `https://ipfs.io/ipfs/${polledAsset.storage.ipfs.cid}`,
-          nftMetadataCid: polledAsset.storage.ipfs.nftMetadata?.cid,
+            polledAsset.storage?.ipfs?.nftMetadata?.gatewayUrl ||
+            `https://ipfs.io/ipfs/${ipfsCid}`,
+          nftMetadataCid: ipfsCid,
         };
 
         console.log(`[Livepeer IPFS] IPFS storage enabled successfully`);
@@ -198,14 +219,18 @@ export async function enableIPFSStorage(
       }
 
       if (attempt < maxAttempts) {
-        console.log(`[Livepeer IPFS] CID not ready yet, waiting... (${attempt}/${maxAttempts})`);
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        console.log(
+          `[Livepeer IPFS] CID not ready yet, waiting... (${attempt}/${maxAttempts})`
+        );
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
       }
     }
 
     throw new Error(
-      `IPFS CID not generated after ${maxAttempts * pollInterval / 1000} seconds. ` +
-      `This may indicate an issue with IPFS pinning. Please try again later or contact support.`
+      `IPFS CID not generated after ${
+        (maxAttempts * pollInterval) / 1000
+      } seconds. ` +
+        `This may indicate an issue with IPFS pinning. Please try again later or contact support.`
     );
   } catch (error) {
     console.error("[Livepeer IPFS] Failed to enable IPFS storage:", error);
@@ -292,9 +317,7 @@ export async function uploadFromPinataIPFS(
   // Use IPFS protocol URL for better compatibility
   const ipfsUrl = `ipfs://${pinataCID}`;
 
-  console.log(
-    `[Livepeer Migration] Uploading from Pinata CID: ${pinataCID}`
-  );
+  console.log(`[Livepeer Migration] Uploading from Pinata CID: ${pinataCID}`);
 
   // Upload to Livepeer with IPFS enabled
   const result = await uploadVideoFromURL(ipfsUrl, filename, true);

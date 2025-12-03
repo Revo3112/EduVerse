@@ -7,7 +7,7 @@
  * @route DELETE /api/livepeer/asset/[assetId]
  */
 
-import { livepeerClient } from "@/lib/livepeer";
+import { livepeerClient, type Asset } from "@/lib/livepeer";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
@@ -27,19 +27,21 @@ export async function GET(
     console.log(`[API Asset] Fetching asset: ${assetId}`);
 
     // Get asset from Livepeer
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await livepeerClient.asset.get(assetId);
+    const response = await livepeerClient.asset.get(assetId);
 
-    // Handle response structure
-    const asset = response.asset || response;
+    // Handle response structure - SDK returns GetAssetResponse with asset property
+    const responseData = response as unknown as { asset?: Asset } | Asset;
+    const asset =
+      "asset" in responseData && responseData.asset
+        ? responseData.asset
+        : (responseData as Asset);
 
     if (!asset) {
       return NextResponse.json({ error: "Asset not found" }, { status: 404 });
     }
 
-    console.log(
-      `[API Asset] Asset status: ${asset.status?.phase || "unknown"}`
-    );
+    const status = asset.status?.phase || "unknown";
+    console.log(`[API Asset] Asset status: ${status}`);
 
     return NextResponse.json(asset);
   } catch (error) {

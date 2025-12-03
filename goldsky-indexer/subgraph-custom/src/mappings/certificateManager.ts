@@ -51,6 +51,13 @@ const ONE_BIGINT = BigInt.fromI32(1);
 const WEI_TO_ETH = BigDecimal.fromString("1000000000000000000");
 const CERTIFICATE_MANAGER_NAME = "CertificateManager";
 
+// Fee structure matching CertificateManager.sol smart contract:
+// - First certificate mint: 10% platform, 90% creator (_processCertificatePayment)
+// - Course addition to certificate: 2% platform, 98% creator (_processPayment)
+const CERTIFICATE_MINT_PLATFORM_FEE_BPS = BigInt.fromI32(1000); // 10% = 1000/10000
+const COURSE_ADDITION_PLATFORM_FEE_BPS = BigInt.fromI32(200); // 2% = 200/10000
+const BASIS_POINTS = BigInt.fromI32(10000);
+
 function weiToEth(wei: BigInt): BigDecimal {
   return wei.toBigDecimal().div(WEI_TO_ETH);
 }
@@ -315,7 +322,7 @@ export function handleCertificateMinted(event: CertificateMinted): void {
 
   createActivityEvent(
     event,
-    "certificate_minted",
+    "CERTIFICATE_MINTED",
     event.params.owner,
     "Minted certificate: " + event.params.recipientName,
     null,
@@ -327,20 +334,19 @@ export function handleCertificateMinted(event: CertificateMinted): void {
   incrementPlatformCounter("CERTIFICATE", event);
   updateNetworkStats(event, "CERTIFICATE_MINTED");
 
-  let platformFeePercent = BigDecimal.fromString("10");
+  // Certificate mint uses 10% platform fee (matches _processCertificatePayment in smart contract)
   let platformFee = mintPrice
-    .toBigDecimal()
-    .times(platformFeePercent)
-    .div(BigDecimal.fromString("100"));
-  let creatorRevenue = mintPrice.toBigDecimal().minus(platformFee);
+    .times(CERTIFICATE_MINT_PLATFORM_FEE_BPS)
+    .div(BASIS_POINTS);
+  let creatorRevenue = mintPrice.minus(platformFee);
 
   addPlatformRevenue(
     mintPrice,
     weiToEth(mintPrice),
-    BigInt.fromString(platformFee.truncate(0).toString()),
-    platformFee.div(WEI_TO_ETH),
-    BigInt.fromString(creatorRevenue.truncate(0).toString()),
-    creatorRevenue.div(WEI_TO_ETH),
+    platformFee,
+    weiToEth(platformFee),
+    creatorRevenue,
+    weiToEth(creatorRevenue),
     event,
   );
 
@@ -548,48 +554,35 @@ export function handleCourseAddedToCertificate(
   );
   certificate.save();
 
-  updateNetworkStats(event, "CERTIFICATE_UPDATE");
+  updateNetworkStats(event, "COURSE_ADDED_TO_CERTIFICATE");
+
+  // Course addition uses 2% platform fee (matches _processPayment in smart contract)
+  // Note: Smart contract uses same 2% fee regardless of first course or additional courses
+  let platformFee = addPrice
+    .times(COURSE_ADDITION_PLATFORM_FEE_BPS)
+    .div(BASIS_POINTS);
+  let creatorRevenue = addPrice.minus(platformFee);
 
   if (course) {
     let creator = getOrCreateUserProfile(course.creator, event);
 
-    let isFirstCourse = certificate.totalCourses.equals(ONE_BIGINT);
-    let platformFeePercent = isFirstCourse
-      ? BigDecimal.fromString("10")
-      : BigDecimal.fromString("5");
-    let platformFee = addPrice
-      .toBigDecimal()
-      .times(platformFeePercent)
-      .div(BigDecimal.fromString("100"));
-    let creatorRevenue = addPrice.toBigDecimal().minus(platformFee);
-
     addPlatformRevenue(
       addPrice,
       weiToEth(addPrice),
-      BigInt.fromString(platformFee.truncate(0).toString()),
-      platformFee.div(WEI_TO_ETH),
-      BigInt.fromString(creatorRevenue.truncate(0).toString()),
-      creatorRevenue.div(WEI_TO_ETH),
+      platformFee,
+      weiToEth(platformFee),
+      creatorRevenue,
+      weiToEth(creatorRevenue),
       event,
     );
   } else {
-    let isFirstCourse = certificate.totalCourses.equals(ONE_BIGINT);
-    let platformFeePercent = isFirstCourse
-      ? BigDecimal.fromString("10")
-      : BigDecimal.fromString("5");
-    let platformFee = addPrice
-      .toBigDecimal()
-      .times(platformFeePercent)
-      .div(BigDecimal.fromString("100"));
-    let creatorRevenue = addPrice.toBigDecimal().minus(platformFee);
-
     addPlatformRevenue(
       addPrice,
       weiToEth(addPrice),
-      BigInt.fromString(platformFee.truncate(0).toString()),
-      platformFee.div(WEI_TO_ETH),
-      BigInt.fromString(creatorRevenue.truncate(0).toString()),
-      creatorRevenue.div(WEI_TO_ETH),
+      platformFee,
+      weiToEth(platformFee),
+      creatorRevenue,
+      weiToEth(creatorRevenue),
       event,
     );
   }
@@ -599,7 +592,7 @@ export function handleCourseAddedToCertificate(
 
   createActivityEvent(
     event,
-    "course_added_to_certificate",
+    "COURSE_ADDED_TO_CERTIFICATE",
     owner,
     "Added course '" + courseName + "' to certificate",
     courseForActivity,
@@ -638,9 +631,12 @@ export function handleCertificateUpdated(event: CertificateUpdated): void {
     profile.updatedAt = event.block.timestamp;
     profile.save();
 
+    // Track network stats
+    updateNetworkStats(event, "CERTIFICATE_UPDATED");
+
     createActivityEvent(
       event,
-      "certificate_updated",
+      "CERTIFICATE_UPDATED",
       certificate.recipientAddress,
       "Updated certificate metadata",
       null,
@@ -664,9 +660,12 @@ export function handleCertificateRevoked(event: CertificateRevoked): void {
     certificate.lastUpdated = event.block.timestamp;
     certificate.save();
 
+    // Track network stats
+    updateNetworkStats(event, "CERTIFICATE_REVOKED");
+
     createActivityEvent(
       event,
-      "certificate_revoked",
+      "CERTIFICATE_REVOKED",
       certificate.recipientAddress,
       "Certificate revoked: " + event.params.reason,
       null,
@@ -693,6 +692,9 @@ export function handleCertificatePaymentRecorded(
     certificate.lastUpdated = event.block.timestamp;
     certificate.save();
 
+    // Track network stats
+    updateNetworkStats(event, "CERTIFICATE_PAYMENT_RECORDED");
+
     log.info("Certificate payment recorded - tokenId: {}", [
       event.params.tokenId.toString(),
     ]);
@@ -707,6 +709,9 @@ export function handleBaseRouteUpdated(event: BaseRouteUpdated): void {
     certificate.baseRoute = event.params.newBaseRoute;
     certificate.lastUpdated = event.block.timestamp;
     certificate.save();
+
+    // Track network stats
+    updateNetworkStats(event, "CONFIG_UPDATE");
 
     log.info("Certificate base route updated - tokenId: {}, route: {}", [
       event.params.tokenId.toString(),
@@ -746,6 +751,9 @@ export function handleDefaultBaseRouteUpdated(
     event.transaction.hash,
   );
 
+  // Track network stats
+  updateNetworkStats(event, "CONFIG_UPDATE");
+
   log.info("Default base route updated: {}", [event.params.newBaseRoute]);
 }
 
@@ -778,6 +786,9 @@ export function handleDefaultMetadataBaseURIUpdated(
     event.block.number,
     event.transaction.hash,
   );
+
+  // Track network stats
+  updateNetworkStats(event, "CONFIG_UPDATE");
 
   log.info("Metadata base URI updated: {}", [event.params.newBaseURI]);
 }
@@ -817,6 +828,9 @@ export function handlePlatformNameUpdated(event: PlatformNameUpdated): void {
     event.block.number,
     event.transaction.hash,
   );
+
+  // Track network stats
+  updateNetworkStats(event, "CONFIG_UPDATE");
 
   log.info("Platform name updated: {}", [event.params.newPlatformName]);
 }
@@ -870,6 +884,9 @@ export function handleCourseAdditionFeeUpdated(
     event.transaction.hash,
   );
 
+  // Track network stats
+  updateNetworkStats(event, "CONFIG_UPDATE");
+
   log.info("Course addition fee updated: {} wei", [
     event.params.newFee.toString(),
   ]);
@@ -886,6 +903,9 @@ export function handleCourseCertificatePriceSet(
     course.certificatePriceEth = weiToEth(event.params.price);
     course.updatedAt = event.block.timestamp;
     course.save();
+
+    // Track network stats
+    updateNetworkStats(event, "CONFIG_UPDATE");
 
     log.info("Course certificate price set - courseId: {}, price: {} wei", [
       courseId.toString(),
@@ -912,6 +932,9 @@ export function handleTokenURIUpdated(event: TokenURIUpdated): void {
       profile.lastTxHash = event.transaction.hash;
       profile.save();
     }
+
+    // Track network stats
+    updateNetworkStats(event, "CERTIFICATE_URI_UPDATED");
 
     log.info("Token URI updated for certificate {}: {}", [
       certificateId,

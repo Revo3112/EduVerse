@@ -1,5 +1,3 @@
-import { createThirdwebClient, getContract, readContract } from "thirdweb";
-import { mantaPacificTestnet } from "thirdweb/chains";
 import dotenv from "dotenv";
 import path from "path";
 
@@ -8,7 +6,6 @@ dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 const CERTIFICATE_MANAGER_ADDRESS =
   process.env.NEXT_PUBLIC_CERTIFICATE_MANAGER_ADDRESS!;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL!;
-const CLIENT_ID = process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!;
 const GOLDSKY_ENDPOINT = process.env.NEXT_PUBLIC_GOLDSKY_GRAPHQL_ENDPOINT!;
 const PINATA_GATEWAY = process.env.NEXT_PUBLIC_PINATA_GATEWAY!;
 
@@ -196,7 +193,7 @@ async function verifyCertificateMetadata() {
 
     for (const attrName of requiredAttributes) {
       const attr = metadata.attributes?.find(
-        (a: any) => a.trait_type === attrName
+        (a: { trait_type: string; value: string }) => a.trait_type === attrName
       );
       if (attr) {
         console.log(`✅ ${attrName}: ${attr.value}`);
@@ -213,7 +210,8 @@ async function verifyCertificateMetadata() {
     const coursesMatch =
       parseInt(
         metadata.attributes.find(
-          (a: any) => a.trait_type === "Total Courses Completed"
+          (a: { trait_type: string; value: string }) =>
+            a.trait_type === "Total Courses Completed"
         )?.value
       ) === parseInt(certificate.totalCourses);
 

@@ -14,8 +14,11 @@ import {
 interface TimeSeriesData {
   date: string;
   transactions: number;
-  gasUsed: string;
-  gasCost: string;
+  blockCount: number;
+  courseTransactions: number;
+  licenseTransactions: number;
+  certificateTransactions: number;
+  progressTransactions: number;
 }
 
 // Types for contract interactions
@@ -26,10 +29,10 @@ interface ContractStats {
   certificateManager: number;
 }
 
-// Types for user activity
-interface UserActivity {
-  totalUsers: number;
-  activeUsers: number;
+// Types for success rate
+interface TransactionSuccess {
+  successfulTransactions: number;
+  failedTransactions: number;
   successRate: string;
 }
 
@@ -37,9 +40,6 @@ interface UserActivity {
 export interface UseNetworkAnalyticsReturn {
   // Current stats
   totalTransactions: number;
-  totalGasUsed: string;
-  totalGasCost: string;
-  averageGasPrice: string;
   averageBlockTime: number;
   lastBlockNumber: number;
 
@@ -55,17 +55,8 @@ export interface UseNetworkAnalyticsReturn {
   // Time series data
   dailyStats: TimeSeriesData[];
 
-  // User activity
-  userActivity: UserActivity;
-
-  // Recent transactions
-  recentTransactions: {
-    hash: string;
-    type: string;
-    action: string;
-    timestamp: number;
-    success: boolean;
-  }[];
+  // Transaction success metrics
+  transactionSuccess: TransactionSuccess;
 
   // Status
   isLoading: boolean;
@@ -98,45 +89,37 @@ export function useNetworkAnalytics(): UseNetworkAnalyticsReturn {
   };
 
   // Process daily stats for time series
-  const dailyStats: TimeSeriesData[] = data?.dailyStats.map((day) => ({
-    date: day.date,
-    transactions: day.transactionCount,
-    gasUsed: day.gasUsed,
-    gasCost: day.gasCost,
-  })) ?? [];
+  const dailyStats: TimeSeriesData[] =
+    data?.dailyStats.map((day) => ({
+      date: day.date,
+      transactions: day.transactionCount,
+      blockCount: day.blockCount,
+      courseTransactions: day.courseTransactions,
+      licenseTransactions: day.licenseTransactions,
+      certificateTransactions: day.certificateTransactions,
+      progressTransactions: day.progressTransactions,
+    })) ?? [];
 
-  // Calculate user activity metrics
-  const userActivity: UserActivity = {
-    totalUsers:
-      data?.dailyStats.reduce((max, day) => Math.max(max, day.uniqueUsers), 0) ??
-      0,
-    activeUsers:
-      data?.dailyStats[0]?.uniqueUsers ?? 0, // Most recent day's active users
+  // Calculate transaction success metrics from daily stats
+  const totalSuccessful =
+    data?.dailyStats.reduce(
+      (sum, day) => sum + day.successfulTransactions,
+      0
+    ) ?? 0;
+  const totalFailed =
+    data?.dailyStats.reduce((sum, day) => sum + day.failedTransactions, 0) ?? 0;
+  const totalTx = totalSuccessful + totalFailed;
+
+  const transactionSuccess: TransactionSuccess = {
+    successfulTransactions: totalSuccessful,
+    failedTransactions: totalFailed,
     successRate:
-      data?.dailyStats[0]
-        ? (
-            (data.dailyStats[0].successfulTransactions /
-              data.dailyStats[0].transactionCount) *
-            100
-          ).toFixed(2)
-        : "0.00",
+      totalTx > 0 ? ((totalSuccessful / totalTx) * 100).toFixed(2) : "100.00",
   };
-
-  // Process recent transactions
-  const recentTransactions = data?.recentTransactions.map((tx) => ({
-    hash: tx.hash,
-    type: tx.eventType,
-    action: tx.eventAction,
-    timestamp: tx.timestamp,
-    success: tx.success,
-  })) ?? [];
 
   return {
     // Current stats
     totalTransactions: data?.currentStats.totalTransactions ?? 0,
-    totalGasUsed: data?.currentStats.totalGasUsed ?? "0",
-    totalGasCost: data?.currentStats.totalGasCost ?? "0",
-    averageGasPrice: data?.currentStats.averageGasPrice ?? "0",
     averageBlockTime: data?.currentStats.averageBlockTime ?? 0,
     lastBlockNumber: data?.currentStats.lastBlockNumber ?? 0,
 
@@ -149,8 +132,7 @@ export function useNetworkAnalytics(): UseNetworkAnalyticsReturn {
     // Processed metrics
     contractStats,
     dailyStats,
-    userActivity,
-    recentTransactions,
+    transactionSuccess,
 
     // Status
     isLoading,
@@ -170,10 +152,10 @@ export function useNetworkAnalytics(): UseNetworkAnalyticsReturn {
 function NetworkStats() {
   const {
     totalTransactions,
-    totalGasUsed,
+    averageBlockTime,
     contractStats,
     dailyStats,
-    userActivity,
+    transactionSuccess,
     isLoading,
     error
   } = useNetworkAnalytics();
@@ -185,11 +167,11 @@ function NetworkStats() {
     <div>
       <h2>Network Overview</h2>
       <p>Total Transactions: {totalTransactions}</p>
-      <p>Total Gas Used: {totalGasUsed}</p>
+      <p>Average Block Time: {averageBlockTime}s</p>
 
       <h3>Contract Activity</h3>
       <p>CourseFactory: {contractStats.courseFactory} interactions</p>
-      <p>Success Rate: {userActivity.successRate}%</p>
+      <p>Success Rate: {transactionSuccess.successRate}%</p>
 
       <h3>Daily Transactions</h3>
       {dailyStats.map(day => (
