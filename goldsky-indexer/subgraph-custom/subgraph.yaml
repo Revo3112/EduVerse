@@ -285,12 +285,13 @@ features:
 # ============================================================================
 
 # ============================================================================
-# DEPLOYMENT VERIFICATION
+# DEPLOYMENT VERIFICATION (Updated: 2025-11-05)
 # ============================================================================
-# ✅ CourseFactory:      0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72 (Block 5386706)
-# ✅ CourseLicense:      0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578 (Block 5386710)
-# ✅ ProgressTracker:    0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2 (Block 5386715)
-# ✅ CertificateManager: 0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5 (Block 5386719)
+# Current Deployment (Manta Pacific Sepolia):
+# ✅ CourseFactory:      0xDb76942D6BeC2d59929Fd730c3Aad419E5Cc1598 (Block 5418109)
+# ✅ CourseLicense:      0xC6566FC4c4d28Ad923ca5f311F4bf972a07A143a (Block 5418111)
+# ✅ ProgressTracker:    0x6eA7FeEc013ce86B397edB36B382AB11b64a6778 (Block 5418113)
+# ✅ CertificateManager: 0x335BD88512Ce9Eff0009f05261ec47679427805d (Block 5418114)
 #
 # Total blocks to index: ~50 blocks (very fast sync!)
 # Expected sync time: 2-5 minutes (optimal)

@@ -27,7 +27,7 @@ const ZERO_BD = BigDecimal.fromString("0");
 const ONE_HUNDRED_BD = BigDecimal.fromString("100");
 
 // Contract addresses (must match deployment)
-const COURSE_FACTORY_ADDRESS = "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72";
+const COURSE_FACTORY_ADDRESS = "0xDb76942D6BeC2d59929Fd730c3Aad419E5Cc1598";
 
 // ============================================================================
 // HELPER FUNCTIONS

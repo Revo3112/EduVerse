@@ -115,9 +115,23 @@ export default function AdminPage() {
     checkOwnership();
   }, [account?.address]);
 
+  // Auto-populate input fields when contract data loads
+  useEffect(() => {
+    if (contractData.defaultBaseRoute) {
+      setBaseRoute(contractData.defaultBaseRoute);
+    }
+    if (contractData.defaultMetadataBaseURI) {
+      setMetadataBaseURI(contractData.defaultMetadataBaseURI);
+    }
+    if (contractData.licenseBaseURI) {
+      setLicenseBaseURI(contractData.licenseBaseURI);
+    }
+  }, [contractData]);
+
   async function loadContractData() {
     setLoadingData(true);
     try {
+      // Fetch on-chain data (always works if contract is deployed)
       const [
         defaultCertFee,
         defaultCourseAddFee,
@@ -127,7 +141,6 @@ export default function AdminPage() {
         platformWalletAddr,
         licensePlatformWalletAddr,
         platformFeePercentage,
-        licenseConfig,
       ] = await Promise.all([
         readContract({
           contract: certificateManager,
@@ -169,8 +182,15 @@ export default function AdminPage() {
           method: "function platformFeePercentage() view returns (uint256)",
           params: [],
         }),
-        getContractConfig(CONTRACT_ADDRESSES.COURSE_LICENSE.toLowerCase()),
       ]);
+
+      // Fetch Goldsky config separately (may be null if no events emitted yet)
+      let licenseConfig = null;
+      try {
+        licenseConfig = await getContractConfig(CONTRACT_ADDRESSES.COURSE_LICENSE.toLowerCase());
+      } catch (goldskyError) {
+        console.warn("[Admin] Goldsky config not available (this is normal if no config events have been emitted):", goldskyError);
+      }
 
       setContractData({
         defaultCertFee: defaultCertFee.toString(),
@@ -180,8 +200,7 @@ export default function AdminPage() {
         defaultMetadataBaseURI,
         platformWallet: platformWalletAddr,
         licensePlatformWallet: licensePlatformWalletAddr,
-        licenseBaseURI:
-          licenseConfig?.baseURI || licenseConfig?.licenseBaseURI || "",
+        licenseBaseURI: licenseConfig?.licenseBaseURI || "",
         platformFeePercentage: platformFeePercentage.toString(),
       });
       toast.success("Contract data loaded successfully");
@@ -192,6 +211,7 @@ export default function AdminPage() {
       setLoadingData(false);
     }
   }
+
 
   async function handleSetCertificateFee() {
     if (!account) return;
@@ -883,21 +903,20 @@ export default function AdminPage() {
                     Metadata Base URI:
                   </span>
                   <p
-                    className={`font-mono break-all ${
-                      contractData.defaultMetadataBaseURI !==
+                    className={`font-mono break-all ${contractData.defaultMetadataBaseURI !==
                       EXPECTED_METADATA_URI
-                        ? "text-yellow-600 dark:text-yellow-400 font-semibold"
-                        : ""
-                    }`}
+                      ? "text-yellow-600 dark:text-yellow-400 font-semibold"
+                      : ""
+                      }`}
                   >
                     {contractData.defaultMetadataBaseURI || "Not loaded"}
                   </p>
                   {contractData.defaultMetadataBaseURI ===
                     EXPECTED_METADATA_URI && (
-                    <p className="text-green-600 dark:text-green-400 text-xs mt-1">
-                      ✓ Correctly configured
-                    </p>
-                  )}
+                      <p className="text-green-600 dark:text-green-400 text-xs mt-1">
+                        ✓ Correctly configured
+                      </p>
+                    )}
                 </div>
                 <div>
                   <span className="text-muted-foreground">
@@ -928,8 +947,8 @@ export default function AdminPage() {
                   <p className="font-mono">
                     {contractData.platformFeePercentage
                       ? `${(
-                          Number(contractData.platformFeePercentage) / 100
-                        ).toFixed(2)}%`
+                        Number(contractData.platformFeePercentage) / 100
+                      ).toFixed(2)}%`
                       : "Not loaded"}
                   </p>
                 </div>
@@ -1111,7 +1130,7 @@ export default function AdminPage() {
               <div className="flex gap-2">
                 <Input
                   type="text"
-                  placeholder="https://yourdomain.com/verify"
+                  placeholder={contractData.defaultBaseRoute || "Enter base route URL"}
                   value={baseRoute}
                   onChange={(e) => setBaseRoute(e.target.value)}
                 />
@@ -1124,7 +1143,7 @@ export default function AdminPage() {
               <div className="flex gap-2">
                 <Input
                   type="text"
-                  placeholder="https://yourdomain.com/api/metadata"
+                  placeholder={contractData.defaultMetadataBaseURI || "Enter metadata base URI"}
                   value={metadataBaseURI}
                   onChange={(e) => setMetadataBaseURI(e.target.value)}
                 />
@@ -1196,7 +1215,7 @@ export default function AdminPage() {
               <div className="flex gap-2">
                 <Input
                   type="text"
-                  placeholder="https://yourdomain.com/api/nft/license/"
+                  placeholder={contractData.licenseBaseURI || "Enter license base URI"}
                   value={licenseBaseURI}
                   onChange={(e) => setLicenseBaseURI(e.target.value)}
                 />

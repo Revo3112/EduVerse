@@ -14,7 +14,6 @@ export interface ContractConfig {
   defaultPlatformName?: string;
   defaultBaseRoute?: string;
   defaultMetadataBaseURI?: string;
-  baseURI?: string;
   licenseBaseURI?: string;
   isPaused?: boolean;
   lastUpdated?: string;
@@ -55,7 +54,6 @@ export async function getContractConfig(
         defaultPlatformName
         defaultBaseRoute
         defaultMetadataBaseURI
-        baseURI
         licenseBaseURI
         isPaused
         lastUpdated
@@ -91,7 +89,6 @@ export async function getAllContractConfigs(): Promise<ContractConfig[]> {
         defaultPlatformName
         defaultBaseRoute
         defaultMetadataBaseURI
-        baseURI
         licenseBaseURI
         isPaused
         lastUpdated

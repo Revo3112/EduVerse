@@ -15,23 +15,23 @@ const SUBGRAPH_URL =
 // Contract Addresses (Manta Pacific Sepolia)
 const CONTRACTS = {
   CourseFactory: {
-    address: "0x8596917Af32Ab154Ab4F48efD32Ef516D4110E72",
-    startBlock: 5386706,
+    address: "0xDb76942D6BeC2d59929Fd730c3Aad419E5Cc1598",
+    startBlock: 5418109,
     events: ["CourseCreated", "SectionAdded"],
   },
   CourseLicense: {
-    address: "0xcEcB4D9A2c051086530D614de4cF4D0f03eDd578",
-    startBlock: 5386710,
+    address: "0xC6566FC4c4d28Ad923ca5f311F4bf972a07A143a",
+    startBlock: 5418111,
     events: ["LicenseMinted", "LicenseRenewed"],
   },
   ProgressTracker: {
-    address: "0xf2D64246dB5E99a72e1F24e2629D590cF25b8cC2",
-    startBlock: 5386715,
+    address: "0x6eA7FeEc013ce86B397edB36B382AB11b64a6778",
+    startBlock: 5418113,
     events: ["SectionCompleted", "CourseCompleted"],
   },
   CertificateManager: {
-    address: "0xC7a6EA3B185328A61B30c209e98c1EeC817acFf5",
-    startBlock: 5386719,
+    address: "0x335BD88512Ce9Eff0009f05261ec47679427805d",
+    startBlock: 5418114,
     events: ["CertificateMinted", "CourseAddedToCertificate"],
   },
 };
@@ -104,10 +104,9 @@ async function verifyIndexing() {
   console.log(`- Current Block: ${meta._meta.block.number}`);
   console.log(`- Deployment ID: ${meta._meta.deployment}`);
   console.log(
-    `- Indexing Errors: ${
-      meta._meta.hasIndexingErrors
-        ? colors.red + "YES" + colors.reset
-        : colors.green + "NO" + colors.reset
+    `- Indexing Errors: ${meta._meta.hasIndexingErrors
+      ? colors.red + "YES" + colors.reset
+      : colors.green + "NO" + colors.reset
     }\n`,
   );
 
@@ -172,8 +171,7 @@ async function verifyIndexing() {
         // Verify counts match
         if (entityCount !== events.length) {
           console.error(
-            `${colors.red}❌ Mismatch: ${
-              events.length - entityCount
+            `${colors.red}❌ Mismatch: ${events.length - entityCount
             } missing entities${colors.reset}`,
           );
           hasErrors = true;
