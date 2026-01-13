@@ -129,9 +129,8 @@ function constructMetadata(certificate: Certificate) {
   return {
     // Standard ERC-1155 fields
     name: `${platformName} Certificate #${tokenId}`,
-    description: `This evolving certificate represents the complete learning journey of ${recipientName} on ${platformName}. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${totalCourses} verified course${
-      totalCourses > 1 ? "s" : ""
-    }.`,
+    description: `This evolving certificate represents the complete learning journey of ${recipientName} on ${platformName}. It grows automatically with each completed course, creating a permanent record of continuous education. Currently includes ${totalCourses} verified course${totalCourses > 1 ? "s" : ""
+      }.`,
     image: `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${ipfsCID}`,
     external_url: verificationUrl,
     decimals: 0, // Non-fungible (ERC-1155 with supply=1)
@@ -223,7 +222,8 @@ export async function GET(
   context: { params: Promise<{ tokenId: string }> }
 ) {
   const params = await context.params;
-  const tokenId = params.tokenId;
+  // Strip .json suffix if present (some wallets/explorers append it per ERC-1155 convention)
+  const tokenId = params.tokenId.replace(/\.json$/i, '');
 
   console.log(`[Metadata API] Fetching metadata for token #${tokenId}`);
 
@@ -302,7 +302,9 @@ export async function HEAD(
 ) {
   try {
     const params = await context.params;
-    const certificate = await getCertificateFromGoldsky(params.tokenId);
+    // Strip .json suffix if present (some wallets/explorers append it per ERC-1155 convention)
+    const tokenId = params.tokenId.replace(/\.json$/i, '');
+    const certificate = await getCertificateFromGoldsky(tokenId);
 
     if (!certificate) {
       return new NextResponse(null, { status: 404 });

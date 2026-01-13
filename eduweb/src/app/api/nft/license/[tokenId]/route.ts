@@ -154,7 +154,8 @@ export async function GET(
     context: { params: Promise<{ tokenId: string }> }
 ) {
     const params = await context.params;
-    const tokenId = params.tokenId;
+    // Strip .json suffix if present (some wallets/explorers append it per ERC-1155 convention)
+    const tokenId = params.tokenId.replace(/\.json$/i, '');
 
     console.log(`[License Metadata API] Fetching metadata for token #${tokenId}`);
 
@@ -248,7 +249,8 @@ export async function HEAD(
 ) {
     try {
         const params = await context.params;
-        const tokenId = params.tokenId;
+        // Strip .json suffix if present (some wallets/explorers append it per ERC-1155 convention)
+        const tokenId = params.tokenId.replace(/\.json$/i, '');
 
         const courseLicenseContract = getContract({
             client,
