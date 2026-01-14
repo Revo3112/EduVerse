@@ -130,16 +130,16 @@ interface PendingChanges {
 interface ProgressState {
   isOpen: boolean;
   stage:
-    | "idle"
-    | "uploading-thumbnail"
-    | "uploading-videos"
-    | "updating-metadata"
-    | "deleting-sections"
-    | "updating-sections"
-    | "adding-sections"
-    | "reordering-sections"
-    | "complete"
-    | "error";
+  | "idle"
+  | "uploading-thumbnail"
+  | "uploading-videos"
+  | "updating-metadata"
+  | "deleting-sections"
+  | "updating-sections"
+  | "adding-sections"
+  | "reordering-sections"
+  | "complete"
+  | "error";
   currentOperation: string;
   currentStep: number;
   totalSteps: number;
@@ -453,9 +453,9 @@ function EditCourseContent() {
         1 +
         (hasSectionChanges
           ? pendingChanges.sectionsToDelete.size +
-            pendingChanges.sectionsToUpdate.size +
-            pendingChanges.sectionsToAdd.length +
-            (pendingChanges.reorderNeeded ? 1 : 0)
+          pendingChanges.sectionsToUpdate.size +
+          pendingChanges.sectionsToAdd.length +
+          (pendingChanges.reorderNeeded ? 1 : 0)
           : 0);
 
       setProgressState({
@@ -1037,16 +1037,14 @@ function EditCourseContent() {
 
               if (playbackId) {
                 console.log(
-                  `[Edit Upload] ✅ PlaybackId retrieved: ${playbackId} (after ${
-                    (retry + 1) * 2
+                  `[Edit Upload] ✅ PlaybackId retrieved: ${playbackId} (after ${(retry + 1) * 2
                   }s)`
                 );
                 break;
               }
 
               console.log(
-                `[Edit Upload] Retry ${
-                  retry + 1
+                `[Edit Upload] Retry ${retry + 1
                 }/${maxRetries}: PlaybackId not ready yet...`
               );
             }
@@ -1107,9 +1105,8 @@ function EditCourseContent() {
 
         setProgressState((prev) => ({
           ...prev,
-          currentOperation: `Uploading video ${i + 1}/${
-            sectionsWithVideo.length
-          }...`,
+          currentOperation: `Uploading video ${i + 1}/${sectionsWithVideo.length
+            }...`,
           videoProgress: {
             current: i,
             total: sectionsWithVideo.length,
@@ -1289,16 +1286,16 @@ function EditCourseContent() {
             const updated = prev.map((s) =>
               s.id === editingSectionId
                 ? {
-                    ...s,
-                    title: sectionFormData.title.trim(),
-                    contentCID: videoFile
-                      ? ""
-                      : sectionFormData.contentCID || s.contentCID,
-                    duration: sectionFormData.duration,
-                    isModified: !s.isNew,
-                    videoFile: videoFile || s.videoFile,
-                    videoFileName: videoFile ? videoFile.name : s.videoFileName,
-                  }
+                  ...s,
+                  title: sectionFormData.title.trim(),
+                  contentCID: videoFile
+                    ? ""
+                    : sectionFormData.contentCID || s.contentCID,
+                  duration: sectionFormData.duration,
+                  isModified: !s.isNew,
+                  videoFile: videoFile || s.videoFile,
+                  videoFileName: videoFile ? videoFile.name : s.videoFileName,
+                }
                 : s
             );
             draftSectionsRef.current = updated;
@@ -1497,23 +1494,23 @@ function EditCourseContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 py-6 px-4 sm:px-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 py-6 px-4 sm:px-6">
       <div className="max-w-6xl mx-auto">
         {/* Header Section */}
         <div className="mb-6 flex items-center gap-3">
           <Button
             variant="outline"
             onClick={handleCancel}
-            className="gap-2 hover:bg-slate-100 transition-colors h-9 px-3"
+            className="gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors h-9 px-3"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
           <div className="flex-1">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
               Edit Course
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Manage and update your course content
             </p>
           </div>
@@ -1524,12 +1521,12 @@ function EditCourseContent() {
             {/* Main Content */}
             <div className="lg:col-span-8 space-y-6">
               {/* Course Information Card */}
-              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-slate-900">
                 <CardHeader className="pb-0">
                   <CardTitle className="text-lg font-bold">
                     Course Information
                   </CardTitle>
-                  <CardDescription className="text-slate-500 text-sm">
+                  <CardDescription className="text-slate-500 dark:text-slate-400 text-sm">
                     Update your course details and metadata
                   </CardDescription>
                 </CardHeader>
@@ -1546,7 +1543,7 @@ function EditCourseContent() {
                       }
                       placeholder="Enter course title"
                       disabled={isSending}
-                      className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
+                      className="h-10 border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.title && (
                       <p className="text-xs font-medium text-red-500 mt-1 flex items-center gap-1">
@@ -1572,7 +1569,7 @@ function EditCourseContent() {
                       placeholder="Describe what students will learn"
                       rows={5}
                       disabled={isSending}
-                      className="border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all resize-none"
+                      className="border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:ring-blue-500 transition-all resize-none"
                     />
                     {errors.description && (
                       <p className="text-xs font-medium text-red-500 mt-1 flex items-center gap-1">
@@ -1597,7 +1594,7 @@ function EditCourseContent() {
                       }
                       placeholder="Your full name"
                       disabled={isSending}
-                      className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
+                      className="h-10 border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.creatorName && (
                       <p className="text-xs font-medium text-red-500 mt-1 flex items-center gap-1">
@@ -1622,10 +1619,10 @@ function EditCourseContent() {
                         }
                         disabled={isSending}
                       >
-                        <SelectTrigger className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500">
+                        <SelectTrigger className="h-10 border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:ring-blue-500">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="border-slate-200">
+                        <SelectContent className="border-slate-200 dark:border-slate-700 dark:bg-slate-900">
                           {COURSE_CATEGORIES.map((cat) => (
                             <SelectItem key={cat.value} value={cat.value}>
                               <span className="flex items-center gap-2">
@@ -1651,10 +1648,10 @@ function EditCourseContent() {
                         }
                         disabled={isSending}
                       >
-                        <SelectTrigger className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500">
+                        <SelectTrigger className="h-10 border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:ring-blue-500">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="border-slate-200">
+                        <SelectContent className="border-slate-200 dark:border-slate-700 dark:bg-slate-900">
                           {COURSE_DIFFICULTIES.map((diff) => (
                             <SelectItem key={diff.value} value={diff.value}>
                               {diff.label}
@@ -1679,7 +1676,7 @@ function EditCourseContent() {
                         handleInputChange("pricePerMonth", e.target.value)
                       }
                       disabled={isSending}
-                      className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500 transition-all"
+                      className="h-10 border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:ring-blue-500 transition-all"
                     />
                     {errors.pricePerMonth && (
                       <p className="text-xs font-medium text-red-500 mt-1 flex items-center gap-1">
@@ -1692,14 +1689,14 @@ function EditCourseContent() {
               </Card>
 
               {/* Course Sections Card */}
-              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-slate-900">
                 <CardHeader className="pb-0">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <CardTitle className="text-lg font-bold">
                         Course Sections
                       </CardTitle>
-                      <CardDescription className="text-slate-500 text-sm mt-0.5">
+                      <CardDescription className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">
                         {draftSections.filter((s) => !s.isDeleted).length}{" "}
                         section(s)
                         {hasSectionChanges && (
@@ -1734,12 +1731,12 @@ function EditCourseContent() {
                 </CardHeader>
                 <CardContent className="pt-3">
                   {draftSections.filter((s) => !s.isDeleted).length === 0 ? (
-                    <div className="text-center py-8 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200">
-                      <Video className="h-10 w-10 mx-auto mb-3 text-slate-300" />
-                      <p className="text-sm font-medium text-slate-600">
+                    <div className="text-center py-8 bg-slate-50 dark:bg-slate-800/50 rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700">
+                      <Video className="h-10 w-10 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
                         No sections yet
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">
                         Add your first section to get started
                       </p>
                     </div>
@@ -1750,18 +1747,17 @@ function EditCourseContent() {
                         .map((section, index) => (
                           <div
                             key={section.id}
-                            className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                              section.isNew
-                                ? "bg-green-50/50 border-green-200 shadow-sm"
-                                : section.isModified
-                                ? "bg-amber-50/50 border-amber-200 shadow-sm"
-                                : "bg-white border-slate-200 hover:border-slate-300"
-                            }`}
+                            className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${section.isNew
+                              ? "bg-green-50/50 dark:bg-green-950/30 border-green-200 dark:border-green-800 shadow-sm"
+                              : section.isModified
+                                ? "bg-amber-50/50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 shadow-sm"
+                                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                              }`}
                           >
                             <GripVertical className="h-5 w-5 text-slate-400 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <h4 className="font-semibold text-slate-900 truncate text-sm">
+                                <h4 className="font-semibold text-slate-900 dark:text-slate-100 truncate text-sm">
                                   {section.title}
                                 </h4>
                                 <div className="flex gap-1.5">
@@ -1777,9 +1773,9 @@ function EditCourseContent() {
                                   )}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-600 flex-wrap">
+                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-600 dark:text-slate-400 flex-wrap">
                                 <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3 text-slate-400" />
+                                  <Clock className="h-3 w-3 text-slate-400 dark:text-slate-500" />
                                   {formatDuration(section.duration)}
                                 </span>
                                 {section.videoFile ? (
@@ -1807,7 +1803,7 @@ function EditCourseContent() {
                                     handleMoveSection(index, index - 1)
                                   }
                                   disabled={isSending}
-                                  className="h-7 w-7 p-0 hover:bg-slate-100"
+                                  className="h-7 w-7 p-0 hover:bg-slate-100 dark:hover:bg-slate-700"
                                 >
                                   ↑
                                 </Button>
@@ -1815,27 +1811,27 @@ function EditCourseContent() {
                               {index <
                                 draftSections.filter((s) => !s.isDeleted)
                                   .length -
-                                  1 && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    handleMoveSection(index, index + 1)
-                                  }
-                                  disabled={isSending}
-                                  className="h-7 w-7 p-0 hover:bg-slate-100"
-                                >
-                                  ↓
-                                </Button>
-                              )}
+                                1 && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleMoveSection(index, index + 1)
+                                    }
+                                    disabled={isSending}
+                                    className="h-7 w-7 p-0 hover:bg-slate-100 dark:hover:bg-slate-700"
+                                  >
+                                    ↓
+                                  </Button>
+                                )}
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 onClick={() => openEditSectionDialog(section)}
                                 disabled={isSending}
-                                className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
+                                className="h-7 w-7 p-0 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-700"
                               >
                                 <Edit className="h-3.5 w-3.5" />
                               </Button>
@@ -1845,7 +1841,7 @@ function EditCourseContent() {
                                 size="sm"
                                 onClick={() => handleDeleteSection(section)}
                                 disabled={isSending}
-                                className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+                                className="h-7 w-7 p-0 hover:bg-red-50 dark:hover:bg-red-950/50 hover:text-red-600 dark:hover:text-red-400 hover:border-red-300 dark:hover:border-red-700"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
@@ -1861,7 +1857,7 @@ function EditCourseContent() {
             {/* Sidebar */}
             <div className="lg:col-span-4 space-y-6">
               {/* Thumbnail Card */}
-              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-slate-900">
                 <CardHeader className="pb-0">
                   <CardTitle className="text-base font-semibold">
                     Thumbnail
@@ -1869,7 +1865,7 @@ function EditCourseContent() {
                 </CardHeader>
                 <CardContent className="pt-2 space-y-1.5">
                   {thumbnailPreview || originalThumbnailUrl ? (
-                    <div className="relative aspect-video rounded-lg overflow-hidden bg-slate-100 shadow-sm group">
+                    <div className="relative aspect-video rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 shadow-sm group">
                       <Image
                         src={thumbnailPreview || originalThumbnailUrl || ""}
                         alt="Thumbnail"
@@ -1889,12 +1885,12 @@ function EditCourseContent() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-slate-400 hover:bg-slate-50 transition-all cursor-pointer">
-                      <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400" />
-                      <p className="text-sm font-medium text-slate-700 mb-0.5">
+                    <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-6 text-center hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer">
+                      <Upload className="h-8 w-8 mx-auto mb-2 text-slate-400 dark:text-slate-500" />
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-0.5">
                         Upload thumbnail
                       </p>
-                      <p className="text-xs text-slate-500 mb-3">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
                         JPG, PNG or WebP
                       </p>
                       <Input
@@ -1910,7 +1906,7 @@ function EditCourseContent() {
               </Card>
 
               {/* Actions Card */}
-              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow sticky top-6">
+              <Card className="border-0 shadow-sm hover:shadow-md transition-shadow sticky top-6 bg-white dark:bg-slate-900">
                 <CardHeader className="pb-0">
                   <CardTitle className="text-base font-semibold">
                     Actions
@@ -1938,7 +1934,7 @@ function EditCourseContent() {
                     type="button"
                     variant="outline"
                     onClick={handleCancel}
-                    className="w-full h-9 border-slate-300 hover:bg-slate-50 rounded-lg transition-colors font-semibold"
+                    className="w-full h-9 border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors font-semibold"
                     disabled={isSending}
                   >
                     Cancel
@@ -1948,9 +1944,9 @@ function EditCourseContent() {
 
               {/* Alert Card */}
               {(hasChanges || hasSectionChanges) && (
-                <Alert className="border-amber-200 bg-amber-50 shadow-sm">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800 font-medium">
+                <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 shadow-sm">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="text-amber-800 dark:text-amber-200 font-medium">
                     You have unsaved changes. Save them to commit to blockchain.
                   </AlertDescription>
                 </Alert>
@@ -1961,12 +1957,12 @@ function EditCourseContent() {
 
         {/* Section Dialog */}
         <Dialog open={sectionDialogOpen} onOpenChange={setSectionDialogOpen}>
-          <DialogContent className="sm:max-w-lg border-slate-200 shadow-lg">
+          <DialogContent className="sm:max-w-lg border-slate-200 dark:border-slate-700 dark:bg-slate-900 shadow-lg">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold">
                 {editingSectionId ? "Edit Section" : "Add Section"}
               </DialogTitle>
-              <DialogDescription className="text-slate-600 text-sm">
+              <DialogDescription className="text-slate-600 dark:text-slate-400 text-sm">
                 {editingSectionId
                   ? "Update section details and video"
                   : "Create a new section for your course"}
@@ -1991,7 +1987,7 @@ function EditCourseContent() {
                     }))
                   }
                   placeholder="Enter section title"
-                  className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                  className="h-10 border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
 
@@ -2014,9 +2010,9 @@ function EditCourseContent() {
                       duration: parseInt(e.target.value) || 300,
                     }))
                   }
-                  className="h-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                  className="h-10 border-slate-200 dark:border-slate-700 dark:bg-slate-800 focus:border-blue-500 focus:ring-blue-500"
                 />
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {Math.floor(sectionFormData.duration / 60)} minutes{" "}
                   {sectionFormData.duration % 60} seconds
                 </p>
@@ -2047,9 +2043,9 @@ function EditCourseContent() {
               </div>
 
               {draftSections.some((s) => s.videoFile && !s.isDeleted) && (
-                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 flex-shrink-0" />
-                  <p className="text-xs font-medium text-blue-700">
+                <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
                     Videos will upload automatically when saving
                   </p>
                 </div>
@@ -2061,7 +2057,7 @@ function EditCourseContent() {
                 variant="outline"
                 onClick={() => setSectionDialogOpen(false)}
                 disabled={isSending}
-                className="border-slate-300 hover:bg-slate-50"
+                className="border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
               >
                 Cancel
               </Button>
@@ -2131,15 +2127,15 @@ function EditCourseContent() {
                     {progressState.stage === "complete"
                       ? "Update Complete!"
                       : progressState.stage === "error"
-                      ? "Update Failed"
-                      : "Updating Course"}
+                        ? "Update Failed"
+                        : "Updating Course"}
                   </DialogTitle>
                   <DialogDescription className="text-sm">
                     {progressState.stage === "complete"
                       ? "All changes have been saved successfully"
                       : progressState.stage === "error"
-                      ? "An error occurred during the update"
-                      : "Processing your changes - Do not close this window"}
+                        ? "An error occurred during the update"
+                        : "Processing your changes - Do not close this window"}
                   </DialogDescription>
                 </div>
               </div>
@@ -2163,8 +2159,8 @@ function EditCourseContent() {
                       progressState.stage === "updating-sections" ||
                       progressState.stage === "adding-sections" ||
                       progressState.stage === "reordering-sections") && (
-                      <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                    )}
+                        <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                      )}
                     {progressState.stage === "complete" && (
                       <CheckCircle className="h-5 w-5 text-green-600" />
                     )}
@@ -2217,48 +2213,48 @@ function EditCourseContent() {
                       <div className="flex items-center gap-2 text-xs">
                         {progressState.videoProgress.processingStatus ===
                           "uploading" && (
-                          <>
-                            <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
-                            <span className="text-purple-700 dark:text-purple-300">
-                              Uploading to Livepeer...{" "}
-                              {progressState.videoProgress.uploadProgress || 0}%
-                            </span>
-                          </>
-                        )}
+                            <>
+                              <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
+                              <span className="text-purple-700 dark:text-purple-300">
+                                Uploading to Livepeer...{" "}
+                                {progressState.videoProgress.uploadProgress || 0}%
+                              </span>
+                            </>
+                          )}
                         {progressState.videoProgress.processingStatus ===
                           "processing" && (
-                          <>
-                            <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
-                            <span className="text-purple-700 dark:text-purple-300">
-                              Processing video... This may take a few minutes
-                            </span>
-                          </>
-                        )}
+                            <>
+                              <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse" />
+                              <span className="text-purple-700 dark:text-purple-300">
+                                Processing video... This may take a few minutes
+                              </span>
+                            </>
+                          )}
                         {progressState.videoProgress.processingStatus ===
                           "getting-cid" && (
-                          <>
-                            <div className="h-2 w-2 bg-orange-500 rounded-full animate-pulse" />
-                            <span className="text-purple-700 dark:text-purple-300">
-                              Finalizing IPFS storage...
-                            </span>
-                          </>
-                        )}
+                            <>
+                              <div className="h-2 w-2 bg-orange-500 rounded-full animate-pulse" />
+                              <span className="text-purple-700 dark:text-purple-300">
+                                Finalizing IPFS storage...
+                              </span>
+                            </>
+                          )}
                         {progressState.videoProgress.processingStatus ===
                           "ready" && (
-                          <>
-                            <div className="h-2 w-2 bg-green-500 rounded-full" />
-                            <span className="text-purple-700 dark:text-purple-300">
-                              Video ready!
-                            </span>
-                          </>
-                        )}
+                            <>
+                              <div className="h-2 w-2 bg-green-500 rounded-full" />
+                              <span className="text-purple-700 dark:text-purple-300">
+                                Video ready!
+                              </span>
+                            </>
+                          )}
                       </div>
                     )}
 
                     {/* Upload Progress Bar */}
                     {progressState.videoProgress.uploadProgress !== undefined &&
                       progressState.videoProgress.processingStatus ===
-                        "uploading" && (
+                      "uploading" && (
                         <div className="space-y-1">
                           <Progress
                             value={progressState.videoProgress.uploadProgress}
@@ -2282,47 +2278,47 @@ function EditCourseContent() {
                 progressState.operationDetails.updated > 0 ||
                 progressState.operationDetails.added > 0 ||
                 progressState.operationDetails.reordered) && (
-                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                  <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                    Changes Applied
-                  </h4>
-                  <div className="space-y-1 text-xs text-blue-700 dark:text-blue-300">
-                    {progressState.operationDetails.deleted > 0 && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-3 w-3" />
-                        <span>
-                          {progressState.operationDetails.deleted} section(s)
-                          deleted
-                        </span>
-                      </div>
-                    )}
-                    {progressState.operationDetails.updated > 0 && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-3 w-3" />
-                        <span>
-                          {progressState.operationDetails.updated} section(s)
-                          updated
-                        </span>
-                      </div>
-                    )}
-                    {progressState.operationDetails.added > 0 && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-3 w-3" />
-                        <span>
-                          {progressState.operationDetails.added} section(s)
-                          added
-                        </span>
-                      </div>
-                    )}
-                    {progressState.operationDetails.reordered && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-3 w-3" />
-                        <span>Sections reordered</span>
-                      </div>
-                    )}
+                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                      Changes Applied
+                    </h4>
+                    <div className="space-y-1 text-xs text-blue-700 dark:text-blue-300">
+                      {progressState.operationDetails.deleted > 0 && (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-3 w-3" />
+                          <span>
+                            {progressState.operationDetails.deleted} section(s)
+                            deleted
+                          </span>
+                        </div>
+                      )}
+                      {progressState.operationDetails.updated > 0 && (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-3 w-3" />
+                          <span>
+                            {progressState.operationDetails.updated} section(s)
+                            updated
+                          </span>
+                        </div>
+                      )}
+                      {progressState.operationDetails.added > 0 && (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-3 w-3" />
+                          <span>
+                            {progressState.operationDetails.added} section(s)
+                            added
+                          </span>
+                        </div>
+                      )}
+                      {progressState.operationDetails.reordered && (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-3 w-3" />
+                          <span>Sections reordered</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Error Message */}
               {progressState.stage === "error" && progressState.error && (
@@ -2369,13 +2365,12 @@ function EditCourseContent() {
                     </h4>
                     <div className="space-y-2 text-xs">
                       <div
-                        className={`flex items-center gap-2 ${
-                          progressState.stage === "uploading-thumbnail"
-                            ? "text-blue-600 font-semibold"
-                            : progressState.currentStep > 0
+                        className={`flex items-center gap-2 ${progressState.stage === "uploading-thumbnail"
+                          ? "text-blue-600 font-semibold"
+                          : progressState.currentStep > 0
                             ? "text-green-600"
                             : "text-muted-foreground"
-                        }`}
+                          }`}
                       >
                         {progressState.currentStep > 0 ? (
                           <CheckCircle className="h-3 w-3" />
@@ -2386,17 +2381,16 @@ function EditCourseContent() {
                       </div>
                       {progressState.videoProgress.total > 0 && (
                         <div
-                          className={`flex items-center gap-2 ${
-                            progressState.stage === "uploading-videos"
-                              ? "text-blue-600 font-semibold"
-                              : progressState.videoProgress.current ===
-                                progressState.videoProgress.total
+                          className={`flex items-center gap-2 ${progressState.stage === "uploading-videos"
+                            ? "text-blue-600 font-semibold"
+                            : progressState.videoProgress.current ===
+                              progressState.videoProgress.total
                               ? "text-green-600"
                               : "text-muted-foreground"
-                          }`}
+                            }`}
                         >
                           {progressState.videoProgress.current ===
-                          progressState.videoProgress.total ? (
+                            progressState.videoProgress.total ? (
                             <CheckCircle className="h-3 w-3" />
                           ) : (
                             <Clock className="h-3 w-3" />
@@ -2405,21 +2399,20 @@ function EditCourseContent() {
                         </div>
                       )}
                       <div
-                        className={`flex items-center gap-2 ${
-                          progressState.stage === "updating-metadata"
-                            ? "text-blue-600 font-semibold"
-                            : progressState.stage === "deleting-sections" ||
-                              progressState.stage === "updating-sections" ||
-                              progressState.stage === "adding-sections" ||
-                              progressState.stage === "reordering-sections"
+                        className={`flex items-center gap-2 ${progressState.stage === "updating-metadata"
+                          ? "text-blue-600 font-semibold"
+                          : progressState.stage === "deleting-sections" ||
+                            progressState.stage === "updating-sections" ||
+                            progressState.stage === "adding-sections" ||
+                            progressState.stage === "reordering-sections"
                             ? "text-green-600"
                             : "text-muted-foreground"
-                        }`}
+                          }`}
                       >
                         {progressState.stage === "deleting-sections" ||
-                        progressState.stage === "updating-sections" ||
-                        progressState.stage === "adding-sections" ||
-                        progressState.stage === "reordering-sections" ? (
+                          progressState.stage === "updating-sections" ||
+                          progressState.stage === "adding-sections" ||
+                          progressState.stage === "reordering-sections" ? (
                           <CheckCircle className="h-3 w-3" />
                         ) : (
                           <Clock className="h-3 w-3" />
@@ -2430,11 +2423,11 @@ function EditCourseContent() {
                         progressState.stage === "updating-sections" ||
                         progressState.stage === "adding-sections" ||
                         progressState.stage === "reordering-sections") && (
-                        <div className="flex items-center gap-2 text-blue-600 font-semibold">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          <span>Update sections on blockchain</span>
-                        </div>
-                      )}
+                          <div className="flex items-center gap-2 text-blue-600 font-semibold">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <span>Update sections on blockchain</span>
+                          </div>
+                        )}
                     </div>
                   </div>
                 )}
